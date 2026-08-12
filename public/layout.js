@@ -35,7 +35,32 @@ function renderCard(el, cardSymbols, { onTap } = {}) {
     div.style.width = pos.size + 'px';
     div.style.height = pos.size + 'px';
     div.style.transform = `translate(-50%, -50%) rotate(${pos.rotation}deg)`;
-    div.innerHTML = `<div class="symbol-emoji" style="font-size:${pos.size * 0.5}px">${sym.emoji}</div><div class="symbol-label">${sym.label}</div>`;
+
+    const makeEmoji = () => {
+      const emojiDiv = document.createElement('div');
+      emojiDiv.className = 'symbol-emoji';
+      emojiDiv.style.fontSize = pos.size * 0.5 + 'px';
+      emojiDiv.textContent = sym.emoji;
+      return emojiDiv;
+    };
+
+    if (sym.image) {
+      const img = document.createElement('img');
+      img.className = 'symbol-image';
+      img.src = `/images/${sym.image}`;
+      img.alt = sym.label;
+      img.loading = 'lazy';
+      img.addEventListener('error', () => img.replaceWith(makeEmoji()), { once: true });
+      div.appendChild(img);
+    } else {
+      div.appendChild(makeEmoji());
+    }
+
+    const labelDiv = document.createElement('div');
+    labelDiv.className = 'symbol-label';
+    labelDiv.textContent = sym.label;
+    div.appendChild(labelDiv);
+
     if (onTap) div.addEventListener('click', () => onTap(sym.id, div));
     el.appendChild(div);
   });

@@ -178,6 +178,14 @@ label { display: block; text-align: left; font-weight: 600; font-size: 0.9rem; c
 
 .symbol-emoji { line-height: 1; }
 
+.symbol-image {
+  width: 68%;
+  height: 68%;
+  object-fit: contain;
+  border-radius: 8px;
+  pointer-events: none;
+}
+
 .symbol-label {
   font-size: 0.55rem;
   font-weight: 700;

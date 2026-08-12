@@ -45,7 +45,12 @@ function scoreboard(room) {
 }
 
 function buildCard(indices) {
-  return indices.map((id) => ({ id, emoji: SYMBOLS[id].emoji, label: SYMBOLS[id].label }));
+  return indices.map((id) => ({
+    id,
+    emoji: SYMBOLS[id].emoji,
+    label: SYMBOLS[id].label,
+    image: SYMBOLS[id].image || null,
+  }));
 }
 
 function startRound(code) {
