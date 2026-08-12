@@ -32,6 +32,7 @@ function join() {
     playerName = res.name;
     el('playerNameBadge').textContent = playerName;
     el('playerAvatar').textContent = playerName.charAt(0).toUpperCase();
+    prefetchAllSymbolImages();
     joinPanel.classList.add('hidden');
     waitingPanel.classList.remove('hidden');
   });

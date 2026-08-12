@@ -15,6 +15,7 @@ el('createBtn').addEventListener('click', () => {
     el('roomCode').textContent = roomCode;
     setup.classList.add('hidden');
     lobby.classList.remove('hidden');
+    prefetchAllSymbolImages();
     fetch(`/api/qr?code=${roomCode}`)
       .then((r) => r.json())
       .then((data) => {

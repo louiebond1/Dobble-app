@@ -199,6 +199,10 @@ setInterval(() => {
   }
 }, 30 * 60 * 1000);
 
+app.get('/api/symbols', (req, res) => {
+  res.json(buildCard(SYMBOLS.map((_, id) => id)));
+});
+
 app.get('/api/qr', async (req, res) => {
   const code = String(req.query.code || '').toUpperCase();
   if (!rooms.has(code)) return res.status(404).json({ error: 'Room not found' });

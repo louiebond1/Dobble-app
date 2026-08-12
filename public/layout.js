@@ -18,6 +18,21 @@ function layoutSymbols(n, containerSize) {
   return positions;
 }
 
+// Warms the browser's image cache for every symbol up front (called during the
+// lobby/waiting screen) so rounds don't stall on network fetches once the game starts.
+function prefetchAllSymbolImages() {
+  fetch('/api/symbols')
+    .then((r) => r.json())
+    .then((symbols) => {
+      symbols.forEach((sym) => {
+        if (!sym.image) return;
+        const img = new Image();
+        img.src = sym.image;
+      });
+    })
+    .catch(() => {});
+}
+
 function renderCard(el, cardSymbols, { onTap } = {}) {
   el.innerHTML = '';
   const size = el.clientWidth || el.getBoundingClientRect().width;
@@ -47,11 +62,14 @@ function renderCard(el, cardSymbols, { onTap } = {}) {
     if (sym.image) {
       const img = document.createElement('img');
       img.className = 'symbol-image';
-      img.src = sym.image;
       img.alt = sym.label;
       img.title = sym.label;
-      img.loading = 'lazy';
+      img.loading = 'eager';
+      img.fetchPriority = 'high';
+      img.addEventListener('load', () => img.classList.add('loaded'), { once: true });
       img.addEventListener('error', () => img.replaceWith(makeEmoji()), { once: true });
+      img.src = sym.image;
+      if (img.complete) img.classList.add('loaded');
       div.appendChild(img);
     } else {
       div.title = sym.label;

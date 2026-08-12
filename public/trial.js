@@ -30,4 +30,5 @@ function handleTap(symbolId, node) {
   }
 }
 
+prefetchAllSymbolImages();
 nextRound();

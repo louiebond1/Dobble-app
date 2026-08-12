@@ -230,6 +230,12 @@ label { display: block; text-align: left; font-weight: 600; font-size: 0.9rem; c
   object-fit: contain;
   border-radius: 12px;
   pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.25s ease;
+}
+
+.symbol-image.loaded {
+  opacity: 1;
 }
 
 .symbol.correct { animation: pulseGreen 0.6s ease; }
