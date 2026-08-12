@@ -47,7 +47,7 @@ function renderCard(el, cardSymbols, { onTap } = {}) {
     if (sym.image) {
       const img = document.createElement('img');
       img.className = 'symbol-image';
-      img.src = `/images/${sym.image}`;
+      img.src = sym.image;
       img.alt = sym.label;
       img.loading = 'lazy';
       img.addEventListener('error', () => img.replaceWith(makeEmoji()), { once: true });
