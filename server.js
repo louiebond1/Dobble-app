@@ -214,6 +214,20 @@ app.get('/play/:code', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'play.html'));
 });
 
+app.get('/trial', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'trial.html'));
+});
+
+app.get('/api/trial', (req, res) => {
+  const a = Math.floor(Math.random() * DECK.length);
+  let b = Math.floor(Math.random() * DECK.length);
+  while (b === a) b = Math.floor(Math.random() * DECK.length);
+  const cardA = DECK[a];
+  const cardB = DECK[b];
+  const commonId = commonSymbol(cardA, cardB);
+  res.json({ cardA: buildCard(cardA), cardB: buildCard(cardB), commonId });
+});
+
 app.use(express.static(path.join(__dirname, 'public')));
 
 server.listen(PORT, () => {

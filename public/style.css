@@ -66,6 +66,16 @@ h2 { margin: 4px 0; }
   box-shadow: 0 6px 16px rgba(214, 61, 132, 0.4);
   width: 100%;
   margin-top: 10px;
+  display: inline-block;
+  text-decoration: none;
+  box-sizing: border-box;
+}
+
+.btn-outline {
+  background: transparent;
+  color: var(--accent-dark);
+  box-shadow: none;
+  border: 2px solid var(--accent-dark);
 }
 
 .btn:disabled {
