@@ -60,20 +60,17 @@ function renderCard(el, cardSymbols, { onTap } = {}) {
     };
 
     if (sym.image) {
-      const frame = document.createElement('div');
-      frame.className = 'symbol-frame';
       const img = document.createElement('img');
       img.className = 'symbol-image';
       img.alt = sym.label;
       img.title = sym.label;
       img.loading = 'eager';
       img.fetchPriority = 'high';
-      img.addEventListener('load', () => frame.classList.add('loaded'), { once: true });
-      img.addEventListener('error', () => frame.replaceWith(makeEmoji()), { once: true });
+      img.addEventListener('load', () => img.classList.add('loaded'), { once: true });
+      img.addEventListener('error', () => img.replaceWith(makeEmoji()), { once: true });
       img.src = sym.image;
-      if (img.complete) frame.classList.add('loaded');
-      frame.appendChild(img);
-      div.appendChild(frame);
+      if (img.complete) img.classList.add('loaded');
+      div.appendChild(img);
     } else {
       div.title = sym.label;
       div.appendChild(makeEmoji());
