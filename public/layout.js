@@ -3,16 +3,21 @@
 // variance for a hand-made Dobble-card feel.
 function layoutSymbols(n, containerSize) {
   const golden = Math.PI * (3 - Math.sqrt(5));
-  const radius = containerSize / 2 * 0.78;
-  const baseSize = containerSize * (0.54 / Math.sqrt(n));
+  const cardRadius = containerSize / 2;
+  const edgeMargin = containerSize * 0.035; // clears the card's decorative inset rings
+  const baseSize = containerSize * (0.5 / Math.sqrt(n));
   const positions = [];
   for (let i = 0; i < n; i++) {
-    const r = radius * Math.sqrt((i + 0.5) / n);
+    const size = baseSize * (0.82 + Math.random() * 0.36);
+    const rotation = Math.random() * 30 - 15;
+    // Half-diagonal of the symbol's (rotated) square footprint — the true
+    // distance its farthest corner can reach from its own center.
+    const halfDiag = size * 0.5 * Math.SQRT2;
+    const maxR = Math.max(0, cardRadius - halfDiag - edgeMargin);
+    const r = maxR * Math.sqrt((i + 0.5) / n);
     const theta = i * golden + Math.random() * 0.5;
     const x = containerSize / 2 + r * Math.cos(theta);
     const y = containerSize / 2 + r * Math.sin(theta);
-    const size = baseSize * (0.82 + Math.random() * 0.36);
-    const rotation = Math.random() * 30 - 15;
     positions.push({ x, y, size, rotation });
   }
   return positions;
