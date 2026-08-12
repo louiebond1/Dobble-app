@@ -140,7 +140,53 @@ label { display: block; text-align: left; font-weight: 600; font-size: 0.9rem; c
 .round-info {
   font-weight: 700;
   color: var(--accent-dark);
+}
+
+.top-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
   margin-bottom: 14px;
+  gap: 10px;
+}
+
+.player-badge {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(255, 255, 255, 0.85);
+  border-radius: 999px;
+  padding: 5px 12px 5px 5px;
+  box-shadow: 0 4px 12px rgba(120, 40, 90, 0.15);
+}
+
+.player-badge .avatar-dot {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--accent), var(--accent-dark));
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 800;
+  font-size: 0.8rem;
+  flex-shrink: 0;
+}
+
+.player-badge .player-name {
+  font-weight: 700;
+  font-size: 0.85rem;
+}
+
+.player-badge .player-score {
+  font-weight: 800;
+  color: var(--accent-dark);
+  background: #fbe3f0;
+  border-radius: 999px;
+  padding: 3px 10px;
+  font-size: 0.85rem;
 }
 
 .cards-wrap {
@@ -179,20 +225,11 @@ label { display: block; text-align: left; font-weight: 600; font-size: 0.9rem; c
 .symbol-emoji { line-height: 1; }
 
 .symbol-image {
-  width: 68%;
-  height: 68%;
+  width: 94%;
+  height: 94%;
   object-fit: contain;
-  border-radius: 8px;
+  border-radius: 12px;
   pointer-events: none;
-}
-
-.symbol-label {
-  font-size: 0.55rem;
-  font-weight: 700;
-  color: var(--ink);
-  max-width: 100%;
-  overflow-wrap: break-word;
-  margin-top: 2px;
 }
 
 .symbol.correct { animation: pulseGreen 0.6s ease; }

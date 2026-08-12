@@ -25,7 +25,14 @@
     </div>
 
     <div class="panel hidden" id="gameArea">
-      <div class="round-info">Round <span id="roundNum"></span> / <span id="totalRounds"></span></div>
+      <div class="top-bar">
+        <div class="round-info">Round <span id="roundNum"></span> / <span id="totalRounds"></span></div>
+        <div class="player-badge">
+          <div class="avatar-dot" id="playerAvatar"></div>
+          <span class="player-name" id="playerNameBadge"></span>
+          <span class="player-score" id="playerScoreBadge">0</span>
+        </div>
+      </div>
       <div class="cards-wrap">
         <div class="card" id="cardA"></div>
         <div class="card" id="cardB"></div>

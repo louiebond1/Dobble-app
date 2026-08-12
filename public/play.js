@@ -1,6 +1,7 @@
 const socket = io();
 let roomCode = null;
 let roundActive = false;
+let playerName = '';
 
 const el = (id) => document.getElementById(id);
 const joinPanel = el('joinPanel');
@@ -28,10 +29,18 @@ function join() {
       return;
     }
     roomCode = code;
+    playerName = res.name;
+    el('playerNameBadge').textContent = playerName;
+    el('playerAvatar').textContent = playerName.charAt(0).toUpperCase();
     joinPanel.classList.add('hidden');
     waitingPanel.classList.remove('hidden');
   });
 }
+
+socket.on('players:update', (scores) => {
+  const mine = scores.find((p) => p.name === playerName);
+  if (mine) el('playerScoreBadge').textContent = mine.score;
+});
 
 socket.on('round:new', (data) => {
   roundActive = true;
@@ -53,8 +62,10 @@ function handleTap(symbolId, node) {
 
 socket.on('round:result', (data) => {
   roundActive = false;
-  const won = data.winnerName === el('nameInput').value.trim();
+  const won = data.winnerName === playerName;
   showOverlay(won ? '🎉' : '👀', won ? 'You got it!' : `${data.winnerName} found it!`, `${data.emoji} ${data.label}`);
+  const mine = data.scores.find((p) => p.name === playerName);
+  if (mine) el('playerScoreBadge').textContent = mine.score;
 });
 
 socket.on('round:timeout', (data) => {

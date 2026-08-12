@@ -4,7 +4,7 @@
 function layoutSymbols(n, containerSize) {
   const golden = Math.PI * (3 - Math.sqrt(5));
   const radius = containerSize / 2 * 0.78;
-  const baseSize = containerSize * (0.4 / Math.sqrt(n));
+  const baseSize = containerSize * (0.54 / Math.sqrt(n));
   const positions = [];
   for (let i = 0; i < n; i++) {
     const r = radius * Math.sqrt((i + 0.5) / n);
@@ -39,7 +39,7 @@ function renderCard(el, cardSymbols, { onTap } = {}) {
     const makeEmoji = () => {
       const emojiDiv = document.createElement('div');
       emojiDiv.className = 'symbol-emoji';
-      emojiDiv.style.fontSize = pos.size * 0.5 + 'px';
+      emojiDiv.style.fontSize = pos.size * 0.72 + 'px';
       emojiDiv.textContent = sym.emoji;
       return emojiDiv;
     };
@@ -49,17 +49,14 @@ function renderCard(el, cardSymbols, { onTap } = {}) {
       img.className = 'symbol-image';
       img.src = sym.image;
       img.alt = sym.label;
+      img.title = sym.label;
       img.loading = 'lazy';
       img.addEventListener('error', () => img.replaceWith(makeEmoji()), { once: true });
       div.appendChild(img);
     } else {
+      div.title = sym.label;
       div.appendChild(makeEmoji());
     }
-
-    const labelDiv = document.createElement('div');
-    labelDiv.className = 'symbol-label';
-    labelDiv.textContent = sym.label;
-    div.appendChild(labelDiv);
 
     if (onTap) div.addEventListener('click', () => onTap(sym.id, div));
     el.appendChild(div);
