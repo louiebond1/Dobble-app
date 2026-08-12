@@ -90,7 +90,7 @@ function startRound(code) {
       label: SYMBOLS[commonId].label,
     });
     setTimeout(() => startRound(code), 3000);
-  }, 20000);
+  }, 23000); // padded ~3s over the visible answer window to cover the client-side countdown reveal
 }
 
 io.on('connection', (socket) => {

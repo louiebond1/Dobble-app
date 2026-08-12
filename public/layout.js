@@ -33,6 +33,67 @@ function prefetchAllSymbolImages() {
     .catch(() => {});
 }
 
+// Preloads every image a round needs and resolves once all are ready (or
+// after a timeout), so the reveal never has to show a pop-in/loading state.
+function preloadRoundImages(symbols, timeoutMs = 4000) {
+  const urls = symbols.map((s) => s.image).filter(Boolean);
+  if (!urls.length) return Promise.resolve();
+  const loaders = urls.map(
+    (url) =>
+      new Promise((resolve) => {
+        const img = new Image();
+        img.onload = resolve;
+        img.onerror = resolve;
+        img.src = url;
+      })
+  );
+  return Promise.race([Promise.all(loaders), new Promise((r) => setTimeout(r, timeoutMs))]);
+}
+
+// Runs a "3, 2, 1, 💥" countdown inside the given overlay element, resolving
+// once the animation completes.
+function showCountdown(overlay, numberEl) {
+  return new Promise((resolve) => {
+    if (!overlay || !numberEl) {
+      resolve();
+      return;
+    }
+    overlay.classList.remove('hidden');
+    const steps = ['3', '2', '1', '💥'];
+    let i = 0;
+    const tick = () => {
+      const isLast = i === steps.length - 1;
+      numberEl.textContent = steps[i];
+      numberEl.className = isLast ? 'countdown-boom' : 'countdown-number';
+      void numberEl.offsetWidth; // restart CSS animation
+      numberEl.classList.add('play');
+      i += 1;
+      if (i < steps.length) {
+        setTimeout(tick, 650);
+      } else {
+        setTimeout(() => {
+          overlay.classList.add('hidden');
+          resolve();
+        }, 400);
+      }
+    };
+    tick();
+  });
+}
+
+// Clears both cards, plays the countdown while preloading the round's
+// images in parallel, then reveals both cards fully loaded and instant.
+async function revealRound(overlay, numberEl, cardAEl, cardBEl, cardASymbols, cardBSymbols, onTap) {
+  cardAEl.innerHTML = '';
+  cardBEl.innerHTML = '';
+  await Promise.all([
+    showCountdown(overlay, numberEl),
+    preloadRoundImages([...cardASymbols, ...cardBSymbols]),
+  ]);
+  renderCard(cardAEl, cardASymbols, { onTap });
+  renderCard(cardBEl, cardBSymbols, { onTap });
+}
+
 function renderCard(el, cardSymbols, { onTap } = {}) {
   el.innerHTML = '';
   const size = el.clientWidth || el.getBoundingClientRect().width;

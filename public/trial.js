@@ -5,15 +5,23 @@ let active = false;
 
 function nextRound() {
   el('feedback').textContent = '';
+  active = false;
   fetch('/api/trial')
     .then((r) => r.json())
-    .then((data) => {
+    .then(async (data) => {
       round += 1;
       commonId = data.commonId;
-      active = true;
       el('roundNum').textContent = round;
-      renderCard(el('cardA'), data.cardA, { onTap: handleTap });
-      renderCard(el('cardB'), data.cardB, { onTap: handleTap });
+      await revealRound(
+        el('countdownOverlay'),
+        el('countdownNumber'),
+        el('cardA'),
+        el('cardB'),
+        data.cardA,
+        data.cardB,
+        handleTap
+      );
+      active = true;
     });
 }
 

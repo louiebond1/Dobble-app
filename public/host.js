@@ -47,8 +47,14 @@ socket.on('players:update', (scores) => {
 socket.on('round:new', (data) => {
   el('roundNum').textContent = data.roundNumber;
   el('totalRounds').textContent = data.totalRounds;
-  renderCard(el('cardA'), data.cardA);
-  renderCard(el('cardB'), data.cardB);
+  revealRound(
+    el('countdownOverlay'),
+    el('countdownNumber'),
+    el('cardA'),
+    el('cardB'),
+    data.cardA,
+    data.cardB
+  );
 });
 
 socket.on('round:result', (data) => {

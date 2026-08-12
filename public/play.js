@@ -43,15 +43,23 @@ socket.on('players:update', (scores) => {
   if (mine) el('playerScoreBadge').textContent = mine.score;
 });
 
-socket.on('round:new', (data) => {
-  roundActive = true;
+socket.on('round:new', async (data) => {
+  roundActive = false;
   waitingPanel.classList.add('hidden');
   gameOver.classList.add('hidden');
   gameArea.classList.remove('hidden');
   el('roundNum').textContent = data.roundNumber;
   el('totalRounds').textContent = data.totalRounds;
-  renderCard(el('cardA'), data.cardA, { onTap: handleTap });
-  renderCard(el('cardB'), data.cardB, { onTap: handleTap });
+  await revealRound(
+    el('countdownOverlay'),
+    el('countdownNumber'),
+    el('cardA'),
+    el('cardB'),
+    data.cardA,
+    data.cardB,
+    handleTap
+  );
+  roundActive = true;
 });
 
 function handleTap(symbolId, node) {
