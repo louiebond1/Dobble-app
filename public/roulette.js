@@ -108,7 +108,6 @@ function renderResult(d) {
   } else {
     challengeEl.classList.add('hidden');
   }
-  el('cupSetupLink').classList.toggle('hidden', d.id !== 'game-014');
 }
 
 el('resultBackBtn').addEventListener('click', () => showPanel(filtersPanel));
