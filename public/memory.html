@@ -14,12 +14,37 @@
   <link rel="manifest" href="/manifest.webmanifest" />
   <link rel="stylesheet" href="/style.css" />
 </head>
-<body>
+<body data-theme="romantic">
   <div class="wrap wrap-wide">
     <h1>🧠 Memory Match</h1>
     <p class="subtitle">Pick how many, then find every pair</p>
 
     <div class="panel" id="setup">
+      <p class="field-label">Choose your memory wall</p>
+      <div class="theme-select" id="themeSelect">
+        <button type="button" class="theme-card active" data-theme="romantic">
+          <span class="theme-card-swatch theme-swatch-romantic"><span class="theme-swatch-string"></span><i></i><i></i><i></i></span>
+          <span class="theme-card-text">
+            <span class="theme-card-name">💕 Romantic Bedroom</span>
+            <span class="theme-card-desc">Soft pink &amp; lilac, fairy lights</span>
+          </span>
+        </button>
+        <button type="button" class="theme-card" data-theme="polaroid">
+          <span class="theme-card-swatch theme-swatch-polaroid"><span class="theme-swatch-string"></span><i></i><i></i><i></i></span>
+          <span class="theme-card-text">
+            <span class="theme-card-name">📸 Polaroid Wall</span>
+            <span class="theme-card-desc">Warm wood pegs, mood-board feel</span>
+          </span>
+        </button>
+        <button type="button" class="theme-card" data-theme="holiday">
+          <span class="theme-card-swatch theme-swatch-holiday"><span class="theme-swatch-string"></span><i></i><i></i><i></i></span>
+          <span class="theme-card-text">
+            <span class="theme-card-name">✈️ Holiday Memories</span>
+            <span class="theme-card-desc">Postcards &amp; travel bunting</span>
+          </span>
+        </button>
+      </div>
+
       <div class="mode-toggle" id="sourceToggle">
         <button type="button" class="mode-btn active" id="sourceFavouritesBtn" data-source="favourites">💕 Favourites</button>
         <button type="button" class="mode-btn" id="sourcePhotosBtn" data-source="photos">📸 Our Photos</button>
@@ -51,38 +76,43 @@
       <button class="btn" id="startBtn">🧠 Deal the Board</button>
       <a href="/" class="btn btn-outline">← Back to Home</a>
     </div>
+  </div>
 
-    <div class="panel hidden" id="memoryGameArea">
-      <div class="panel-header">
-        <a href="/memory" class="btn-back">← Quit</a>
+  <div class="memory-stage hidden" id="memoryGameArea">
+    <div class="memory-topbar">
+      <a href="/memory" class="btn-back memory-quit">← Quit</a>
+      <div class="memory-header-text">
+        <span class="memory-title">🧠 Memory Match</span>
+        <span class="memory-subtitle">Flip the cards. Find every pair.</span>
       </div>
-      <div class="memory-hud" id="memoryHud">
-        <div class="memory-player" id="hudP1">
-          <span class="memory-player-name" id="hudP1Name"></span>
-          <span class="memory-player-score" id="hudP1Score">0</span>
-        </div>
-        <div class="memory-turn" id="memoryTurn">—</div>
-        <div class="memory-player" id="hudP2">
-          <span class="memory-player-name" id="hudP2Name"></span>
-          <span class="memory-player-score" id="hudP2Score">0</span>
-        </div>
-      </div>
-      <div class="memory-stats">
-        <span id="memoryMoves">0 moves</span>
-        <span id="memoryTimer">0:00</span>
-        <span id="memoryFound">0 / 57 pairs</span>
-      </div>
-      <div class="memory-grid" id="memoryGrid"></div>
     </div>
+    <div class="memory-stats-bar">
+      <span id="memoryMoves">0 moves</span>
+      <span id="memoryTimer">0:00</span>
+      <span id="memoryFound">0 / 10 pairs</span>
+    </div>
+    <div class="memory-hud hidden" id="memoryHud">
+      <div class="memory-player" id="hudP1">
+        <span class="memory-player-name" id="hudP1Name"></span>
+        <span class="memory-player-score" id="hudP1Score">0</span>
+      </div>
+      <div class="memory-turn" id="memoryTurn">—</div>
+      <div class="memory-player" id="hudP2">
+        <span class="memory-player-name" id="hudP2Name"></span>
+        <span class="memory-player-score" id="hudP2Score">0</span>
+      </div>
+    </div>
+    <div class="memory-wall" id="memoryWall"></div>
+  </div>
 
-    <div class="panel hidden" id="memoryOver">
-      <div class="game-complete-emoji">🧠</div>
-      <h2 id="memoryOverTitle">All Matched!</h2>
-      <p class="rounds-completed" id="memoryOverSummary"></p>
-      <p class="rounds-completed" id="memorySoloBest"></p>
+  <div class="memory-stage memory-stage-over hidden" id="memoryOver">
+    <div class="memory-over-content">
+      <div class="memory-over-emoji">🎉</div>
+      <h2 id="memoryOverTitle">All memories found!</h2>
+      <p class="memory-over-summary" id="memoryOverSummary"></p>
+      <p class="memory-over-summary" id="memorySoloBest"></p>
       <div class="leaderboard" id="memoryFinalBoard"></div>
-      <button class="btn" id="memoryPlayAgainBtn">🔁 Play Again</button>
-      <a href="/" class="btn btn-outline">← Back to Home</a>
+      <button class="btn" id="memoryPlayAgainBtn">💕 Play Again</button>
     </div>
   </div>
 
