@@ -22,6 +22,8 @@
     <p class="subtitle">Spot the match — scan to join on your phone</p>
 
     <div class="panel" id="setup">
+      <label for="hostNameInput">Your name</label>
+      <input type="text" id="hostNameInput" placeholder="e.g. Alex" maxlength="20" />
       <div class="rounds-field">
         <label for="roundsInput">Number of rounds</label>
         <input type="number" id="roundsInput" min="5" max="28" value="15" />
@@ -37,6 +39,7 @@
       <h3>Players (<span id="playerCount">0</span>)</h3>
       <ul id="playerList"></ul>
       <button class="btn" id="startBtn" disabled>Start Game</button>
+      <p class="lobby-hint" id="lobbyHint">Waiting for at least one more player to join…</p>
     </div>
 
     <div class="panel hidden" id="gameArea">

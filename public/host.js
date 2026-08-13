@@ -1,6 +1,8 @@
 const socket = io();
 let roomCode = null;
 let hostToken = null;
+let myName = null;
+let roundActive = false;
 
 const el = (id) => document.getElementById(id);
 const setup = el('setup');
@@ -11,9 +13,11 @@ const resultOverlay = el('resultOverlay');
 
 el('createBtn').addEventListener('click', () => {
   const rounds = parseInt(el('roundsInput').value, 10) || 15;
-  socket.emit('host:create', { rounds }, (res) => {
+  const name = el('hostNameInput').value.trim();
+  socket.emit('host:create', { rounds, name }, (res) => {
     roomCode = res.code;
     hostToken = res.hostToken;
+    myName = res.name;
     el('roomCode').textContent = roomCode;
     setup.classList.add('hidden');
     lobby.classList.remove('hidden');
@@ -46,43 +50,63 @@ socket.on('connect', () => {
   if (!roomCode || !hostToken) return;
   socket.emit('host:rejoin', { code: roomCode, hostToken }, (res) => {
     if (!res || !res.ok) return;
-    el('playerCount').textContent = res.players.length;
-    el('startBtn').disabled = res.players.length < 1;
-    el('playerList').innerHTML = res.players.map((p) => `<li>${p.name}</li>`).join('');
-    renderLeaderboard('leaderboard', res.players);
+    updateLobby(res.players);
   });
 });
 
 socket.on('players:update', (scores) => {
-  el('playerCount').textContent = scores.length;
-  el('startBtn').disabled = scores.length < 1;
-  el('playerList').innerHTML = scores.map((p) => `<li>${p.name}</li>`).join('');
-  renderLeaderboard('leaderboard', scores);
+  updateLobby(scores);
 });
+
+function updateLobby(scores) {
+  el('playerCount').textContent = scores.length;
+  el('startBtn').disabled = scores.length < 2;
+  el('lobbyHint').classList.toggle('hidden', scores.length >= 2);
+  el('playerList').innerHTML = scores.map((p) => `<li>${label(p.name)}</li>`).join('');
+  renderLeaderboard('leaderboard', scores);
+}
+
+function label(name) {
+  return name === myName ? `${name} (You)` : name;
+}
 
 let roundsPlayed = 0;
 
-socket.on('round:new', (data) => {
+function handleTap(symbolId, node) {
+  if (!roundActive) return;
+  socket.emit('player:answer', { code: roomCode, symbolId });
+  hapticTap();
+  node.classList.add('correct');
+  setTimeout(() => node.classList.remove('correct'), 600);
+}
+
+socket.on('round:new', async (data) => {
+  roundActive = false;
   roundsPlayed = data.roundNumber;
   el('roundNum').textContent = data.roundNumber;
   el('totalRounds').textContent = data.totalRounds;
-  revealRound(
+  await revealRound(
     el('countdownOverlay'),
     el('countdownNumber'),
     el('cardA'),
     el('cardB'),
     data.cardA,
-    data.cardB
+    data.cardB,
+    handleTap
   );
+  roundActive = true;
 });
 
 socket.on('round:result', async (data) => {
+  roundActive = false;
   await highlightMatch(el('cardA'), el('cardB'), data.symbolId);
-  showOverlay(data.image, data.emoji, `🎉 ${data.winnerName} got it!`, data.label);
+  const won = data.winnerName === myName;
+  showOverlay(data.image, data.emoji, won ? '🎉 You got it!' : `👀 ${data.winnerName} got it!`, data.label);
   renderLeaderboard('leaderboard', data.scores);
 });
 
 socket.on('round:timeout', async (data) => {
+  roundActive = false;
   await highlightMatch(el('cardA'), el('cardB'), data.symbolId);
   showOverlay(data.image, data.emoji, "⏰ Time's up!", `It was ${data.label}`);
 });
@@ -105,6 +129,6 @@ function showOverlay(image, emoji, title, label) {
 function renderLeaderboard(targetId, scores) {
   const medals = ['🥇', '🥈', '🥉'];
   el(targetId).innerHTML = scores
-    .map((p, i) => `<div class="leaderboard-row"><span>${medals[i] || ''} ${p.name}</span><span>${p.score}</span></div>`)
+    .map((p, i) => `<div class="leaderboard-row"><span>${medals[i] || ''} ${label(p.name)}</span><span>${p.score}</span></div>`)
     .join('');
 }

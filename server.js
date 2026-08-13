@@ -98,9 +98,10 @@ function startRound(code) {
 io.on('connection', (socket) => {
   socket.on('host:create', (payload, ack) => {
     const rounds = Math.max(3, Math.min(28, Number(payload && payload.rounds) || 15));
+    const hostName = String((payload && payload.name) || '').trim().slice(0, 20) || 'Host';
     const code = makeRoomCode();
     const hostToken = crypto.randomUUID();
-    rooms.set(code, {
+    const room = {
       code,
       hostSocketId: socket.id,
       hostToken,
@@ -113,11 +114,15 @@ io.on('connection', (socket) => {
       currentCommonId: null,
       roundTimer: null,
       createdAt: Date.now(),
-    });
+    };
+    // The host plays too — they're a player like anyone who scans the QR code.
+    room.players.set(socket.id, { name: hostName, score: 0 });
+    rooms.set(code, room);
     socket.join(code);
     socket.data.role = 'host';
     socket.data.code = code;
-    if (typeof ack === 'function') ack({ code, hostToken });
+    if (typeof ack === 'function') ack({ code, hostToken, name: hostName });
+    io.to(code).emit('players:update', scoreboard(room));
   });
 
   // Re-claims host privileges for a room after the host's socket reconnects
@@ -131,6 +136,13 @@ io.on('connection', (socket) => {
     if (!room || !hostToken || room.hostToken !== hostToken) {
       if (typeof ack === 'function') ack({ ok: false });
       return;
+    }
+    // Carry the host's own player entry (name + score) over to their new
+    // socket id so reconnecting mid-game doesn't reset their progress.
+    const oldHostSocketId = room.hostSocketId;
+    if (oldHostSocketId !== socket.id && room.players.has(oldHostSocketId)) {
+      room.players.set(socket.id, room.players.get(oldHostSocketId));
+      room.players.delete(oldHostSocketId);
     }
     room.hostSocketId = socket.id;
     socket.join(code);
@@ -166,7 +178,7 @@ io.on('connection', (socket) => {
   socket.on('host:start', (payload) => {
     const code = String((payload && payload.code) || '').toUpperCase();
     const room = rooms.get(code);
-    if (!room || room.hostSocketId !== socket.id || room.players.size < 1) return;
+    if (!room || room.hostSocketId !== socket.id || room.players.size < 2) return;
     room.started = true;
     room.roundNumber = 0;
     room.cardOrder = shuffledIndices(DECK.length);

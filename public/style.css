@@ -145,6 +145,13 @@ label { display: block; text-align: left; font-weight: 600; font-size: 0.9rem; c
   display: block;
 }
 
+.lobby-hint {
+  color: var(--muted);
+  font-weight: 600;
+  font-size: 0.85rem;
+  margin: 10px 0 0;
+}
+
 .room-code {
   font-size: 2.4rem;
   font-weight: 800;
