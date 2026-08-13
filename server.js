@@ -835,6 +835,10 @@ app.get('/hugo-spritz-pong', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'hugo-spritz-pong.html'));
 });
 
+app.get('/hugo-pong', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'hugo-pong.html'));
+});
+
 app.get('/api/hugo-spritz-pong', (req, res) => {
   const cups = HUGO_SPRITZ_CUPS.map((cup) => {
     const symbol = SYMBOLS.find((s) => s.label === cup.symbolLabel) || {};

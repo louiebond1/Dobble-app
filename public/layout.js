@@ -112,6 +112,25 @@ function hapticSuccess() {
   }
 }
 
+// A quick rising sweep for a throw's release — several close tones in fast
+// succession reads as a "whoosh" without needing real noise synthesis.
+function playWhoosh() {
+  _tone(320, 70, 'sine', 0.06);
+  setTimeout(() => _tone(460, 70, 'sine', 0.06), 35);
+  setTimeout(() => _tone(600, 90, 'sine', 0.05), 70);
+}
+function playSplash() {
+  _tone(200, 60, 'sine', 0.1);
+  setTimeout(() => _tone(700, 140, 'triangle', 0.12), 40);
+  setTimeout(() => _tone(1100, 180, 'sine', 0.1), 110);
+}
+function playMissThud() {
+  _tone(180, 120, 'sine', 0.08);
+}
+function playCelebrate() {
+  [660, 880, 1100, 1320].forEach((f, i) => setTimeout(() => _tone(f, 160, 'triangle', 0.13), i * 90));
+}
+
 // Briefly highlights the same symbol (by id) on both cards — the "spot it,
 // tap it" payoff before the reveal modal appears. Resolves once the
 // highlight has been visible long enough to register.

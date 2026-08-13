@@ -1,0 +1,218 @@
+/* Hugo Pong — full-bleed canvas game screen. Reuses style.css's shared
+   tokens (--accent etc.), .btn/.btn-outline, .overlay/.overlay-card, and
+   .countdown-overlay/.countdown-number for visual consistency with the
+   rest of the app, but the layout itself is edge-to-edge, not the
+   .wrap/.panel card system used elsewhere. */
+
+html, body {
+  height: 100%;
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
+#gameWrap {
+  position: fixed;
+  inset: 0;
+  background: radial-gradient(120% 90% at 50% -10%, var(--bg1), var(--bg2) 78%);
+}
+
+#gameCanvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.hud-top {
+  position: absolute;
+  top: env(safe-area-inset-top);
+  left: 0;
+  right: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px calc(16px + env(safe-area-inset-right)) 6px calc(16px + env(safe-area-inset-left));
+  pointer-events: none;
+}
+
+.hud-back {
+  pointer-events: auto;
+  color: #fff;
+  text-decoration: none;
+  font-weight: 700;
+  font-size: 0.85rem;
+  background: rgba(0, 0, 0, 0.22);
+  padding: 7px 13px;
+  border-radius: 999px;
+  backdrop-filter: blur(6px);
+}
+.hud-back:active { opacity: 0.6; }
+
+.hud-title {
+  color: #fff;
+  font-weight: 800;
+  font-size: 1rem;
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+.hud-spacer { width: 70px; }
+
+.hud-stats {
+  position: absolute;
+  top: calc(env(safe-area-inset-top) + 46px);
+  left: 0;
+  right: 0;
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  padding: 0 16px;
+  pointer-events: none;
+}
+
+.hud-stat {
+  background: rgba(0, 0, 0, 0.22);
+  backdrop-filter: blur(6px);
+  border-radius: 12px;
+  padding: 6px 14px;
+  text-align: center;
+  min-width: 66px;
+}
+
+.hud-stat-label {
+  display: block;
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.65);
+}
+
+.hud-stat-value {
+  display: block;
+  font-size: 1rem;
+  font-weight: 800;
+  color: #fff;
+}
+
+.swipe-hint {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: calc(env(safe-area-inset-bottom) + 40px);
+  text-align: center;
+  color: rgba(255, 255, 255, 0.75);
+  font-weight: 800;
+  font-size: 0.8rem;
+  letter-spacing: 0.06em;
+  pointer-events: none;
+  animation: hintPulse 1.6s ease-in-out infinite;
+  transition: opacity 0.3s ease;
+}
+.swipe-hint.hidden { opacity: 0; }
+
+@keyframes hintPulse {
+  0%, 100% { opacity: 0.4; transform: translateY(0); }
+  50% { opacity: 0.9; transform: translateY(-4px); }
+}
+
+.result-toast {
+  position: absolute;
+  top: 42%;
+  left: 0;
+  right: 0;
+  text-align: center;
+  font-size: 1.7rem;
+  font-weight: 900;
+  color: #fff;
+  text-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+  pointer-events: none;
+  transition: opacity 0.25s ease, transform 0.25s ease;
+}
+.result-toast.hidden {
+  opacity: 0;
+  transform: translateY(10px) scale(0.9);
+}
+
+.intro-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  background: radial-gradient(120% 90% at 50% -10%, var(--bg1), var(--bg2) 78%);
+  z-index: 20;
+  padding: 0 24px;
+  text-align: center;
+}
+.intro-overlay.hidden { display: none; }
+
+.intro-title {
+  font-size: 2.1rem;
+  font-weight: 900;
+  color: #fff;
+  text-shadow: 0 3px 14px rgba(0, 0, 0, 0.3);
+}
+
+.intro-sub {
+  color: rgba(255, 255, 255, 0.8);
+  font-weight: 600;
+  margin-bottom: 20px;
+}
+
+.intro-start-btn {
+  appearance: none;
+  border: none;
+  border-radius: 999px;
+  padding: 16px 40px;
+  font-size: 1.05rem;
+  font-weight: 800;
+  color: #fff;
+  background: linear-gradient(135deg, var(--accent), var(--accent-dark));
+  box-shadow: 0 10px 26px rgba(181, 45, 112, 0.4);
+  cursor: pointer;
+}
+.intro-start-btn:active { transform: scale(0.97); }
+
+.end-card {
+  background: rgba(255, 255, 255, 0.96);
+  border-radius: 24px;
+  padding: 30px 24px;
+  width: 100%;
+  max-width: 340px;
+  text-align: center;
+  box-shadow: 0 24px 60px rgba(20, 8, 40, 0.4);
+}
+
+.end-emoji { font-size: 2.6rem; }
+
+.end-score {
+  font-size: 1.6rem;
+  font-weight: 900;
+  color: var(--accent-dark);
+  margin: 6px 0 2px;
+}
+
+.end-accuracy {
+  font-size: 0.9rem;
+  color: var(--muted);
+  font-weight: 600;
+  margin-bottom: 16px;
+}
+
+.end-verdict-title {
+  font-weight: 800;
+  font-size: 1.1rem;
+  color: var(--ink);
+  margin-bottom: 4px;
+}
+
+.end-verdict-sub {
+  font-size: 0.88rem;
+  color: var(--muted);
+  margin-bottom: 18px;
+}
