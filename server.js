@@ -238,6 +238,18 @@ io.on('connection', (socket) => {
     io.to(code).emit('players:update', scoreboard(room));
   });
 
+  // Lets the host back out of a room they created (before or during a game)
+  // instead of it just lingering until the TTL sweep. Anyone already
+  // joined gets bounced back to the join screen.
+  socket.on('host:cancel', (payload) => {
+    const code = String((payload && payload.code) || '').toUpperCase();
+    const room = rooms.get(code);
+    if (!room || room.hostSocketId !== socket.id) return;
+    clearTimeout(room.roundTimer);
+    io.to(code).emit('room:cancelled');
+    rooms.delete(code);
+  });
+
   socket.on('host:start', (payload) => {
     const code = String((payload && payload.code) || '').toUpperCase();
     const room = rooms.get(code);

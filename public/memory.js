@@ -5,6 +5,7 @@ const overPanel = el('memoryOver');
 
 let symbols = [];
 let players = [];
+let mode = 'solo';
 let currentPlayer = 0;
 let moves = 0;
 let matchedPairs = 0;
@@ -20,14 +21,29 @@ fetch('/api/symbols')
     symbols = data;
   });
 
+document.querySelectorAll('.mode-btn').forEach((btn) => {
+  btn.addEventListener('click', () => {
+    mode = btn.dataset.mode;
+    document.querySelectorAll('.mode-btn').forEach((b) => b.classList.toggle('active', b === btn));
+    el('soloFields').classList.toggle('hidden', mode !== 'solo');
+    el('duoFields').classList.toggle('hidden', mode !== 'duo');
+  });
+});
+
 el('startBtn').addEventListener('click', () => {
   if (!symbols.length) return; // symbols still loading — button is effectively a no-op until ready
-  const p1 = el('p1Input').value.trim() || 'Player 1';
-  const p2 = el('p2Input').value.trim() || 'Player 2';
-  players = [
-    { name: p1, pairs: 0 },
-    { name: p2, pairs: 0 },
-  ];
+
+  if (mode === 'solo') {
+    const name = el('soloNameInput').value.trim() || 'You';
+    players = [{ name, pairs: 0 }];
+  } else {
+    const p1 = el('p1Input').value.trim() || 'Player 1';
+    const p2 = el('p2Input').value.trim() || 'Player 2';
+    players = [
+      { name: p1, pairs: 0 },
+      { name: p2, pairs: 0 },
+    ];
+  }
   currentPlayer = 0;
   moves = 0;
   matchedPairs = 0;
@@ -38,9 +54,10 @@ el('startBtn').addEventListener('click', () => {
   setup.classList.add('hidden');
   overPanel.classList.add('hidden');
   gameArea.classList.remove('hidden');
+  el('memoryHud').classList.toggle('hidden', mode === 'solo');
 
-  el('hudP1Name').textContent = p1;
-  el('hudP2Name').textContent = p2;
+  el('hudP1Name').textContent = players[0].name;
+  if (players[1]) el('hudP2Name').textContent = players[1].name;
   updateHud();
   buildBoard();
   startTimer();
@@ -132,7 +149,7 @@ function handleCardClick(cardEl) {
       setTimeout(() => {
         firstCard.classList.remove('flipped', 'mismatch');
         secondCard.classList.remove('flipped', 'mismatch');
-        currentPlayer = 1 - currentPlayer;
+        if (players.length > 1) currentPlayer = 1 - currentPlayer;
         updateHud();
         resetTurnState();
       }, 500);
@@ -148,9 +165,11 @@ function resetTurnState() {
 
 function updateHud() {
   el('hudP1Score').textContent = players[0].pairs;
-  el('hudP2Score').textContent = players[1].pairs;
   el('hudP1').classList.toggle('active', currentPlayer === 0);
-  el('hudP2').classList.toggle('active', currentPlayer === 1);
+  if (players[1]) {
+    el('hudP2Score').textContent = players[1].pairs;
+    el('hudP2').classList.toggle('active', currentPlayer === 1);
+  }
   el('memoryTurn').textContent = `${players[currentPlayer].name}'s turn`;
 }
 
@@ -165,16 +184,49 @@ function startTimer() {
   }, 1000);
 }
 
+function bestKey(name) {
+  return `memory-solo-best-${name.trim().toLowerCase()}`;
+}
+
 function endGame() {
   clearInterval(timerInterval);
   gameArea.classList.add('hidden');
   overPanel.classList.remove('hidden');
 
-  const [p1, p2] = players;
-  let title;
-  if (p1.pairs === p2.pairs) title = "It's a tie! 🤝";
-  else title = `${p1.pairs > p2.pairs ? p1.name : p2.name} wins! 🏆`;
-  el('memoryOverTitle').textContent = title;
+  const elapsedSec = Math.floor((Date.now() - startedAt) / 1000);
   el('memoryOverSummary').textContent = `${moves} moves · ${el('memoryTimer').textContent} · all 57 pairs found`;
-  renderLeaderboard('memoryFinalBoard', [...players].sort((a, b) => b.pairs - a.pairs), { valueKey: 'pairs' });
+
+  if (mode === 'solo') {
+    el('memoryOverTitle').textContent = '🎉 Board Cleared!';
+    el('memoryFinalBoard').innerHTML = '';
+
+    const key = bestKey(players[0].name);
+    let best = null;
+    try {
+      best = JSON.parse(localStorage.getItem(key) || 'null');
+    } catch (e) {
+      best = null;
+    }
+    const improved = !best || moves < best.moves || (moves === best.moves && elapsedSec < best.seconds);
+    if (improved) {
+      try {
+        localStorage.setItem(key, JSON.stringify({ moves, seconds: elapsedSec }));
+      } catch (e) {
+        // localStorage unavailable — best-tracking just won't persist
+      }
+      el('memorySoloBest').textContent = best ? '🏆 New personal best!' : '🏆 First run in the books!';
+    } else {
+      const bestM = Math.floor(best.seconds / 60);
+      const bestS = String(best.seconds % 60).padStart(2, '0');
+      el('memorySoloBest').textContent = `Best: ${best.moves} moves · ${bestM}:${bestS}`;
+    }
+  } else {
+    const [p1, p2] = players;
+    let title;
+    if (p1.pairs === p2.pairs) title = "It's a tie! 🤝";
+    else title = `${p1.pairs > p2.pairs ? p1.name : p2.name} wins! 🏆`;
+    el('memoryOverTitle').textContent = title;
+    el('memorySoloBest').textContent = '';
+    renderLeaderboard('memoryFinalBoard', [...players].sort((a, b) => b.pairs - a.pairs), { valueKey: 'pairs' });
+  }
 }

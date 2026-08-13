@@ -20,16 +20,32 @@
     <p class="subtitle">All 57 favourites — find every pair</p>
 
     <div class="panel" id="setup">
-      <label for="p1Input">Player 1</label>
-      <input type="text" id="p1Input" maxlength="20" placeholder="e.g. Louie" />
-      <label for="p2Input">Player 2</label>
-      <input type="text" id="p2Input" maxlength="20" placeholder="e.g. Anna" />
+      <div class="mode-toggle" id="modeToggle">
+        <button type="button" class="mode-btn active" id="modeSoloBtn" data-mode="solo">🧍 Solo</button>
+        <button type="button" class="mode-btn" id="modeDuoBtn" data-mode="duo">🧑‍🤝‍🧑 Head-to-Head</button>
+      </div>
+
+      <div id="soloFields">
+        <label for="soloNameInput">Your name</label>
+        <input type="text" id="soloNameInput" maxlength="20" placeholder="e.g. Louie" />
+      </div>
+
+      <div id="duoFields" class="hidden">
+        <label for="p1Input">Player 1</label>
+        <input type="text" id="p1Input" maxlength="20" placeholder="e.g. Louie" />
+        <label for="p2Input">Player 2</label>
+        <input type="text" id="p2Input" maxlength="20" placeholder="e.g. Anna" />
+      </div>
+
       <button class="btn" id="startBtn">🧠 Deal the Board</button>
       <a href="/" class="btn btn-outline">← Back to Home</a>
     </div>
 
     <div class="panel hidden" id="memoryGameArea">
-      <div class="memory-hud">
+      <div class="panel-header">
+        <a href="/memory" class="btn-back">← Quit</a>
+      </div>
+      <div class="memory-hud" id="memoryHud">
         <div class="memory-player" id="hudP1">
           <span class="memory-player-name" id="hudP1Name"></span>
           <span class="memory-player-score" id="hudP1Score">0</span>
@@ -52,6 +68,7 @@
       <div class="game-complete-emoji">🧠</div>
       <h2 id="memoryOverTitle">All Matched!</h2>
       <p class="rounds-completed" id="memoryOverSummary"></p>
+      <p class="rounds-completed" id="memorySoloBest"></p>
       <div class="leaderboard" id="memoryFinalBoard"></div>
       <button class="btn" id="memoryPlayAgainBtn">🔁 Play Again</button>
       <a href="/" class="btn btn-outline">← Back to Home</a>

@@ -31,6 +31,15 @@ el('createBtn').addEventListener('click', () => {
   });
 });
 
+el('lobbyBackBtn').addEventListener('click', () => {
+  if (roomCode) socket.emit('host:cancel', { code: roomCode });
+  roomCode = null;
+  hostToken = null;
+  myName = null;
+  lobby.classList.add('hidden');
+  setup.classList.remove('hidden');
+});
+
 el('startBtn').addEventListener('click', () => {
   socket.emit('host:start', { code: roomCode });
   lobby.classList.add('hidden');

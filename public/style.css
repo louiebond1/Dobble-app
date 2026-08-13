@@ -109,6 +109,31 @@ input[type="text"], input[type="number"] {
 
 label { display: block; text-align: left; font-weight: 600; font-size: 0.9rem; color: var(--muted); }
 
+.mode-toggle {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.mode-btn {
+  flex: 1;
+  appearance: none;
+  border: 2px solid #eeddf3;
+  background: transparent;
+  border-radius: 12px;
+  padding: 10px 8px;
+  font-weight: 700;
+  font-size: 0.85rem;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.mode-btn.active {
+  background: linear-gradient(135deg, var(--accent), var(--accent-dark));
+  border-color: transparent;
+  color: white;
+}
+
 .rounds-field {
   background: #fbf3fb;
   border-radius: 16px;
@@ -438,6 +463,26 @@ label { display: block; text-align: left; font-weight: 600; font-size: 0.9rem; c
 }
 
 .hidden { display: none !important; }
+
+.panel-header {
+  display: flex;
+  justify-content: flex-start;
+  margin: -6px 0 8px;
+}
+
+.btn-back {
+  appearance: none;
+  border: none;
+  background: none;
+  color: var(--muted);
+  font-weight: 700;
+  font-size: 0.85rem;
+  padding: 6px 4px;
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.btn-back:active { opacity: 0.6; }
 
 /* ---------- Memory Match ---------- */
 

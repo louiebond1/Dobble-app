@@ -42,6 +42,16 @@ function label(name) {
   return name === playerName ? `${name} (You)` : name;
 }
 
+socket.on('room:cancelled', () => {
+  roomCode = null;
+  roundActive = false;
+  gameArea.classList.add('hidden');
+  waitingPanel.classList.add('hidden');
+  gameOver.classList.add('hidden');
+  joinPanel.classList.remove('hidden');
+  el('joinError').textContent = 'The host ended the game.';
+});
+
 socket.on('players:update', (scores) => {
   const mine = scores.find((p) => p.name === playerName);
   if (mine) el('playerScoreBadge').textContent = mine.score;
