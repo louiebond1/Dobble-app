@@ -345,11 +345,36 @@ label { display: block; text-align: left; font-weight: 600; font-size: 0.9rem; c
 .leaderboard-row {
   display: flex;
   justify-content: space-between;
+  align-items: center;
   padding: 8px 14px;
   background: rgba(255,255,255,0.7);
   border-radius: 12px;
   margin-bottom: 6px;
   font-weight: 600;
+  gap: 10px;
+}
+
+.leaderboard-value {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.leaderboard-time {
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--muted);
+  background: #f3e5f9;
+  border-radius: 999px;
+  padding: 2px 8px;
+  white-space: nowrap;
+}
+
+.all-time-heading {
+  margin: 18px 0 4px;
+  font-size: 1.05rem;
+  font-weight: 800;
+  color: var(--ink);
 }
 
 .overlay {

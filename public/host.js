@@ -63,7 +63,7 @@ function updateLobby(scores) {
   el('startBtn').disabled = scores.length < 2;
   el('lobbyHint').classList.toggle('hidden', scores.length >= 2);
   el('playerList').innerHTML = scores.map((p) => `<li>${label(p.name)}</li>`).join('');
-  renderLeaderboard('leaderboard', scores);
+  renderLeaderboard('leaderboard', scores, { labelFn: label });
 }
 
 function label(name) {
@@ -102,7 +102,7 @@ socket.on('round:result', async (data) => {
   await highlightMatch(el('cardA'), el('cardB'), data.symbolId);
   const won = data.winnerName === myName;
   showOverlay(data.image, data.emoji, won ? '🎉 You got it!' : `👀 ${data.winnerName} got it!`, data.label);
-  renderLeaderboard('leaderboard', data.scores);
+  renderLeaderboard('leaderboard', data.scores, { labelFn: label });
 });
 
 socket.on('round:timeout', async (data) => {
@@ -115,7 +115,8 @@ socket.on('game:over', (data) => {
   gameArea.classList.add('hidden');
   gameOver.classList.remove('hidden');
   el('roundsCompletedCount').textContent = roundsPlayed;
-  renderLeaderboard('finalLeaderboard', data.scores);
+  renderLeaderboard('finalLeaderboard', data.scores, { labelFn: label });
+  renderLeaderboard('allTimeLeaderboard', data.allTime, { valueKey: 'wins', labelFn: label });
 });
 
 function showOverlay(image, emoji, title, label) {
@@ -126,9 +127,3 @@ function showOverlay(image, emoji, title, label) {
   setTimeout(() => resultOverlay.classList.add('hidden'), 2600);
 }
 
-function renderLeaderboard(targetId, scores) {
-  const medals = ['🥇', '🥈', '🥉'];
-  el(targetId).innerHTML = scores
-    .map((p, i) => `<div class="leaderboard-row"><span>${medals[i] || ''} ${label(p.name)}</span><span>${p.score}</span></div>`)
-    .join('');
-}

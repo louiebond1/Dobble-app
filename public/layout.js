@@ -237,6 +237,25 @@ function renderResultPhoto(frameEl, image, emoji, label) {
   }
 }
 
+// Renders a scored leaderboard list — used for both the live "this game"
+// leaderboard (valueKey 'score') and the "all-time" lifetime one (valueKey
+// 'wins'). Rows may optionally carry avgTimeMs, shown as a small time badge.
+function renderLeaderboard(targetId, rows, opts = {}) {
+  const target = document.getElementById(targetId);
+  if (!target) return;
+  const valueKey = opts.valueKey || 'score';
+  const labelFn = opts.labelFn || ((name) => name);
+  const medals = ['🥇', '🥈', '🥉'];
+  target.innerHTML = rows
+    .map((p, i) => {
+      const value = p[valueKey] || 0;
+      const timeBadge =
+        p.avgTimeMs != null ? `<span class="leaderboard-time">${(p.avgTimeMs / 1000).toFixed(1)}s avg</span>` : '';
+      return `<div class="leaderboard-row"><span>${medals[i] || ''} ${labelFn(p.name)}</span><span class="leaderboard-value">${value}${timeBadge}</span></div>`;
+    })
+    .join('');
+}
+
 function renderCard(el, cardSymbols, { onTap } = {}) {
   el.innerHTML = '';
   const size = el.clientWidth || el.getBoundingClientRect().width;

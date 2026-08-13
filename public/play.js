@@ -38,6 +38,10 @@ function join() {
   });
 }
 
+function label(name) {
+  return name === playerName ? `${name} (You)` : name;
+}
+
 socket.on('players:update', (scores) => {
   const mine = scores.find((p) => p.name === playerName);
   if (mine) el('playerScoreBadge').textContent = mine.score;
@@ -92,10 +96,8 @@ socket.on('game:over', (data) => {
   gameArea.classList.add('hidden');
   gameOver.classList.remove('hidden');
   el('roundsCompletedCount').textContent = roundsPlayed;
-  const medals = ['🥇', '🥈', '🥉'];
-  el('finalLeaderboard').innerHTML = data.scores
-    .map((p, i) => `<div class="leaderboard-row"><span>${medals[i] || ''} ${p.name}</span><span>${p.score}</span></div>`)
-    .join('');
+  renderLeaderboard('finalLeaderboard', data.scores, { labelFn: label });
+  renderLeaderboard('allTimeLeaderboard', data.allTime, { valueKey: 'wins', labelFn: label });
 });
 
 function showOverlay(image, emoji, title, label) {

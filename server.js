@@ -1,4 +1,5 @@
 const path = require('path');
+const fs = require('fs');
 const crypto = require('crypto');
 const express = require('express');
 const QRCode = require('qrcode');
@@ -16,6 +17,62 @@ const ROOM_TTL_MS = 6 * 60 * 60 * 1000;
 
 /** @type {Map<string, any>} */
 const rooms = new Map();
+
+// Lifetime win/speed stats, keyed by lowercased player name so "Louie" and
+// "louie" are the same person. Persisted to a local JSON file — this survives
+// normal restarts but NOT a fresh Railway deploy (new container, blank disk)
+// unless a persistent volume is attached to the service.
+const STATS_DIR = path.join(__dirname, 'data');
+const STATS_FILE = path.join(STATS_DIR, 'stats.json');
+/** @type {Map<string, {name: string, wins: number, totalTimeMs: number}>} */
+const statsStore = new Map();
+
+function loadStats() {
+  try {
+    const raw = fs.readFileSync(STATS_FILE, 'utf8');
+    const entries = JSON.parse(raw);
+    for (const entry of entries) {
+      if (entry && entry.name) statsStore.set(entry.name.trim().toLowerCase(), entry);
+    }
+  } catch (err) {
+    // no stats file yet — start fresh
+  }
+}
+
+function saveStats() {
+  try {
+    fs.mkdirSync(STATS_DIR, { recursive: true });
+    fs.writeFileSync(STATS_FILE, JSON.stringify(Array.from(statsStore.values()), null, 2));
+  } catch (err) {
+    console.error('Failed to save stats:', err.message);
+  }
+}
+
+function recordLifetimeWin(name, timeMs) {
+  const key = name.trim().toLowerCase();
+  if (!key) return;
+  const existing = statsStore.get(key) || { name, wins: 0, totalTimeMs: 0 };
+  existing.name = name;
+  existing.wins += 1;
+  existing.totalTimeMs += timeMs;
+  statsStore.set(key, existing);
+  saveStats();
+}
+
+function allTimeStats(room) {
+  return Array.from(room.players.values())
+    .map((p) => {
+      const rec = statsStore.get(p.name.trim().toLowerCase());
+      return {
+        name: p.name,
+        wins: rec ? rec.wins : 0,
+        avgTimeMs: rec && rec.wins > 0 ? Math.round(rec.totalTimeMs / rec.wins) : null,
+      };
+    })
+    .sort((a, b) => b.wins - a.wins);
+}
+
+loadStats();
 
 function makeRoomCode() {
   let code;
@@ -41,7 +98,11 @@ function commonSymbol(cardA, cardB) {
 
 function scoreboard(room) {
   return Array.from(room.players.values())
-    .map((p) => ({ name: p.name, score: p.score }))
+    .map((p) => ({
+      name: p.name,
+      score: p.score,
+      avgTimeMs: p.score > 0 ? Math.round(p.totalTimeMs / p.score) : null,
+    }))
     .sort((a, b) => b.score - a.score);
 }
 
@@ -60,7 +121,7 @@ function startRound(code) {
 
   if (room.roundNumber >= room.totalRounds || room.cardOrder.length < 2) {
     room.started = false;
-    io.to(code).emit('game:over', { scores: scoreboard(room) });
+    io.to(code).emit('game:over', { scores: scoreboard(room), allTime: allTimeStats(room) });
     return;
   }
 
@@ -73,6 +134,7 @@ function startRound(code) {
   room.roundNumber += 1;
   room.roundActive = true;
   room.currentCommonId = commonId;
+  room.roundStartedAt = Date.now();
 
   io.to(code).emit('round:new', {
     roundNumber: room.roundNumber,
@@ -113,10 +175,11 @@ io.on('connection', (socket) => {
       roundActive: false,
       currentCommonId: null,
       roundTimer: null,
+      roundStartedAt: null,
       createdAt: Date.now(),
     };
     // The host plays too — they're a player like anyone who scans the QR code.
-    room.players.set(socket.id, { name: hostName, score: 0 });
+    room.players.set(socket.id, { name: hostName, score: 0, totalTimeMs: 0 });
     rooms.set(code, room);
     socket.join(code);
     socket.data.role = 'host';
@@ -167,7 +230,7 @@ io.on('connection', (socket) => {
       if (typeof ack === 'function') ack({ ok: false, error: 'Room not found' });
       return;
     }
-    room.players.set(socket.id, { name, score: 0 });
+    room.players.set(socket.id, { name, score: 0, totalTimeMs: 0 });
     socket.join(code);
     socket.data.role = 'player';
     socket.data.code = code;
@@ -182,7 +245,10 @@ io.on('connection', (socket) => {
     room.started = true;
     room.roundNumber = 0;
     room.cardOrder = shuffledIndices(DECK.length);
-    for (const p of room.players.values()) p.score = 0;
+    for (const p of room.players.values()) {
+      p.score = 0;
+      p.totalTimeMs = 0;
+    }
     startRound(code);
   });
 
@@ -193,7 +259,10 @@ io.on('connection', (socket) => {
     room.started = true;
     room.roundNumber = 0;
     room.cardOrder = shuffledIndices(DECK.length);
-    for (const p of room.players.values()) p.score = 0;
+    for (const p of room.players.values()) {
+      p.score = 0;
+      p.totalTimeMs = 0;
+    }
     io.to(code).emit('players:update', scoreboard(room));
     startRound(code);
   });
@@ -210,7 +279,10 @@ io.on('connection', (socket) => {
 
     room.roundActive = false;
     clearTimeout(room.roundTimer);
+    const answerTimeMs = Math.max(0, Date.now() - (room.roundStartedAt || Date.now()));
     player.score += 1;
+    player.totalTimeMs += answerTimeMs;
+    recordLifetimeWin(player.name, answerTimeMs);
 
     io.to(code).emit('round:result', {
       winnerName: player.name,
