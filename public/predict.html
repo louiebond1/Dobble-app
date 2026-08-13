@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#4a3070" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <title>What Would You Say? — Our Favourite Things</title>
+  <link rel="icon" href="/favicon.ico" sizes="any" />
+  <link rel="icon" href="/favicon-32.png" type="image/png" />
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <link rel="stylesheet" href="/style.css" />
+  <link rel="stylesheet" href="/predict.css" />
+</head>
+<body>
+  <div class="wrap">
+    <h1>🧠 What Would You Say?</h1>
+    <p class="subtitle">How well do you actually know each other?</p>
+
+    <div class="panel" id="setup">
+      <button class="btn" id="hostBtn">🎉 Host New Game</button>
+      <div class="rounds-field">
+        <label for="roundsInput">Number of rounds</label>
+        <input type="number" id="roundsInput" min="5" max="30" value="12" />
+      </div>
+      <div class="or-divider">or</div>
+      <label for="codeInput">Join with a code</label>
+      <input type="text" id="codeInput" placeholder="e.g. AB12" maxlength="4" autocapitalize="characters" />
+      <button class="btn btn-outline" id="joinBtn">Join Game</button>
+      <p class="join-error" id="joinError"></p>
+      <a href="/" class="btn btn-outline">← Back to Home</a>
+    </div>
+
+    <div class="panel hidden" id="lobby">
+      <div class="panel-header">
+        <button class="btn-back" id="lobbyBackBtn">← Back</button>
+      </div>
+      <div class="room-code hidden" id="roomCodeWrap"><span id="roomCode"></span></div>
+      <img id="qrImg" alt="QR code to join" class="hidden" />
+      <div class="join-url hidden" id="joinUrlText"></div>
+      <h3>Who are you?</h3>
+      <div class="role-pick" id="rolePick">
+        <button class="role-btn" id="pickLouieBtn" data-role="Louie">🙋 I'm Louie</button>
+        <button class="role-btn" id="pickArielBtn" data-role="Ariel">🙋 I'm Ariel</button>
+      </div>
+      <p class="lobby-hint" id="lobbyHint">Waiting for both of you to join and pick who's who…</p>
+      <button class="btn hidden" id="startBtn" disabled>Start Game</button>
+    </div>
+
+    <div class="panel hidden" id="roundArea">
+      <div class="round-info">
+        <span class="category-badge" id="categoryBadge"></span>
+        <span>Round <span id="roundNum"></span> / <span id="totalRounds"></span></span>
+      </div>
+      <h2 id="roundHeader"></h2>
+      <p class="question-text" id="questionText"></p>
+      <div class="options-list" id="optionsList"></div>
+      <p class="waiting-text hidden" id="waitingText">⏳ Waiting for the other player…</p>
+      <div class="score-strip">Game score: <strong id="gameScoreDisplay">0</strong></div>
+    </div>
+
+    <div class="panel hidden" id="gameOver">
+      <div class="game-complete-emoji">💕</div>
+      <h2 id="verdictHeading"></h2>
+      <div class="compat-circle" id="compatCircle"><span id="compatPct">0</span>%</div>
+      <p class="rounds-completed"><span id="questionsPlayedCount"></span> questions · <span id="matchesCount"></span> matches</p>
+      <div class="alltime-strip">All-time accuracy: <strong id="allTimeAccuracy"></strong>% over <strong id="allTimeGames"></strong> games</div>
+      <button class="btn" id="playAgainBtn">🔁 Play Again</button>
+      <a href="/" class="btn btn-outline">← Back to Home</a>
+    </div>
+  </div>
+
+  <div class="overlay hidden" id="revealOverlay">
+    <div class="overlay-card reveal-card">
+      <div class="reveal-flip-row">
+        <div class="reveal-flip-card" id="flipTarget">
+          <div class="flip-label" id="flipTargetLabel">Honest answer</div>
+          <div class="flip-value" id="flipTargetValue"></div>
+        </div>
+        <div class="reveal-flip-card" id="flipPredictor">
+          <div class="flip-label" id="flipPredictorLabel">Prediction</div>
+          <div class="flip-value" id="flipPredictorValue"></div>
+        </div>
+      </div>
+      <h2 id="matchBanner"></h2>
+      <p id="revealPhrase"></p>
+      <p class="points-earned" id="pointsEarned"></p>
+    </div>
+  </div>
+
+  <div class="countdown-overlay hidden" id="countdownOverlay">
+    <div class="countdown-number" id="countdownNumber">3</div>
+  </div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="/layout.js"></script>
+  <script src="/predict.js"></script>
+</body>
+</html>

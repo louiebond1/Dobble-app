@@ -1,0 +1,220 @@
+/* "What Would You Say?" — feature-specific styles layered on top of style.css's
+   shared .panel/.btn/.overlay system. */
+
+.or-divider {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--muted);
+  font-size: 0.85rem;
+  font-weight: 600;
+  margin: 18px 0 12px;
+}
+.or-divider::before,
+.or-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: rgba(44, 33, 56, 0.15);
+}
+
+#setup input[type='text'] {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 2px solid rgba(44, 33, 56, 0.15);
+  font-size: 1.05rem;
+  text-align: center;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+#setup label {
+  display: block;
+  text-align: left;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--muted);
+  margin: 4px 2px 6px;
+}
+
+.join-error {
+  color: var(--accent-dark);
+  font-size: 0.85rem;
+  font-weight: 600;
+  min-height: 1.2em;
+  margin: 6px 0 0;
+}
+
+.role-pick {
+  display: flex;
+  gap: 10px;
+  margin: 14px 0;
+}
+.role-btn {
+  flex: 1;
+  appearance: none;
+  border: 2px solid rgba(44, 33, 56, 0.15);
+  border-radius: 16px;
+  background: #fff;
+  padding: 18px 10px;
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--ink);
+  cursor: pointer;
+  transition: transform 0.12s ease, border-color 0.12s ease, background 0.12s ease;
+}
+.role-btn:active { transform: scale(0.97); }
+.role-btn.picked {
+  border-color: var(--accent);
+  background: linear-gradient(135deg, rgba(239, 77, 149, 0.15), rgba(181, 45, 112, 0.1));
+  color: var(--accent-dark);
+}
+.role-btn.taken {
+  opacity: 0.4;
+}
+.role-btn:disabled { cursor: not-allowed; }
+
+.round-info {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  font-weight: 700;
+  color: var(--muted);
+  font-size: 0.9rem;
+  margin-bottom: 6px;
+}
+
+.category-badge {
+  background: linear-gradient(135deg, var(--accent), var(--accent-dark));
+  color: #fff;
+  font-size: 0.78rem;
+  font-weight: 800;
+  padding: 4px 12px;
+  border-radius: 999px;
+  letter-spacing: 0.01em;
+}
+
+#roundHeader {
+  font-size: 1.15rem;
+  margin: 8px 0 2px;
+}
+
+.question-text {
+  font-size: 1.2rem;
+  font-weight: 700;
+  color: var(--ink);
+  margin: 6px 0 18px;
+  line-height: 1.35;
+}
+
+.options-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.option-btn {
+  appearance: none;
+  border: 2px solid rgba(44, 33, 56, 0.15);
+  border-radius: 14px;
+  background: #fff;
+  padding: 14px 16px;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+  transition: transform 0.12s ease, border-color 0.12s ease, background 0.12s ease;
+}
+.option-btn:active { transform: scale(0.98); }
+.option-btn.selected {
+  border-color: var(--accent);
+  background: linear-gradient(135deg, rgba(239, 77, 149, 0.15), rgba(181, 45, 112, 0.08));
+  color: var(--accent-dark);
+}
+.option-btn:disabled { cursor: default; opacity: 0.75; }
+
+.waiting-text {
+  margin: 14px 0 0;
+  font-weight: 700;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.score-strip {
+  margin-top: 18px;
+  font-size: 0.9rem;
+  color: var(--muted);
+}
+.score-strip strong { color: var(--accent-dark); }
+
+.compat-circle {
+  width: 140px;
+  height: 140px;
+  margin: 10px auto 4px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 2.2rem;
+  font-weight: 800;
+  color: #fff;
+  background: linear-gradient(135deg, var(--accent), var(--accent-dark));
+  box-shadow: 0 12px 28px rgba(181, 45, 112, 0.35);
+}
+
+.alltime-strip {
+  margin: 14px 0 4px;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+.alltime-strip strong { color: var(--accent-dark); }
+
+.reveal-card { max-width: 340px; }
+
+.reveal-flip-row {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+.reveal-flip-card {
+  flex: 1;
+  background: rgba(44, 33, 56, 0.04);
+  border-radius: 14px;
+  padding: 12px 10px;
+  animation: flipIn 0.5s ease;
+}
+.flip-label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  margin-bottom: 6px;
+}
+.flip-value {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--ink);
+  line-height: 1.3;
+}
+
+@keyframes flipIn {
+  from { transform: rotateY(90deg); opacity: 0; }
+  to { transform: rotateY(0deg); opacity: 1; }
+}
+
+#matchBanner { margin: 8px 0 4px; font-size: 1.4rem; }
+.match-yes { color: #1a9d5c; }
+.match-no { color: var(--accent-dark); }
+
+.points-earned {
+  font-weight: 800;
+  color: var(--accent-dark);
+  font-size: 1.05rem;
+}

@@ -138,6 +138,55 @@ label { display: block; text-align: left; font-weight: 600; font-size: 0.9rem; c
   color: white;
 }
 
+.feature-cards {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.feature-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  background: rgba(255, 255, 255, 0.92);
+  border-radius: 20px;
+  padding: 16px 18px;
+  text-decoration: none;
+  box-shadow: 0 14px 34px rgba(20, 8, 40, 0.3);
+  backdrop-filter: blur(10px);
+  transition: transform 0.12s ease, box-shadow 0.12s ease;
+}
+
+.feature-card:active {
+  transform: translateY(1px) scale(0.99);
+}
+
+.feature-card-emoji {
+  font-size: 2.2rem;
+  flex-shrink: 0;
+}
+
+.feature-card-body {
+  text-align: left;
+  min-width: 0;
+}
+
+.feature-card-title {
+  font-weight: 800;
+  font-size: 1rem;
+  letter-spacing: -0.01em;
+  color: var(--accent-dark);
+}
+
+.feature-card-sub {
+  font-size: 0.85rem;
+  color: var(--muted);
+  font-weight: 500;
+  margin-top: 2px;
+}
+
 .pair-count-field input[type="number"] {
   max-width: 110px;
   margin: 0;

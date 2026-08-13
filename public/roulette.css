@@ -1,0 +1,214 @@
+/* Date Roulette — feature-specific styles layered on top of style.css's
+   shared .panel/.btn/.overlay system. */
+
+.filter-group {
+  text-align: left;
+  margin-bottom: 16px;
+}
+.filter-label {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--muted);
+  margin-bottom: 8px;
+}
+.chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.chip {
+  appearance: none;
+  border: 2px solid rgba(44, 33, 56, 0.15);
+  border-radius: 999px;
+  background: #fff;
+  padding: 8px 14px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--ink);
+  cursor: pointer;
+  transition: transform 0.1s ease, border-color 0.1s ease, background 0.1s ease;
+}
+.chip:active { transform: scale(0.96); }
+.chip.active {
+  border-color: var(--accent);
+  background: linear-gradient(135deg, rgba(239, 77, 149, 0.16), rgba(181, 45, 112, 0.08));
+  color: var(--accent-dark);
+}
+
+.surprise-toggle,
+.favourite-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+  font-size: 0.9rem;
+  margin: 14px 2px;
+  cursor: pointer;
+}
+.surprise-toggle input,
+.favourite-toggle input {
+  width: 20px;
+  height: 20px;
+  accent-color: var(--accent);
+}
+
+.spin-btn {
+  font-size: 1.15rem;
+  padding: 18px 28px;
+  margin-top: 6px;
+}
+
+#spinningPanel {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 260px;
+}
+.slot-reel {
+  font-size: 5rem;
+  animation: spinPulse 0.3s ease infinite alternate;
+}
+@keyframes spinPulse {
+  from { transform: scale(1); }
+  to { transform: scale(1.12); }
+}
+
+.result-category {
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-size: 0.8rem;
+  font-weight: 800;
+  color: var(--accent-dark);
+  margin-bottom: 4px;
+}
+.result-desc {
+  font-size: 1.05rem;
+  font-weight: 600;
+  margin: 6px 0 12px;
+  line-height: 1.4;
+}
+.result-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: center;
+  margin-bottom: 12px;
+}
+.meta-pill {
+  background: rgba(44, 33, 56, 0.06);
+  border-radius: 999px;
+  padding: 5px 12px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--ink);
+}
+.result-instructions {
+  font-size: 0.9rem;
+  color: var(--muted);
+  line-height: 1.4;
+  margin: 0 0 10px;
+}
+.result-challenge {
+  background: rgba(239, 77, 149, 0.1);
+  border-radius: 12px;
+  padding: 10px 12px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--accent-dark);
+  margin: 0 0 14px;
+}
+
+.committed-emoji { font-size: 3rem; }
+
+#completeFormPanel label {
+  display: block;
+  text-align: left;
+  font-weight: 700;
+  font-size: 0.85rem;
+  color: var(--muted);
+  margin: 14px 2px 6px;
+}
+#completeFormPanel input[type='range'] {
+  width: 100%;
+  accent-color: var(--accent);
+}
+#completeFormPanel textarea {
+  width: 100%;
+  box-sizing: border-box;
+  border-radius: 12px;
+  border: 2px solid rgba(44, 33, 56, 0.15);
+  padding: 10px 12px;
+  font-family: inherit;
+  font-size: 0.95rem;
+  resize: vertical;
+}
+.photo-upload-label { cursor: pointer; }
+#completeFormPanel input[type='file'] { width: 100%; }
+.photo-preview {
+  width: 100%;
+  max-height: 220px;
+  object-fit: cover;
+  border-radius: 14px;
+  margin-top: 10px;
+}
+
+.dates-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: center;
+  margin: 10px 0 18px;
+}
+.stat-pill {
+  background: rgba(44, 33, 56, 0.06);
+  border-radius: 999px;
+  padding: 6px 14px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.dates-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  text-align: left;
+  max-height: 55vh;
+  overflow-y: auto;
+}
+.dates-empty {
+  color: var(--muted);
+  font-size: 0.9rem;
+  text-align: center;
+}
+.dates-entry {
+  display: flex;
+  gap: 12px;
+  background: rgba(44, 33, 56, 0.04);
+  border-radius: 14px;
+  padding: 10px;
+}
+.dates-thumb {
+  width: 64px;
+  height: 64px;
+  object-fit: cover;
+  border-radius: 10px;
+  flex-shrink: 0;
+}
+.dates-entry-body { flex: 1; min-width: 0; }
+.dates-entry-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 0.92rem;
+}
+.dates-entry-date {
+  font-size: 0.75rem;
+  color: var(--muted);
+  margin-top: 2px;
+}
+.dates-note {
+  font-size: 0.85rem;
+  color: var(--ink);
+  margin: 4px 0 0;
+}

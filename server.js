@@ -7,6 +7,8 @@ const { Server } = require('socket.io');
 const http = require('http');
 const { SYMBOLS, DECK } = require('./lib/deck');
 const { PHOTOS } = require('./lib/photos');
+const { QUESTIONS, CATEGORIES: PREDICT_CATEGORIES, DIFFICULTY_POINTS } = require('./lib/whatWouldYouSay');
+const { DATES, CATEGORIES: DATE_CATEGORIES } = require('./lib/dates');
 
 const app = express();
 const server = http.createServer(app);
@@ -74,6 +76,250 @@ function allTimeStats(room) {
 }
 
 loadStats();
+
+// All-time "What Would You Say?" compatibility stats — one shared record for
+// the pair (this app is always just the two of them), persisted the same way
+// as the matching-game stats.
+const PREDICT_STATS_FILE = path.join(STATS_DIR, 'predict-stats.json');
+let predictStats = { gamesPlayed: 0, totalQuestions: 0, totalMatches: 0, bestAccuracy: 0 };
+
+function loadPredictStats() {
+  try {
+    const raw = fs.readFileSync(PREDICT_STATS_FILE, 'utf8');
+    predictStats = { ...predictStats, ...JSON.parse(raw) };
+  } catch (err) {
+    // no file yet — start fresh
+  }
+}
+
+function savePredictStats() {
+  try {
+    fs.mkdirSync(STATS_DIR, { recursive: true });
+    fs.writeFileSync(PREDICT_STATS_FILE, JSON.stringify(predictStats, null, 2));
+  } catch (err) {
+    console.error('Failed to save predict stats:', err.message);
+  }
+}
+
+loadPredictStats();
+
+// Completed Date Roulette entries — an ever-growing archive ("Our Dates"),
+// persisted the same way as everything else in data/.
+const DATES_LOG_FILE = path.join(STATS_DIR, 'dates-log.json');
+/** @type {Array<any>} */
+let datesLog = [];
+
+function loadDatesLog() {
+  try {
+    const raw = fs.readFileSync(DATES_LOG_FILE, 'utf8');
+    datesLog = JSON.parse(raw);
+  } catch (err) {
+    // no file yet — start fresh
+  }
+}
+
+function saveDatesLog() {
+  try {
+    fs.mkdirSync(STATS_DIR, { recursive: true });
+    fs.writeFileSync(DATES_LOG_FILE, JSON.stringify(datesLog, null, 2));
+  } catch (err) {
+    console.error('Failed to save dates log:', err.message);
+  }
+}
+
+loadDatesLog();
+
+// Global (not per-room) anti-repeat memory — this app is always the same two
+// players, so "recently used" is tracked once, not per room. Keeps the last
+// third of each pool out of rotation, then lets it reshuffle back in.
+function makeRecentTracker(poolSize) {
+  const recent = [];
+  const cap = Math.max(3, Math.round(poolSize * 0.34));
+  return {
+    has: (id) => recent.includes(id),
+    add(id) {
+      recent.push(id);
+      if (recent.length > cap) recent.shift();
+    },
+  };
+}
+const recentQuestions = makeRecentTracker(QUESTIONS.length);
+const recentDates = makeRecentTracker(DATES.length);
+
+function pickQuestion(excludeIds) {
+  const exclude = excludeIds instanceof Set ? excludeIds : new Set();
+  let pool = QUESTIONS.filter((q) => !recentQuestions.has(q.id) && !exclude.has(q.id));
+  if (pool.length === 0) pool = QUESTIONS.filter((q) => !exclude.has(q.id));
+  if (pool.length === 0) pool = QUESTIONS;
+  // Weight by category so the overall spread across a long play session
+  // trends toward each category's target share instead of pure uniform draw.
+  const weights = pool.map((q) => (PREDICT_CATEGORIES[q.category] || { weight: 10 }).weight);
+  const total = weights.reduce((a, b) => a + b, 0);
+  let r = Math.random() * total;
+  for (let i = 0; i < pool.length; i++) {
+    r -= weights[i];
+    if (r <= 0) return pool[i];
+  }
+  return pool[pool.length - 1];
+}
+
+const MATCH_PHRASES = [
+  "You two just RIZZ-ed the same brainwave 💫",
+  "Certified telepathic. 🔮",
+  "That's scary in-sync. 😳",
+  "Same page, same paragraph, same word. 📖",
+  "Compatibility level: unreasonable. 💕",
+  "Okay but how. HOW. 🤯",
+  "Couple goals, officially confirmed. ✅",
+  "You read each other like a book. 📚",
+  "Locked in. Perfectly. 🔒",
+  "That's not luck, that's love. ❤️",
+];
+const NO_MATCH_PHRASES = [
+  "Well. That's a conversation for later. 👀",
+  "Somebody doesn't know somebody. 😬",
+  "Plot twist! 🌀",
+  "Back to the drawing board. 📝",
+  "That one's going in the highlight reel. 🎬",
+  "Bold guess. Wrong guess. 😅",
+  "Not even close, but A for effort. 🫠",
+  "Mysteries of love, deepened. 🌫️",
+  "You'll get 'em next round. 🎯",
+  "Interesting. Very interesting. 🕵️",
+];
+let lastMatchPhraseIdx = -1;
+let lastNoMatchPhraseIdx = -1;
+function pickRevealPhrase(match) {
+  const list = match ? MATCH_PHRASES : NO_MATCH_PHRASES;
+  let idx;
+  do {
+    idx = Math.floor(Math.random() * list.length);
+  } while (list.length > 1 && idx === (match ? lastMatchPhraseIdx : lastNoMatchPhraseIdx));
+  if (match) lastMatchPhraseIdx = idx;
+  else lastNoMatchPhraseIdx = idx;
+  return list[idx];
+}
+
+function compatibilityVerdict(pct) {
+  if (pct >= 90) return 'Actually telepathic 🔮';
+  if (pct >= 75) return "You two just get it ✨";
+  if (pct >= 50) return 'Solid, with room to grow 🌱';
+  return "Plenty left to learn about each other 👀";
+}
+
+/** @type {Map<string, any>} */
+const predictRooms = new Map();
+
+function predictRoomState(room) {
+  return {
+    code: room.code,
+    roles: Array.from(room.sockets.values())
+      .map((s) => s.role)
+      .filter(Boolean),
+    started: room.started,
+  };
+}
+
+function endPredictGame(code) {
+  const room = predictRooms.get(code);
+  if (!room) return;
+  room.started = false;
+  clearTimeout(room.roundTimer);
+  const pct = room.totalRoundsPlayed > 0 ? Math.round((room.matches / room.totalRoundsPlayed) * 100) : 0;
+
+  predictStats.gamesPlayed += 1;
+  predictStats.totalQuestions += room.totalRoundsPlayed;
+  predictStats.totalMatches += room.matches;
+  predictStats.bestAccuracy = Math.max(predictStats.bestAccuracy, pct);
+  savePredictStats();
+
+  const allTimePct =
+    predictStats.totalQuestions > 0 ? Math.round((predictStats.totalMatches / predictStats.totalQuestions) * 100) : 0;
+
+  io.to(code).emit('predict:game:over', {
+    questionsPlayed: room.totalRoundsPlayed,
+    matches: room.matches,
+    accuracy: pct,
+    verdict: compatibilityVerdict(pct),
+    gameScore: room.gameScore,
+    allTime: {
+      gamesPlayed: predictStats.gamesPlayed,
+      accuracy: allTimePct,
+      bestAccuracy: predictStats.bestAccuracy,
+    },
+  });
+}
+
+function startPredictRound(code) {
+  const room = predictRooms.get(code);
+  if (!room) return;
+
+  if (room.roundNumber >= room.totalRounds) {
+    endPredictGame(code);
+    return;
+  }
+
+  room.roundNumber += 1;
+  room.targetRole = room.roundNumber % 2 === 1 ? 'Ariel' : 'Louie';
+  const question = pickQuestion(room.usedQuestionIds);
+  room.usedQuestionIds.add(question.id);
+  recentQuestions.add(question.id);
+  room.currentQuestion = question;
+  room.submissions = { targetChoice: null, predictorChoice: null };
+
+  io.to(code).emit('predict:round:new', {
+    roundNumber: room.roundNumber,
+    totalRounds: room.totalRounds,
+    targetRole: room.targetRole,
+    category: question.category,
+    categoryLabel: (PREDICT_CATEGORIES[question.category] || {}).label || question.category,
+    difficulty: question.difficulty,
+    points: DIFFICULTY_POINTS[question.difficulty] || 100,
+    question: question.question.split('{target}').join(room.targetRole),
+    options: question.options,
+  });
+
+  clearTimeout(room.roundTimer);
+  room.roundTimer = setTimeout(() => revealPredictRound(code, true), 45000);
+}
+
+function revealPredictRound(code, timedOut) {
+  const room = predictRooms.get(code);
+  if (!room || !room.currentQuestion) return;
+  clearTimeout(room.roundTimer);
+
+  const { targetChoice, predictorChoice } = room.submissions;
+  const match = targetChoice != null && predictorChoice != null && targetChoice === predictorChoice;
+  const points = match ? DIFFICULTY_POINTS[room.currentQuestion.difficulty] || 100 : 0;
+
+  room.totalRoundsPlayed += 1;
+  if (match) room.matches += 1;
+  room.gameScore += points;
+
+  const predictorRole = room.targetRole === 'Ariel' ? 'Louie' : 'Ariel';
+  const predictorEntry = room.predictorTally.get(predictorRole);
+  predictorEntry.total += 1;
+  if (match) predictorEntry.correct += 1;
+
+  io.to(code).emit('predict:reveal', {
+    targetChoice,
+    predictorChoice,
+    match,
+    timedOut: !!timedOut,
+    points,
+    gameScore: room.gameScore,
+    correctText: room.currentQuestion.options[targetChoice] ?? null,
+    revealPhrase: pickRevealPhrase(match),
+    predictorAccuracy: Array.from(room.predictorTally.entries()).map(([role, t]) => ({
+      role,
+      correct: t.correct,
+      total: t.total,
+    })),
+  });
+
+  room.currentQuestion = null;
+  setTimeout(() => startPredictRound(code), 4200);
+}
 
 function makeRoomCode() {
   let code;
@@ -311,14 +557,220 @@ io.on('connection', (socket) => {
 
   socket.on('disconnect', () => {
     const code = socket.data.code;
-    if (!code) return;
-    const room = rooms.get(code);
-    if (!room) return;
-    if (socket.data.role === 'player' && room.players.delete(socket.id)) {
-      io.to(code).emit('players:update', scoreboard(room));
+    if (code) {
+      const room = rooms.get(code);
+      if (room && socket.data.role === 'player' && room.players.delete(socket.id)) {
+        io.to(code).emit('players:update', scoreboard(room));
+      }
+    }
+    const predictCode = socket.data.predictCode;
+    if (predictCode) {
+      const room = predictRooms.get(predictCode);
+      if (room) {
+        room.sockets.delete(socket.id);
+        io.to(predictCode).emit('predict:roles:update', predictRoomState(room));
+      }
     }
   });
+
+  // --- "What Would You Say?" ---------------------------------------------
+
+  socket.on('predict:host:create', (payload, ack) => {
+    const rounds = Math.max(3, Math.min(30, Number(payload && payload.rounds) || 12));
+    const code = makeRoomCode();
+    const hostToken = crypto.randomUUID();
+    const room = {
+      code,
+      hostSocketId: socket.id,
+      hostToken,
+      sockets: new Map(),
+      started: false,
+      totalRounds: rounds,
+      roundNumber: 0,
+      totalRoundsPlayed: 0,
+      matches: 0,
+      gameScore: 0,
+      targetRole: null,
+      currentQuestion: null,
+      submissions: { targetChoice: null, predictorChoice: null },
+      usedQuestionIds: new Set(),
+      predictorTally: new Map([
+        ['Louie', { correct: 0, total: 0 }],
+        ['Ariel', { correct: 0, total: 0 }],
+      ]),
+      roundTimer: null,
+      createdAt: Date.now(),
+    };
+    room.sockets.set(socket.id, { role: null });
+    predictRooms.set(code, room);
+    socket.join(code);
+    socket.data.predictRole2 = 'host';
+    socket.data.predictCode = code;
+    if (typeof ack === 'function') ack({ ok: true, code, hostToken });
+    io.to(code).emit('predict:roles:update', predictRoomState(room));
+  });
+
+  socket.on('predict:player:join', (payload, ack) => {
+    const code = String((payload && payload.code) || '').toUpperCase();
+    const room = predictRooms.get(code);
+    if (!room) {
+      if (typeof ack === 'function') ack({ ok: false, error: 'Room not found' });
+      return;
+    }
+    room.sockets.set(socket.id, { role: null });
+    socket.join(code);
+    socket.data.predictCode = code;
+    if (typeof ack === 'function') ack({ ok: true, code, started: room.started });
+    io.to(code).emit('predict:roles:update', predictRoomState(room));
+  });
+
+  socket.on('predict:host:cancel', (payload) => {
+    const code = String((payload && payload.code) || '').toUpperCase();
+    const room = predictRooms.get(code);
+    if (!room || room.hostSocketId !== socket.id) return;
+    clearTimeout(room.roundTimer);
+    io.to(code).emit('predict:room:cancelled');
+    predictRooms.delete(code);
+  });
+
+  // Reclaims a seat (and, if provided, host status) after a dropped/rebuilt
+  // socket — same problem/fix as host:rejoin on the matching game.
+  socket.on('predict:rejoin', (payload, ack) => {
+    const code = String((payload && payload.code) || '').toUpperCase();
+    const role = String((payload && payload.role) || '');
+    const hostToken = payload && payload.hostToken;
+    const room = predictRooms.get(code);
+    if (!room || (role !== 'Louie' && role !== 'Ariel')) {
+      if (typeof ack === 'function') ack({ ok: false });
+      return;
+    }
+    if (hostToken && hostToken === room.hostToken) {
+      room.hostSocketId = socket.id;
+      socket.data.predictRole2 = 'host';
+    }
+    // Drop any stale socket entries still holding this role, then claim it fresh.
+    for (const [sid, entry] of room.sockets) {
+      if (entry.role === role && sid !== socket.id) room.sockets.delete(sid);
+    }
+    room.sockets.set(socket.id, { role });
+    socket.join(code);
+    socket.data.predictCode = code;
+    if (typeof ack === 'function') {
+      ack({
+        ok: true,
+        started: room.started,
+        roundNumber: room.roundNumber,
+        totalRounds: room.totalRounds,
+        gameScore: room.gameScore,
+        roles: predictRoomState(room).roles,
+        currentRound: room.currentQuestion
+          ? {
+              roundNumber: room.roundNumber,
+              totalRounds: room.totalRounds,
+              targetRole: room.targetRole,
+              category: room.currentQuestion.category,
+              categoryLabel: (PREDICT_CATEGORIES[room.currentQuestion.category] || {}).label || room.currentQuestion.category,
+              difficulty: room.currentQuestion.difficulty,
+              points: DIFFICULTY_POINTS[room.currentQuestion.difficulty] || 100,
+              question: room.currentQuestion.question.split('{target}').join(room.targetRole),
+              options: room.currentQuestion.options,
+              alreadyLocked:
+                role === room.targetRole ? room.submissions.targetChoice != null : room.submissions.predictorChoice != null,
+            }
+          : null,
+      });
+    }
+    io.to(code).emit('predict:roles:update', predictRoomState(room));
+  });
+
+  socket.on('predict:role:pick', (payload, ack) => {
+    const code = String((payload && payload.code) || '').toUpperCase();
+    const role = String((payload && payload.role) || '');
+    const room = predictRooms.get(code);
+    if (!room || (role !== 'Louie' && role !== 'Ariel')) {
+      if (typeof ack === 'function') ack({ ok: false });
+      return;
+    }
+    const taken = Array.from(room.sockets.values()).some((s) => s.role === role && room.sockets.get(socket.id) !== s);
+    if (taken) {
+      if (typeof ack === 'function') ack({ ok: false, error: 'That person already joined.' });
+      return;
+    }
+    const entry = room.sockets.get(socket.id) || {};
+    entry.role = role;
+    room.sockets.set(socket.id, entry);
+    if (typeof ack === 'function') ack({ ok: true, role });
+    io.to(code).emit('predict:roles:update', predictRoomState(room));
+  });
+
+  socket.on('predict:host:start', (payload) => {
+    const code = String((payload && payload.code) || '').toUpperCase();
+    const room = predictRooms.get(code);
+    if (!room || room.hostSocketId !== socket.id) return;
+    const roles = Array.from(room.sockets.values()).map((s) => s.role);
+    if (!roles.includes('Louie') || !roles.includes('Ariel')) return;
+    room.started = true;
+    room.roundNumber = 0;
+    room.totalRoundsPlayed = 0;
+    room.matches = 0;
+    room.gameScore = 0;
+    room.usedQuestionIds = new Set();
+    room.predictorTally = new Map([
+      ['Louie', { correct: 0, total: 0 }],
+      ['Ariel', { correct: 0, total: 0 }],
+    ]);
+    startPredictRound(code);
+  });
+
+  socket.on('predict:answer:submit', (payload) => {
+    const code = String((payload && payload.code) || '').toUpperCase();
+    const choice = Number(payload && payload.choice);
+    const room = predictRooms.get(code);
+    if (!room || !room.currentQuestion || Number.isNaN(choice)) return;
+    const entry = room.sockets.get(socket.id);
+    if (!entry || !entry.role) return;
+    if (entry.role === room.targetRole) {
+      if (room.submissions.targetChoice != null) return;
+      room.submissions.targetChoice = choice;
+      socket.to(code).emit('predict:opponent:locked', { who: 'target' });
+    } else {
+      if (room.submissions.predictorChoice != null) return;
+      room.submissions.predictorChoice = choice;
+      socket.to(code).emit('predict:opponent:locked', { who: 'predictor' });
+    }
+    if (room.submissions.targetChoice != null && room.submissions.predictorChoice != null) {
+      revealPredictRound(code, false);
+    }
+  });
+
+  socket.on('predict:host:playAgain', (payload) => {
+    const code = String((payload && payload.code) || '').toUpperCase();
+    const room = predictRooms.get(code);
+    if (!room || room.hostSocketId !== socket.id) return;
+    room.started = true;
+    room.roundNumber = 0;
+    room.totalRoundsPlayed = 0;
+    room.matches = 0;
+    room.gameScore = 0;
+    room.usedQuestionIds = new Set();
+    room.predictorTally = new Map([
+      ['Louie', { correct: 0, total: 0 }],
+      ['Ariel', { correct: 0, total: 0 }],
+    ]);
+    startPredictRound(code);
+  });
 });
+
+// Periodic cleanup of stale predict rooms — mirrors the matching-game sweep.
+setInterval(() => {
+  const now = Date.now();
+  for (const [code, room] of predictRooms) {
+    if (now - room.createdAt > ROOM_TTL_MS) {
+      clearTimeout(room.roundTimer);
+      predictRooms.delete(code);
+    }
+  }
+}, 30 * 60 * 1000);
 
 // Periodic cleanup of stale rooms.
 setInterval(() => {
@@ -338,8 +790,10 @@ app.get('/api/photos', (req, res) => {
 
 app.get('/api/qr', async (req, res) => {
   const code = String(req.query.code || '').toUpperCase();
-  if (!rooms.has(code)) return res.status(404).json({ error: 'Room not found' });
-  const joinUrl = `${req.protocol}://${req.get('host')}/play/${code}`;
+  const type = req.query.type === 'predict' ? 'predict' : 'play';
+  const store = type === 'predict' ? predictRooms : rooms;
+  if (!store.has(code)) return res.status(404).json({ error: 'Room not found' });
+  const joinUrl = `${req.protocol}://${req.get('host')}/${type}/${code}`;
   try {
     const qrDataUrl = await QRCode.toDataURL(joinUrl, { margin: 1, width: 320 });
     res.json({ joinUrl, qrDataUrl });
@@ -364,6 +818,18 @@ app.get('/memory', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'memory.html'));
 });
 
+app.get('/predict', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'predict.html'));
+});
+
+app.get('/predict/:code', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'predict.html'));
+});
+
+app.get('/roulette', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'roulette.html'));
+});
+
 app.get('/api/trial', (req, res) => {
   const a = Math.floor(Math.random() * DECK.length);
   let b = Math.floor(Math.random() * DECK.length);
@@ -372,6 +838,85 @@ app.get('/api/trial', (req, res) => {
   const cardB = DECK[b];
   const commonId = commonSymbol(cardA, cardB);
   res.json({ cardA: buildCard(cardA), cardB: buildCard(cardB), commonId });
+});
+
+function pickRandomDistinct(arr, n) {
+  const pool = arr.slice();
+  const picked = [];
+  while (picked.length < n && pool.length) {
+    const i = Math.floor(Math.random() * pool.length);
+    picked.push(pool.splice(i, 1)[0]);
+  }
+  return picked;
+}
+
+function resolveDate(dateEntry) {
+  if (!dateEntry.dynamic) return dateEntry;
+  const resolved = { ...dateEntry };
+  if (dateEntry.dynamicType === 'photo-recreate') {
+    const photo = PHOTOS[Math.floor(Math.random() * PHOTOS.length)];
+    resolved.resolvedPhoto = photo;
+    resolved.description = `${dateEntry.description} (Tonight's memory: "${photo.label}")`;
+  } else if (dateEntry.dynamicType === 'random-favourites') {
+    const picks = pickRandomDistinct(SYMBOLS.map((s, id) => ({ id, ...s })), 3);
+    resolved.resolvedSymbols = picks;
+    resolved.description = `${dateEntry.description} (Tonight's three: ${picks.map((p) => p.label).join(', ')})`;
+  }
+  return resolved;
+}
+
+app.post('/api/dates/spin', express.json(), (req, res) => {
+  const body = req.body || {};
+  const surpriseMe = !!body.surpriseMe;
+  let pool = DATES;
+  if (!surpriseMe) {
+    if (body.duration) pool = pool.filter((d) => d.duration === body.duration);
+    if (body.budget) pool = pool.filter((d) => d.budget === body.budget);
+    if (body.mood) pool = pool.filter((d) => d.mood === body.mood);
+    if (body.location) pool = pool.filter((d) => d.location === body.location || d.location === 'either');
+  }
+  if (pool.length === 0) pool = DATES;
+
+  let candidates = pool.filter((d) => !recentDates.has(d.id));
+  if (candidates.length === 0) candidates = pool;
+
+  const chosen = candidates[Math.floor(Math.random() * candidates.length)];
+  recentDates.add(chosen.id);
+  res.json({ date: resolveDate(chosen), poolSize: pool.length });
+});
+
+app.post('/api/dates/complete', express.json({ limit: '6mb' }), (req, res) => {
+  const body = req.body || {};
+  const dateId = String(body.dateId || '');
+  const dateEntry = DATES.find((d) => d.id === dateId);
+  if (!dateEntry) return res.status(404).json({ error: 'Unknown date' });
+  const rating = Math.max(0, Math.min(10, Number(body.rating) || 0));
+  const entry = {
+    id: crypto.randomUUID(),
+    dateId,
+    title: dateEntry.title,
+    category: dateEntry.category,
+    completedAt: Date.now(),
+    note: String(body.note || '').slice(0, 500),
+    rating,
+    photo: typeof body.photo === 'string' ? body.photo.slice(0, 6_000_000) : null,
+    favourite: !!body.favourite,
+  };
+  datesLog.push(entry);
+  saveDatesLog();
+  res.json({ ok: true, entry, stats: datesStats() });
+});
+
+function datesStats() {
+  const completed = datesLog.length;
+  const rated = datesLog.filter((e) => e.rating > 0);
+  const bestRated = rated.length ? rated.reduce((a, b) => (b.rating > a.rating ? b : a)) : null;
+  const favourite = datesLog.filter((e) => e.favourite).slice(-1)[0] || null;
+  return { completed, bestRated, favourite };
+}
+
+app.get('/api/dates/history', (req, res) => {
+  res.json({ entries: datesLog.slice().reverse(), stats: datesStats(), categories: DATE_CATEGORIES });
 });
 
 app.use(express.static(path.join(__dirname, 'public')));

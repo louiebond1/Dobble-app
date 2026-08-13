@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#4a3070" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <title>Date Roulette — Our Favourite Things</title>
+  <link rel="icon" href="/favicon.ico" sizes="any" />
+  <link rel="icon" href="/favicon-32.png" type="image/png" />
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <link rel="stylesheet" href="/style.css" />
+  <link rel="stylesheet" href="/roulette.css" />
+</head>
+<body>
+  <div class="wrap">
+    <h1>🎲 Date Roulette</h1>
+    <p class="subtitle">Let us choose tonight.</p>
+
+    <div class="panel" id="filtersPanel">
+      <div class="panel-header">
+        <a href="/" class="btn-back">← Back</a>
+        <button class="btn-back" id="historyBtn">📖 Our Dates</button>
+      </div>
+
+      <div class="filter-group">
+        <div class="filter-label">⏱️ Time</div>
+        <div class="chip-row" data-filter="duration">
+          <button class="chip" data-value="">Any</button>
+          <button class="chip" data-value="20min">20 min</button>
+          <button class="chip" data-value="1hr">1 hr</button>
+          <button class="chip" data-value="2-3hr">2-3 hr</button>
+          <button class="chip" data-value="evening">Evening</button>
+          <button class="chip" data-value="halfday">Half day</button>
+          <button class="chip" data-value="fullday">Full day</button>
+        </div>
+      </div>
+
+      <div class="filter-group">
+        <div class="filter-label">💰 Budget</div>
+        <div class="chip-row" data-filter="budget">
+          <button class="chip" data-value="">Any</button>
+          <button class="chip" data-value="free">Free</button>
+          <button class="chip" data-value="£">£</button>
+          <button class="chip" data-value="££">££</button>
+          <button class="chip" data-value="£££">£££</button>
+        </div>
+      </div>
+
+      <div class="filter-group">
+        <div class="filter-label">🎭 Mood</div>
+        <div class="chip-row" data-filter="mood">
+          <button class="chip" data-value="">Any</button>
+          <button class="chip" data-value="romantic">Romantic</button>
+          <button class="chip" data-value="funny">Funny</button>
+          <button class="chip" data-value="relaxed">Relaxed</button>
+          <button class="chip" data-value="adventurous">Adventurous</button>
+          <button class="chip" data-value="competitive">Competitive</button>
+          <button class="chip" data-value="creative">Creative</button>
+          <button class="chip" data-value="food">Food</button>
+          <button class="chip" data-value="chaos">Chaos</button>
+        </div>
+      </div>
+
+      <div class="filter-group">
+        <div class="filter-label">📍 Location</div>
+        <div class="chip-row" data-filter="location">
+          <button class="chip" data-value="">Any</button>
+          <button class="chip" data-value="home">At home</button>
+          <button class="chip" data-value="outside">Out and about</button>
+        </div>
+      </div>
+
+      <label class="surprise-toggle">
+        <input type="checkbox" id="surpriseMe" />
+        <span>🎁 Surprise Me (ignore filters)</span>
+      </label>
+
+      <button class="btn spin-btn" id="spinBtn">🎰 SPIN THE WHEEL</button>
+    </div>
+
+    <div class="panel hidden" id="spinningPanel">
+      <div class="slot-reel" id="slotReel"></div>
+    </div>
+
+    <div class="panel hidden" id="resultPanel">
+      <div class="panel-header">
+        <button class="btn-back" id="resultBackBtn">← Back to filters</button>
+      </div>
+      <div class="result-category" id="resultCategory"></div>
+      <h2 id="resultTitle"></h2>
+      <p class="result-desc" id="resultDesc"></p>
+      <div class="result-meta" id="resultMeta"></div>
+      <p class="result-instructions" id="resultInstructions"></p>
+      <p class="result-challenge hidden" id="resultChallenge"></p>
+      <button class="btn" id="letsDoItBtn">❤️ Let's Do It</button>
+      <button class="btn btn-outline" id="spinAgainBtn">🎲 Spin Again</button>
+    </div>
+
+    <div class="panel hidden" id="committedPanel">
+      <div class="committed-emoji">🔒</div>
+      <h2>Locked in!</h2>
+      <p id="committedTitle"></p>
+      <button class="btn" id="didItBtn">✅ We did it!</button>
+      <button class="btn btn-outline" id="notYetBtn">⏳ Not yet</button>
+      <button class="btn btn-outline" id="skipBtn">Skip this one</button>
+    </div>
+
+    <div class="panel hidden" id="completeFormPanel">
+      <h2>DATE COMPLETE ❤️</h2>
+      <p id="completeFormTitle"></p>
+      <label for="ratingInput">Rating <span id="ratingValue">8</span>/10</label>
+      <input type="range" min="1" max="10" value="8" id="ratingInput" />
+      <label for="noteInput">A short note (optional)</label>
+      <textarea id="noteInput" maxlength="500" rows="3" placeholder="How did it go?"></textarea>
+      <label class="photo-upload-label" for="photoInput">📷 Add a photo (optional)</label>
+      <input type="file" accept="image/*" id="photoInput" />
+      <img id="photoPreview" class="photo-preview hidden" alt="Preview" />
+      <label class="favourite-toggle">
+        <input type="checkbox" id="favouriteInput" />
+        <span>⭐ Mark as a favourite</span>
+      </label>
+      <button class="btn" id="saveCompleteBtn">Save</button>
+    </div>
+
+    <div class="panel hidden" id="completeDonePanel">
+      <div class="game-complete-emoji">🎉</div>
+      <h2>Saved to Our Dates!</h2>
+      <div class="dates-stats" id="doneStats"></div>
+      <button class="btn" id="doneSpinAgainBtn">🎲 Spin Again</button>
+      <button class="btn btn-outline" id="doneHistoryBtn">📖 View Our Dates</button>
+      <a href="/" class="btn btn-outline">🏠 Home</a>
+    </div>
+
+    <div class="panel hidden" id="historyPanel">
+      <div class="panel-header">
+        <button class="btn-back" id="historyBackBtn">← Back</button>
+      </div>
+      <h2>📖 Our Dates</h2>
+      <div class="dates-stats" id="historyStats"></div>
+      <div class="dates-list" id="datesList"></div>
+    </div>
+  </div>
+
+  <script src="/layout.js"></script>
+  <script src="/roulette.js"></script>
+</body>
+</html>

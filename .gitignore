@@ -1,2 +1,4 @@
 node_modules
 data/stats.json
+data/predict-stats.json
+data/dates-log.json
