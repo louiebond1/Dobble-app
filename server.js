@@ -343,6 +343,10 @@ app.get('/trial', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'trial.html'));
 });
 
+app.get('/memory', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'memory.html'));
+});
+
 app.get('/api/trial', (req, res) => {
   const a = Math.floor(Math.random() * DECK.length);
   let b = Math.floor(Math.random() * DECK.length);
