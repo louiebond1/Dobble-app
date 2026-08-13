@@ -21,8 +21,11 @@
 
     <div class="hud-top">
       <a href="/" class="hud-back">← Games</a>
-      <div class="hud-title">🍹 Hugo Pong</div>
-      <div class="hud-spacer"></div>
+      <div class="hud-title-wrap">
+        <div class="hud-title">🍹 Hugo&nbsp;Pong</div>
+        <div class="hud-tagline">SINK THE SPRITZ</div>
+      </div>
+      <button class="hud-sound-btn" id="soundToggleBtn" aria-label="Toggle sound">🔊</button>
     </div>
 
     <div class="hud-stats">
@@ -31,11 +34,24 @@
       <div class="hud-stat"><span class="hud-stat-label">Score</span><span class="hud-stat-value" id="scoreStat">0</span></div>
     </div>
 
-    <div class="swipe-hint" id="swipeHint">SWIPE TO THROW</div>
+    <div class="swipe-hint" id="swipeHint">
+      <div class="swipe-hint-title">↑ SWIPE TO THROW</div>
+      <div class="swipe-hint-sub">Drag back and release</div>
+    </div>
+
+    <div class="recipe-card">
+      <div class="recipe-card-title">THE HUGO</div>
+      <div class="recipe-card-item">🥂 Prosecco</div>
+      <div class="recipe-card-item">🌸 Elderflower</div>
+      <div class="recipe-card-item">🌿 Mint</div>
+      <div class="recipe-card-item">🍈 Lime</div>
+      <div class="recipe-card-item">💗 Good vibes</div>
+    </div>
+
     <div class="result-toast hidden" id="resultToast"></div>
 
     <div class="intro-overlay" id="introOverlay">
-      <div class="intro-title">🍹 HUGO PONG</div>
+      <div class="intro-title">🍹 Hugo Pong</div>
       <div class="intro-sub">Swipe to throw. Sink the spritz.</div>
       <button class="intro-start-btn" id="introStartBtn">Let's Go</button>
     </div>
