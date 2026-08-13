@@ -268,6 +268,16 @@ label { display: block; text-align: left; font-weight: 600; font-size: 0.9rem; c
   flex-shrink: 0;
 }
 
+.footer-link {
+  display: block;
+  margin-top: 22px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.6);
+  text-decoration: none;
+}
+.footer-link:active { opacity: 0.6; }
+
 .pair-count-field input[type="number"] {
   max-width: 110px;
   margin: 0;

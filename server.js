@@ -9,6 +9,7 @@ const { SYMBOLS, DECK } = require('./lib/deck');
 const { PHOTOS } = require('./lib/photos');
 const { QUESTIONS, CATEGORIES: PREDICT_CATEGORIES, DIFFICULTY_POINTS } = require('./lib/whatWouldYouSay');
 const { DATES, CATEGORIES: DATE_CATEGORIES } = require('./lib/dates');
+const { CUPS: HUGO_SPRITZ_CUPS } = require('./lib/hugoSpritzPong');
 
 const app = express();
 const server = http.createServer(app);
@@ -828,6 +829,18 @@ app.get('/predict/:code', (req, res) => {
 
 app.get('/roulette', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'roulette.html'));
+});
+
+app.get('/hugo-spritz-pong', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'hugo-spritz-pong.html'));
+});
+
+app.get('/api/hugo-spritz-pong', (req, res) => {
+  const cups = HUGO_SPRITZ_CUPS.map((cup) => {
+    const symbol = SYMBOLS.find((s) => s.label === cup.symbolLabel) || {};
+    return { ...cup, emoji: symbol.emoji || '🥂', image: symbol.image || null };
+  });
+  res.json({ cups });
 });
 
 app.get('/api/trial', (req, res) => {

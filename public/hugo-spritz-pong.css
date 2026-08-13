@@ -1,0 +1,79 @@
+/* Hugo Spritz Pong — feature-specific styles layered on top of style.css's
+   shared .panel/.btn system. */
+
+.rules-text {
+  font-size: 0.92rem;
+  color: var(--ink);
+  line-height: 1.5;
+  margin: 4px 0 16px;
+}
+
+.shuffle-btn { margin-top: 4px; }
+
+.cup-grid {
+  width: 100%;
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.cup-card {
+  background: rgba(255, 255, 255, 0.92);
+  border-radius: 18px;
+  padding: 14px 10px 16px;
+  text-align: center;
+  box-shadow: 0 10px 26px rgba(20, 8, 40, 0.28);
+  backdrop-filter: blur(10px);
+  position: relative;
+}
+
+.cup-number {
+  position: absolute;
+  top: 8px;
+  left: 10px;
+  font-size: 0.72rem;
+  font-weight: 800;
+  color: var(--muted);
+  background: rgba(44, 33, 56, 0.06);
+  border-radius: 999px;
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.cup-image {
+  width: 56px;
+  height: 56px;
+  object-fit: contain;
+  margin: 6px auto 8px;
+  display: block;
+}
+
+.cup-emoji {
+  font-size: 2.6rem;
+  margin: 6px 0 8px;
+}
+
+.cup-name {
+  font-weight: 800;
+  font-size: 0.92rem;
+  color: var(--accent-dark);
+  margin-bottom: 6px;
+}
+
+.cup-forfeit {
+  font-size: 0.76rem;
+  color: var(--muted);
+  line-height: 1.35;
+}
+
+.cup-wins {
+  background: linear-gradient(160deg, rgba(255, 236, 190, 0.95), rgba(255, 255, 255, 0.92));
+  box-shadow: 0 10px 26px rgba(181, 45, 112, 0.35), 0 0 0 2px var(--accent);
+}
+.cup-wins .cup-name::after {
+  content: ' 👑';
+}

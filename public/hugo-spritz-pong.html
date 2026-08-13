@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#4a3070" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <title>Hugo Spritz Pong — Our Favourite Things</title>
+  <link rel="icon" href="/favicon.ico" sizes="any" />
+  <link rel="icon" href="/favicon-32.png" type="image/png" />
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <link rel="stylesheet" href="/style.css" />
+  <link rel="stylesheet" href="/hugo-spritz-pong.css" />
+</head>
+<body>
+  <div class="wrap">
+    <h1>🥂 Hugo Spritz Pong</h1>
+    <p class="subtitle">Beer pong, but make it us.</p>
+
+    <div class="panel" id="rulesPanel">
+      <div class="panel-header">
+        <a href="/" class="btn-back">← Back</a>
+      </div>
+      <p class="rules-text">
+        Classic pong rules — 10 cups in a triangle, take turns shooting, sunk cups come off the table.
+        The twist: every cup is one of our Favourite Things, and sinking it triggers its forfeit.
+      </p>
+      <button class="btn shuffle-btn" id="shuffleBtn">🎲 Shuffle Cup Order</button>
+    </div>
+
+    <div class="cup-grid" id="cupGrid"></div>
+  </div>
+
+  <script src="/layout.js"></script>
+  <script src="/hugo-spritz-pong.js"></script>
+</body>
+</html>
