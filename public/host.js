@@ -44,7 +44,10 @@ socket.on('players:update', (scores) => {
   renderLeaderboard('leaderboard', scores);
 });
 
+let roundsPlayed = 0;
+
 socket.on('round:new', (data) => {
+  roundsPlayed = data.roundNumber;
   el('roundNum').textContent = data.roundNumber;
   el('totalRounds').textContent = data.totalRounds;
   revealRound(
@@ -57,18 +60,21 @@ socket.on('round:new', (data) => {
   );
 });
 
-socket.on('round:result', (data) => {
+socket.on('round:result', async (data) => {
+  await highlightMatch(el('cardA'), el('cardB'), data.symbolId);
   showOverlay(data.image, data.emoji, `🎉 ${data.winnerName} got it!`, data.label);
   renderLeaderboard('leaderboard', data.scores);
 });
 
-socket.on('round:timeout', (data) => {
+socket.on('round:timeout', async (data) => {
+  await highlightMatch(el('cardA'), el('cardB'), data.symbolId);
   showOverlay(data.image, data.emoji, "⏰ Time's up!", `It was ${data.label}`);
 });
 
 socket.on('game:over', (data) => {
   gameArea.classList.add('hidden');
   gameOver.classList.remove('hidden');
+  el('roundsCompletedCount').textContent = roundsPlayed;
   renderLeaderboard('finalLeaderboard', data.scores);
 });
 

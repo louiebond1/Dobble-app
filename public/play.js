@@ -43,8 +43,11 @@ socket.on('players:update', (scores) => {
   if (mine) el('playerScoreBadge').textContent = mine.score;
 });
 
+let roundsPlayed = 0;
+
 socket.on('round:new', async (data) => {
   roundActive = false;
+  roundsPlayed = data.roundNumber;
   waitingPanel.classList.add('hidden');
   gameOver.classList.add('hidden');
   gameArea.classList.remove('hidden');
@@ -65,26 +68,30 @@ socket.on('round:new', async (data) => {
 function handleTap(symbolId, node) {
   if (!roundActive) return;
   socket.emit('player:answer', { code: roomCode, symbolId });
+  hapticTap();
   node.classList.add('correct');
   setTimeout(() => node.classList.remove('correct'), 600);
 }
 
-socket.on('round:result', (data) => {
+socket.on('round:result', async (data) => {
   roundActive = false;
+  await highlightMatch(el('cardA'), el('cardB'), data.symbolId);
   const won = data.winnerName === playerName;
   showOverlay(data.image, data.emoji, won ? '🎉 You got it!' : `👀 ${data.winnerName} got it!`, data.label);
   const mine = data.scores.find((p) => p.name === playerName);
   if (mine) el('playerScoreBadge').textContent = mine.score;
 });
 
-socket.on('round:timeout', (data) => {
+socket.on('round:timeout', async (data) => {
   roundActive = false;
+  await highlightMatch(el('cardA'), el('cardB'), data.symbolId);
   showOverlay(data.image, data.emoji, "⏰ Time's up!", `It was ${data.label}`);
 });
 
 socket.on('game:over', (data) => {
   gameArea.classList.add('hidden');
   gameOver.classList.remove('hidden');
+  el('roundsCompletedCount').textContent = roundsPlayed;
   const medals = ['🥇', '🥈', '🥉'];
   el('finalLeaderboard').innerHTML = data.scores
     .map((p, i) => `<div class="leaderboard-row"><span>${medals[i] || ''} ${p.name}</span><span>${p.score}</span></div>`)

@@ -2,7 +2,11 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#4a3070" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <title>Dobble Party — Host</title>
   <link rel="preconnect" href="https://upload.wikimedia.org" />
   <link rel="preconnect" href="https://commons.wikimedia.org" />
@@ -14,9 +18,11 @@
     <p class="subtitle">Spot the match — scan to join on your phone</p>
 
     <div class="panel" id="setup">
-      <label for="roundsInput">Number of rounds</label>
-      <input type="number" id="roundsInput" min="5" max="28" value="15" />
-      <button class="btn" id="createBtn">Create Game</button>
+      <div class="rounds-field">
+        <label for="roundsInput">Number of rounds</label>
+        <input type="number" id="roundsInput" min="5" max="28" value="15" />
+      </div>
+      <button class="btn" id="createBtn">🎉 Create Game</button>
       <a href="/trial" class="btn btn-outline">🧪 Try Solo Trial Mode</a>
     </div>
 
@@ -39,9 +45,11 @@
     </div>
 
     <div class="panel hidden" id="gameOver">
-      <h2>🏆 Final Scores</h2>
+      <div class="game-complete-emoji">🎉</div>
+      <h2>Game Complete!</h2>
+      <p class="rounds-completed"><span id="roundsCompletedCount"></span> rounds played</p>
       <div class="leaderboard" id="finalLeaderboard"></div>
-      <button class="btn" id="playAgainBtn">Play Again</button>
+      <button class="btn" id="playAgainBtn">🔁 Play Again</button>
     </div>
   </div>
 

@@ -6,7 +6,7 @@ function layoutSymbols(n, containerSize) {
   const golden = Math.PI * (3 - Math.sqrt(5));
   const cardRadius = containerSize / 2;
   const edgeMargin = containerSize * 0.035; // clears the card's decorative inset rings
-  const baseSize = containerSize * (0.52 / Math.sqrt(n));
+  const baseSize = containerSize * (0.585 / Math.sqrt(n));
 
   const items = [];
   for (let i = 0; i < n; i++) {
@@ -66,6 +66,70 @@ function layoutSymbols(n, containerSize) {
   return items.map(({ x, y, size, rotation }) => ({ x, y, size, rotation }));
 }
 
+// Tiny, dependency-free sound/haptics layer. Every call is best-effort — if the
+// browser blocks audio (no user gesture yet) or doesn't support vibration, it
+// just silently no-ops rather than breaking the game.
+let _audioCtx = null;
+function _tone(freq, durationMs, type = 'sine', volume = 0.14) {
+  try {
+    _audioCtx = _audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+    if (_audioCtx.state === 'suspended') _audioCtx.resume();
+    const osc = _audioCtx.createOscillator();
+    const gain = _audioCtx.createGain();
+    osc.type = type;
+    osc.frequency.value = freq;
+    gain.gain.value = volume;
+    gain.gain.exponentialRampToValueAtTime(0.001, _audioCtx.currentTime + durationMs / 1000);
+    osc.connect(gain).connect(_audioCtx.destination);
+    osc.start();
+    osc.stop(_audioCtx.currentTime + durationMs / 1000);
+  } catch (e) {
+    /* audio unavailable — ignore */
+  }
+}
+function playTick() {
+  _tone(880, 90, 'square', 0.08);
+}
+function playGo() {
+  _tone(1320, 220, 'triangle', 0.16);
+}
+function playSuccess() {
+  _tone(880, 110, 'sine', 0.13);
+  setTimeout(() => _tone(1320, 160, 'sine', 0.13), 90);
+}
+function hapticTap() {
+  try {
+    if (navigator.vibrate) navigator.vibrate(15);
+  } catch (e) {
+    /* vibration unavailable — ignore */
+  }
+}
+function hapticSuccess() {
+  try {
+    if (navigator.vibrate) navigator.vibrate([12, 40, 20]);
+  } catch (e) {
+    /* vibration unavailable — ignore */
+  }
+}
+
+// Briefly highlights the same symbol (by id) on both cards — the "spot it,
+// tap it" payoff before the reveal modal appears. Resolves once the
+// highlight has been visible long enough to register.
+function highlightMatch(cardAEl, cardBEl, symbolId, durationMs = 480) {
+  const nodes = [cardAEl, cardBEl]
+    .map((el) => el && el.querySelector(`.symbol[data-id="${symbolId}"]`))
+    .filter(Boolean);
+  nodes.forEach((n) => n.classList.add('matched'));
+  playSuccess();
+  hapticSuccess();
+  return new Promise((resolve) => {
+    setTimeout(() => {
+      nodes.forEach((n) => n.classList.remove('matched'));
+      resolve();
+    }, durationMs);
+  });
+}
+
 // Warms the browser's image cache for every symbol up front (called during the
 // lobby/waiting screen) so rounds don't stall on network fetches once the game starts.
 function prefetchAllSymbolImages() {
@@ -98,8 +162,8 @@ function preloadRoundImages(symbols, timeoutMs = 4000) {
   return Promise.race([Promise.all(loaders), new Promise((r) => setTimeout(r, timeoutMs))]);
 }
 
-// Runs a "3, 2, 1, 💥" countdown inside the given overlay element, resolving
-// once the animation completes.
+// Runs a "3, 2, 1, GO!" countdown inside the given overlay element, resolving
+// once the animation completes. GO! is a quick, punchy beat — not a slow step.
 function showCountdown(overlay, numberEl) {
   return new Promise((resolve) => {
     if (!overlay || !numberEl) {
@@ -107,14 +171,16 @@ function showCountdown(overlay, numberEl) {
       return;
     }
     overlay.classList.remove('hidden');
-    const steps = ['3', '2', '1', '💥'];
+    const steps = ['3', '2', '1', 'GO!'];
     let i = 0;
     const tick = () => {
       const isLast = i === steps.length - 1;
       numberEl.textContent = steps[i];
-      numberEl.className = isLast ? 'countdown-boom' : 'countdown-number';
+      numberEl.className = isLast ? 'countdown-go' : 'countdown-number';
       void numberEl.offsetWidth; // restart CSS animation
       numberEl.classList.add('play');
+      if (isLast) playGo();
+      else playTick();
       i += 1;
       if (i < steps.length) {
         setTimeout(tick, 650);
@@ -122,7 +188,7 @@ function showCountdown(overlay, numberEl) {
         setTimeout(() => {
           overlay.classList.add('hidden');
           resolve();
-        }, 400);
+        }, 380);
       }
     };
     tick();

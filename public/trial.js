@@ -27,11 +27,13 @@ function nextRound() {
     });
 }
 
-function handleTap(symbolId, node) {
+async function handleTap(symbolId, node) {
   if (!active) return;
+  hapticTap();
   if (symbolId === commonId) {
     active = false;
     node.classList.add('correct');
+    await highlightMatch(el('cardA'), el('cardB'), symbolId);
     showOverlay(commonSymbol && commonSymbol.image, commonSymbol && commonSymbol.emoji, '✅ Correct!', commonSymbol && commonSymbol.label);
     setTimeout(nextRound, 1600);
   } else {
