@@ -20,18 +20,37 @@
     <h1>🥂 Hugo Spritz Pong</h1>
     <p class="subtitle">Beer pong, but make it us.</p>
 
-    <div class="panel" id="rulesPanel">
+    <div class="panel" id="setupPanel">
       <div class="panel-header">
         <a href="/" class="btn-back">← Back</a>
       </div>
       <p class="rules-text">
         Classic pong rules — 10 cups in a triangle, take turns shooting, sunk cups come off the table.
         The twist: every cup is one of our Favourite Things, and sinking it triggers its forfeit.
+        Set up your cups below, then start the game — each cup stays a secret until it's actually sunk.
       </p>
-      <button class="btn shuffle-btn" id="shuffleBtn">🎲 Shuffle Cup Order</button>
+      <button class="btn btn-outline shuffle-btn" id="shuffleBtn">🎲 Shuffle Cup Order</button>
+      <button class="btn play-btn" id="startGameBtn">▶️ Start Game</button>
+    </div>
+
+    <div class="panel hidden" id="playPanel">
+      <div class="panel-header">
+        <button class="btn-back" id="playBackBtn">← Back to setup</button>
+      </div>
+      <div class="cups-remaining">🥤 <span id="cupsRemainingCount">10</span> cups left</div>
+      <p class="play-hint">Tap a cup the moment it's actually sunk in real life.</p>
     </div>
 
     <div class="cup-grid" id="cupGrid"></div>
+  </div>
+
+  <div class="overlay hidden" id="gameOverOverlay">
+    <div class="overlay-card">
+      <div class="game-complete-emoji">🏆</div>
+      <h2>GAME OVER!</h2>
+      <p id="gameOverText"></p>
+      <button class="btn" id="newGameBtn">🔁 New Game</button>
+    </div>
   </div>
 
   <script src="/layout.js"></script>

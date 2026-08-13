@@ -9,6 +9,20 @@
 }
 
 .shuffle-btn { margin-top: 4px; }
+.play-btn { margin-top: 10px; }
+
+.cups-remaining {
+  font-size: 1.3rem;
+  font-weight: 800;
+  color: var(--accent-dark);
+  margin-bottom: 4px;
+}
+
+.play-hint {
+  font-size: 0.85rem;
+  color: var(--muted);
+  margin: 0;
+}
 
 .cup-grid {
   width: 100%;
@@ -76,4 +90,48 @@
 }
 .cup-wins .cup-name::after {
   content: ' 👑';
+}
+
+.cup-hidden {
+  appearance: none;
+  border: 2px dashed rgba(44, 33, 56, 0.2);
+  cursor: pointer;
+  width: 100%;
+  font-family: inherit;
+  animation: none;
+  transition: transform 0.12s ease, border-color 0.12s ease;
+}
+.cup-hidden:active {
+  transform: scale(0.96);
+  border-color: var(--accent);
+}
+.cup-hidden .cup-emoji { opacity: 0.6; }
+
+.cup-tap-hint {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--muted);
+}
+
+.cup-sunk {
+  opacity: 0.55;
+  animation: sinkReveal 0.4s ease;
+}
+
+.cup-sunk-badge {
+  position: absolute;
+  top: 8px;
+  right: 10px;
+  font-size: 0.65rem;
+  font-weight: 800;
+  color: #fff;
+  background: var(--accent-dark);
+  border-radius: 999px;
+  padding: 2px 8px;
+  letter-spacing: 0.04em;
+}
+
+@keyframes sinkReveal {
+  from { transform: scale(0.9) rotateY(90deg); opacity: 0; }
+  to { transform: scale(1) rotateY(0deg); opacity: 0.55; }
 }
