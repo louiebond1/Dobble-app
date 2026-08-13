@@ -1,5 +1,6 @@
 const socket = io();
 let roomCode = null;
+let hostToken = null;
 
 const el = (id) => document.getElementById(id);
 const setup = el('setup');
@@ -12,6 +13,7 @@ el('createBtn').addEventListener('click', () => {
   const rounds = parseInt(el('roundsInput').value, 10) || 15;
   socket.emit('host:create', { rounds }, (res) => {
     roomCode = res.code;
+    hostToken = res.hostToken;
     el('roomCode').textContent = roomCode;
     setup.classList.add('hidden');
     lobby.classList.remove('hidden');
@@ -35,6 +37,20 @@ el('playAgainBtn').addEventListener('click', () => {
   socket.emit('host:playAgain', { code: roomCode });
   gameOver.classList.add('hidden');
   gameArea.classList.remove('hidden');
+});
+
+// iOS suspends a backgrounded home-screen app and can hand it a fresh
+// socket id when it wakes back up; without re-claiming host status the
+// server silently ignores host:start/host:playAgain from the "wrong" socket.
+socket.on('connect', () => {
+  if (!roomCode || !hostToken) return;
+  socket.emit('host:rejoin', { code: roomCode, hostToken }, (res) => {
+    if (!res || !res.ok) return;
+    el('playerCount').textContent = res.players.length;
+    el('startBtn').disabled = res.players.length < 1;
+    el('playerList').innerHTML = res.players.map((p) => `<li>${p.name}</li>`).join('');
+    renderLeaderboard('leaderboard', res.players);
+  });
 });
 
 socket.on('players:update', (scores) => {

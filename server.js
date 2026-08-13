@@ -1,4 +1,5 @@
 const path = require('path');
+const crypto = require('crypto');
 const express = require('express');
 const QRCode = require('qrcode');
 const { Server } = require('socket.io');
@@ -98,9 +99,11 @@ io.on('connection', (socket) => {
   socket.on('host:create', (payload, ack) => {
     const rounds = Math.max(3, Math.min(28, Number(payload && payload.rounds) || 15));
     const code = makeRoomCode();
+    const hostToken = crypto.randomUUID();
     rooms.set(code, {
       code,
       hostSocketId: socket.id,
+      hostToken,
       players: new Map(),
       started: false,
       totalRounds: rounds,
@@ -114,7 +117,34 @@ io.on('connection', (socket) => {
     socket.join(code);
     socket.data.role = 'host';
     socket.data.code = code;
-    if (typeof ack === 'function') ack({ code });
+    if (typeof ack === 'function') ack({ code, hostToken });
+  });
+
+  // Re-claims host privileges for a room after the host's socket reconnects
+  // (e.g. iOS suspends a backgrounded home-screen app and issues a new
+  // socket id on resume) — otherwise host:start/host:playAgain silently
+  // no-op because they're gated on the stale socket id.
+  socket.on('host:rejoin', (payload, ack) => {
+    const code = String((payload && payload.code) || '').toUpperCase();
+    const hostToken = String((payload && payload.hostToken) || '');
+    const room = rooms.get(code);
+    if (!room || !hostToken || room.hostToken !== hostToken) {
+      if (typeof ack === 'function') ack({ ok: false });
+      return;
+    }
+    room.hostSocketId = socket.id;
+    socket.join(code);
+    socket.data.role = 'host';
+    socket.data.code = code;
+    if (typeof ack === 'function') {
+      ack({
+        ok: true,
+        players: scoreboard(room),
+        started: room.started,
+        roundNumber: room.roundNumber,
+        totalRounds: room.totalRounds,
+      });
+    }
   });
 
   socket.on('player:join', (payload, ack) => {
