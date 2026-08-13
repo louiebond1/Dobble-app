@@ -744,9 +744,7 @@ body[data-mount="shelf"]  { --mount-line: rgba(90, 60, 30, 0.9); --mount-1: #ba8
 .memory-wall {
   position: relative;
   flex: 1;
-  overflow-y: auto;
-  overflow-x: hidden;
-  -webkit-overflow-scrolling: touch;
+  overflow: hidden;
 }
 
 .memory-wall-inner {

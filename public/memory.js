@@ -175,42 +175,72 @@ function shuffle(arr) {
 // even spacing per line with small randomized jitter in position/rotation/
 // hang length, computed once so the wall stays stable during play. Geometry
 // adapts per mount: string needs room to sag, pins barely any, shelves need
-// none (cards share one baseline so they visibly rest on the ledge).
+// none (cards share one baseline so they visibly rest on the ledge). Values
+// are RATIOS of card height, not fixed pixels — the per-line overhead has to
+// shrink along with the cards themselves, or a big board could never
+// converge on a layout that fits one screen.
 const MOUNT_GEOM = {
-  string: { base: 20, jitter: 12, vJitter: 10, extra: 36, rotJitter: 7 },
-  pin: { base: 6, jitter: 4, vJitter: 6, extra: 28, rotJitter: 6 },
-  shelf: { base: 0, jitter: 0, vJitter: 0, extra: 24, rotJitter: 5 },
+  string: { base: 0.22, jitter: 0.13, vJitter: 0.11, extra: 0.3, rotJitter: 7 },
+  pin: { base: 0.08, jitter: 0.05, vJitter: 0.07, extra: 0.24, rotJitter: 6 },
+  shelf: { base: 0, jitter: 0, vJitter: 0, extra: 0.2, rotJitter: 5 },
 };
 
-function computeLayout(n, wallWidth) {
+// The wall must always fit on one screen — never scroll — so instead of a
+// fixed cards-per-line guess, this searches column counts ascending and
+// takes the first (largest-card) layout whose total height fits the actual
+// available space. More columns means smaller cards but fewer rows, so
+// height only gets easier to satisfy as columns increase; if nothing fits
+// even at the column cap, the tightest option found is used as a last resort.
+function computeLayout(n, wallWidth, wallHeight) {
   const geom = MOUNT_GEOM[mount] || MOUNT_GEOM.string;
-  const cardsPerLine = n <= 12 ? 3 : n <= 24 ? 4 : n <= 48 ? 5 : 6;
-  const lines = Math.max(1, Math.ceil(n / cardsPerLine));
-  const sidePad = Math.max(18, wallWidth * 0.05);
-  const gapX = Math.max(10, wallWidth * 0.025);
+  const sidePad = Math.max(14, wallWidth * 0.04);
+  const gapX = Math.max(8, wallWidth * 0.02);
   const avail = wallWidth - sidePad * 2;
-  let cardW = (avail - gapX * (cardsPerLine - 1)) / cardsPerLine;
-  cardW = Math.max(64, Math.min(150, cardW));
-  const cardH = (cardW * 4) / 3;
-  const lineGap = cardH + geom.base + geom.jitter + geom.vJitter + geom.extra;
-  // Shelf cards extend upward from the line (they rest ON the shelf, rather
-  // than hang below it), so the first row needs a full card height of
-  // headroom or it renders off the top of the wall.
-  const topPad = mount === 'shelf' ? cardH + 24 : 40;
+  const maxCols = Math.max(2, Math.min(n, 16));
+
+  let cols = maxCols;
+  let cardW = 0;
+  let cardH = 0;
+  let lineGap = 0;
+  let topPad = 0;
+  let lines = 0;
+
+  for (let tryCols = 2; tryCols <= maxCols; tryCols++) {
+    let w = (avail - gapX * (tryCols - 1)) / tryCols;
+    w = Math.max(24, Math.min(150, w));
+    const h = (w * 4) / 3;
+    const gap = h * (1 + geom.base + geom.jitter + geom.vJitter + geom.extra);
+    // Shelf cards extend upward from the line (they rest ON the shelf,
+    // rather than hang below it), so the first row needs a full card
+    // height of headroom or it renders off the top of the wall.
+    const pad = mount === 'shelf' ? h * 1.15 : Math.max(24, h * 0.4);
+    const ln = Math.ceil(n / tryCols);
+    const totalHeight = pad + ln * gap;
+
+    cols = tryCols;
+    cardW = w;
+    cardH = h;
+    lineGap = gap;
+    topPad = pad;
+    lines = ln;
+
+    if (totalHeight <= wallHeight) break; // largest-card fitting config found
+  }
 
   const cards = [];
   let idx = 0;
   for (let line = 0; line < lines && idx < n; line++) {
-    const countThisLine = Math.min(cardsPerLine, n - idx);
+    const countThisLine = Math.min(cols, n - idx);
     const usedWidth = countThisLine * cardW + (countThisLine - 1) * gapX;
     const lineStartX = sidePad + Math.max(0, (avail - usedWidth) / 2);
     for (let c = 0; c < countThisLine; c++) {
       const baseX = lineStartX + c * (cardW + gapX) + cardW / 2;
       const jitterX = (Math.random() - 0.5) * gapX * 0.4;
+      const hangLen = cardH * (geom.base + Math.random() * geom.jitter + (Math.random() - 0.5) * geom.vJitter);
       cards.push({
         x: baseX + jitterX,
         lineY: topPad + line * lineGap,
-        hangLen: geom.base + Math.random() * geom.jitter + (Math.random() - 0.5) * geom.vJitter,
+        hangLen: Math.max(0, hangLen),
         rot: (Math.random() - 0.5) * 2 * geom.rotJitter,
         cardW,
         cardH,
@@ -235,7 +265,8 @@ function buildWall() {
   wall.appendChild(inner);
 
   const wallWidth = wall.clientWidth || window.innerWidth;
-  const layout = computeLayout(deck.length, wallWidth);
+  const wallHeight = wall.clientHeight || window.innerHeight;
+  const layout = computeLayout(deck.length, wallWidth, wallHeight);
   inner.style.height = `${layout.topPad + layout.lines * layout.lineGap}px`;
 
   for (let line = 0; line < layout.lines; line++) {
