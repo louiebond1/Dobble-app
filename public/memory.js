@@ -4,6 +4,8 @@ const gameArea = el('memoryGameArea');
 const overPanel = el('memoryOver');
 
 let symbols = [];
+let photos = [];
+let source = 'favourites';
 let players = [];
 let mode = 'solo';
 let pairCount = 12;
@@ -17,27 +19,64 @@ let lock = false;
 let startedAt = null;
 let timerInterval = null;
 
-fetch('/api/symbols')
-  .then((r) => r.json())
-  .then((data) => {
-    symbols = data;
-  });
+const CHIP_PRESETS = { favourites: [8, 12, 16, 24], photos: [6, 10, 14] };
 
-document.querySelectorAll('.mode-btn').forEach((btn) => {
+function currentPool() {
+  return source === 'photos' ? photos : symbols;
+}
+
+Promise.all([
+  fetch('/api/symbols').then((r) => r.json()),
+  fetch('/api/photos').then((r) => r.json()),
+]).then(([symbolData, photoData]) => {
+  symbols = symbolData;
+  photos = photoData;
+  renderChips();
+});
+
+document.querySelectorAll('#sourceToggle .mode-btn').forEach((btn) => {
+  btn.addEventListener('click', () => {
+    source = btn.dataset.source;
+    document.querySelectorAll('#sourceToggle .mode-btn').forEach((b) => b.classList.toggle('active', b === btn));
+    renderChips();
+  });
+});
+
+document.querySelectorAll('#modeToggle .mode-btn').forEach((btn) => {
   btn.addEventListener('click', () => {
     mode = btn.dataset.mode;
-    document.querySelectorAll('.mode-btn').forEach((b) => b.classList.toggle('active', b === btn));
+    document.querySelectorAll('#modeToggle .mode-btn').forEach((b) => b.classList.toggle('active', b === btn));
     el('soloFields').classList.toggle('hidden', mode !== 'solo');
     el('duoFields').classList.toggle('hidden', mode !== 'duo');
   });
 });
 
-document.querySelectorAll('.chip').forEach((chip) => {
-  chip.addEventListener('click', () => {
-    document.querySelectorAll('.chip').forEach((c) => c.classList.toggle('active', c === chip));
-    el('pairCountInput').value = chip.dataset.count;
+function renderChips() {
+  const pool = currentPool();
+  if (!pool.length) return; // still loading
+  const container = el('pairChips');
+  container.innerHTML = '';
+  const presets = CHIP_PRESETS[source].filter((n) => n < pool.length);
+  presets.forEach((n) => addChip(container, n, `${n}`));
+  addChip(container, pool.length, `All ${pool.length}`);
+  const defaultChip = container.children[Math.min(1, container.children.length - 1)];
+  defaultChip.classList.add('active');
+  el('pairCountInput').value = defaultChip.dataset.count;
+  el('pairCountInput').max = pool.length;
+}
+
+function addChip(container, count, text) {
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'chip';
+  btn.dataset.count = count;
+  btn.textContent = text;
+  btn.addEventListener('click', () => {
+    container.querySelectorAll('.chip').forEach((c) => c.classList.toggle('active', c === btn));
+    el('pairCountInput').value = count;
   });
-});
+  container.appendChild(btn);
+}
 
 el('pairCountInput').addEventListener('input', () => {
   const val = String(el('pairCountInput').value);
@@ -45,9 +84,10 @@ el('pairCountInput').addEventListener('input', () => {
 });
 
 el('startBtn').addEventListener('click', () => {
-  if (!symbols.length) return; // symbols still loading — button is effectively a no-op until ready
+  const pool = currentPool();
+  if (!pool.length) return; // still loading — button is effectively a no-op until ready
 
-  pairCount = Math.max(4, Math.min(symbols.length, parseInt(el('pairCountInput').value, 10) || 12));
+  pairCount = Math.max(2, Math.min(pool.length, parseInt(el('pairCountInput').value, 10) || 12));
 
   if (mode === 'solo') {
     const name = el('soloNameInput').value.trim() || 'You';
@@ -100,7 +140,7 @@ function gridColumnsFor(totalCards) {
 }
 
 function buildBoard() {
-  const chosen = shuffle([...symbols]).slice(0, pairCount);
+  const chosen = shuffle([...currentPool()]).slice(0, pairCount);
   deckSize = chosen.length;
   const deck = shuffle(chosen.flatMap((s) => [{ ...s, pairKey: `${s.id}a` }, { ...s, pairKey: `${s.id}b` }]));
   const grid = el('memoryGrid');
@@ -213,7 +253,7 @@ function startTimer() {
 }
 
 function bestKey(name) {
-  return `memory-solo-best-${name.trim().toLowerCase()}-${deckSize}`;
+  return `memory-solo-best-${source}-${name.trim().toLowerCase()}-${deckSize}`;
 }
 
 function endGame() {

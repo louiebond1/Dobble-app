@@ -6,6 +6,7 @@ const QRCode = require('qrcode');
 const { Server } = require('socket.io');
 const http = require('http');
 const { SYMBOLS, DECK } = require('./lib/deck');
+const { PHOTOS } = require('./lib/photos');
 
 const app = express();
 const server = http.createServer(app);
@@ -329,6 +330,10 @@ setInterval(() => {
 
 app.get('/api/symbols', (req, res) => {
   res.json(buildCard(SYMBOLS.map((_, id) => id)));
+});
+
+app.get('/api/photos', (req, res) => {
+  res.json(PHOTOS);
 });
 
 app.get('/api/qr', async (req, res) => {
