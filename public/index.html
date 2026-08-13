@@ -18,10 +18,18 @@
 </head>
 <body>
   <div class="wrap">
+    <div class="brand-mark">A + L</div>
     <h1>💘 Our Favourite Things</h1>
-    <p class="subtitle">Spot the match — scan to join on your phone</p>
+    <p class="subtitle">Games, memories &amp; date nights — made just for us</p>
 
     <div class="panel" id="setup">
+      <div class="panel-eyebrow">
+        <span class="panel-eyebrow-emoji">🎴</span>
+        <div>
+          <div class="panel-eyebrow-title">Spot The Match</div>
+          <div class="panel-eyebrow-sub">Our Dobble-style card game — scan to join on your phone</div>
+        </div>
+      </div>
       <label for="hostNameInput">Your name</label>
       <input type="text" id="hostNameInput" placeholder="e.g. Alex" maxlength="20" />
       <div class="rounds-field">
@@ -29,17 +37,27 @@
         <input type="number" id="roundsInput" min="5" max="28" value="15" />
       </div>
       <button class="btn" id="createBtn">🎉 Create Game</button>
-      <a href="/trial" class="btn btn-outline">🧪 Try Solo Trial Mode</a>
-      <a href="/memory" class="btn btn-outline">🧠 Play Memory Match</a>
+      <a href="/trial" class="trial-link">🧪 Just want to practice? Try Solo Trial Mode →</a>
     </div>
 
+    <div class="section-divider"><span>More ways to play</span></div>
+
     <div class="feature-cards">
+      <a href="/memory" class="feature-card">
+        <div class="feature-card-emoji">🖼️</div>
+        <div class="feature-card-body">
+          <div class="feature-card-title">MEMORY MATCH</div>
+          <div class="feature-card-sub">Our hanging wall of memories.</div>
+        </div>
+        <div class="feature-card-arrow">›</div>
+      </a>
       <a href="/predict" class="feature-card">
         <div class="feature-card-emoji">🧠</div>
         <div class="feature-card-body">
           <div class="feature-card-title">WHAT WOULD YOU SAY?</div>
           <div class="feature-card-sub">How well do you actually know each other?</div>
         </div>
+        <div class="feature-card-arrow">›</div>
       </a>
       <a href="/roulette" class="feature-card">
         <div class="feature-card-emoji">🎲</div>
@@ -47,6 +65,7 @@
           <div class="feature-card-title">DATE ROULETTE</div>
           <div class="feature-card-sub">Let us choose tonight.</div>
         </div>
+        <div class="feature-card-arrow">›</div>
       </a>
     </div>
 
