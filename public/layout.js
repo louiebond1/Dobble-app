@@ -142,6 +142,35 @@ async function revealRound(overlay, numberEl, cardAEl, cardBEl, cardASymbols, ca
   renderCard(cardBEl, cardBSymbols, { onTap });
 }
 
+// Fills a result-overlay frame with the actual symbol photo (big, so the
+// "what was it" reveal is unmistakable), falling back to a large emoji.
+function renderResultPhoto(frameEl, image, emoji, label) {
+  frameEl.innerHTML = '';
+  if (image) {
+    const img = document.createElement('img');
+    img.className = 'overlay-photo';
+    img.alt = label || '';
+    img.addEventListener(
+      'error',
+      () => {
+        frameEl.innerHTML = '';
+        const fallback = document.createElement('div');
+        fallback.style.fontSize = '5rem';
+        fallback.textContent = emoji || '';
+        frameEl.appendChild(fallback);
+      },
+      { once: true }
+    );
+    img.src = image;
+    frameEl.appendChild(img);
+  } else {
+    const div = document.createElement('div');
+    div.style.fontSize = '5rem';
+    div.textContent = emoji || '';
+    frameEl.appendChild(div);
+  }
+}
+
 function renderCard(el, cardSymbols, { onTap } = {}) {
   el.innerHTML = '';
   const size = el.clientWidth || el.getBoundingClientRect().width;

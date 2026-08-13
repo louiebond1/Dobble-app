@@ -72,14 +72,14 @@ function handleTap(symbolId, node) {
 socket.on('round:result', (data) => {
   roundActive = false;
   const won = data.winnerName === playerName;
-  showOverlay(won ? '🎉' : '👀', won ? 'You got it!' : `${data.winnerName} found it!`, `${data.emoji} ${data.label}`);
+  showOverlay(data.image, data.emoji, won ? '🎉 You got it!' : `👀 ${data.winnerName} got it!`, data.label);
   const mine = data.scores.find((p) => p.name === playerName);
   if (mine) el('playerScoreBadge').textContent = mine.score;
 });
 
 socket.on('round:timeout', (data) => {
   roundActive = false;
-  showOverlay('⏰', "Time's up!", `It was ${data.emoji} ${data.label}`);
+  showOverlay(data.image, data.emoji, "⏰ Time's up!", `It was ${data.label}`);
 });
 
 socket.on('game:over', (data) => {
@@ -91,10 +91,10 @@ socket.on('game:over', (data) => {
     .join('');
 });
 
-function showOverlay(emoji, title, label) {
-  el('resultEmoji').textContent = emoji;
+function showOverlay(image, emoji, title, label) {
+  renderResultPhoto(el('resultPhotoFrame'), image, emoji, label);
   el('resultTitle').textContent = title;
   el('resultLabel').textContent = label;
   resultOverlay.classList.remove('hidden');
-  setTimeout(() => resultOverlay.classList.add('hidden'), 2000);
+  setTimeout(() => resultOverlay.classList.add('hidden'), 2200);
 }

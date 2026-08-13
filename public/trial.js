@@ -1,16 +1,18 @@
 const el = (id) => document.getElementById(id);
+const resultOverlay = el('resultOverlay');
 let round = 0;
 let commonId = null;
+let commonSymbol = null;
 let active = false;
 
 function nextRound() {
-  el('feedback').textContent = '';
   active = false;
   fetch('/api/trial')
     .then((r) => r.json())
     .then(async (data) => {
       round += 1;
       commonId = data.commonId;
+      commonSymbol = data.cardA.find((s) => s.id === commonId) || null;
       el('roundNum').textContent = round;
       await revealRound(
         el('countdownOverlay'),
@@ -30,12 +32,20 @@ function handleTap(symbolId, node) {
   if (symbolId === commonId) {
     active = false;
     node.classList.add('correct');
-    el('feedback').textContent = '✅ Correct!';
-    setTimeout(nextRound, 1200);
+    showOverlay(commonSymbol && commonSymbol.image, commonSymbol && commonSymbol.emoji, '✅ Correct!', commonSymbol && commonSymbol.label);
+    setTimeout(nextRound, 1600);
   } else {
     node.classList.add('wrong');
     setTimeout(() => node.classList.remove('wrong'), 400);
   }
+}
+
+function showOverlay(image, emoji, title, label) {
+  renderResultPhoto(el('resultPhotoFrame'), image, emoji, label);
+  el('resultTitle').textContent = title;
+  el('resultLabel').textContent = label;
+  resultOverlay.classList.remove('hidden');
+  setTimeout(() => resultOverlay.classList.add('hidden'), 1400);
 }
 
 prefetchAllSymbolImages();

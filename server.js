@@ -88,6 +88,7 @@ function startRound(code) {
       symbolId: commonId,
       emoji: SYMBOLS[commonId].emoji,
       label: SYMBOLS[commonId].label,
+      image: SYMBOLS[commonId].image || null,
     });
     setTimeout(() => startRound(code), 3000);
   }, 23000); // padded ~3s over the visible answer window to cover the client-side countdown reveal
@@ -174,6 +175,7 @@ io.on('connection', (socket) => {
       symbolId,
       emoji: SYMBOLS[symbolId].emoji,
       label: SYMBOLS[symbolId].label,
+      image: SYMBOLS[symbolId].image || null,
       scores: scoreboard(room),
     });
 
