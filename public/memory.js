@@ -6,7 +6,8 @@ const overPanel = el('memoryOver');
 let symbols = [];
 let photos = [];
 let source = 'favourites';
-let theme = 'romantic';
+let bg = 'blush';
+let mount = 'string';
 let players = [];
 let mode = 'solo';
 let pairCount = 12;
@@ -35,11 +36,39 @@ Promise.all([
   renderChips();
 });
 
-document.querySelectorAll('.theme-card').forEach((btn) => {
+document.querySelectorAll('.bg-swatch[data-bg]').forEach((btn) => {
   btn.addEventListener('click', () => {
-    theme = btn.dataset.theme;
-    document.querySelectorAll('.theme-card').forEach((b) => b.classList.toggle('active', b === btn));
-    document.body.dataset.theme = theme;
+    bg = btn.dataset.bg;
+    document.querySelectorAll('.bg-swatch').forEach((b) => b.classList.toggle('active', b === btn));
+    document.body.dataset.bg = bg;
+    el('bgUploadHint').classList.add('hidden');
+    [gameArea, overPanel].forEach((stage) => {
+      stage.style.backgroundImage = '';
+    });
+  });
+});
+
+el('bgUploadInput').addEventListener('change', (e) => {
+  const file = e.target.files && e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    bg = 'custom';
+    document.body.dataset.bg = bg;
+    document.querySelectorAll('.bg-swatch').forEach((b) => b.classList.toggle('active', b === el('bgUploadSwatch')));
+    el('bgUploadHint').classList.remove('hidden');
+    [gameArea, overPanel].forEach((stage) => {
+      stage.style.backgroundImage = `url(${reader.result})`;
+    });
+  };
+  reader.readAsDataURL(file);
+});
+
+document.querySelectorAll('.mount-card').forEach((btn) => {
+  btn.addEventListener('click', () => {
+    mount = btn.dataset.mount;
+    document.querySelectorAll('.mount-card').forEach((b) => b.classList.toggle('active', b === btn));
+    document.body.dataset.mount = mount;
   });
 });
 
@@ -144,8 +173,17 @@ function shuffle(arr) {
 
 // Lays cards out along 3+ loosely organic "washing lines" instead of a grid —
 // even spacing per line with small randomized jitter in position/rotation/
-// string length, computed once so the wall stays stable during play.
+// hang length, computed once so the wall stays stable during play. Geometry
+// adapts per mount: string needs room to sag, pins barely any, shelves need
+// none (cards share one baseline so they visibly rest on the ledge).
+const MOUNT_GEOM = {
+  string: { base: 20, jitter: 12, vJitter: 10, extra: 36, rotJitter: 7 },
+  pin: { base: 6, jitter: 4, vJitter: 6, extra: 28, rotJitter: 6 },
+  shelf: { base: 0, jitter: 0, vJitter: 0, extra: 24, rotJitter: 5 },
+};
+
 function computeLayout(n, wallWidth) {
+  const geom = MOUNT_GEOM[mount] || MOUNT_GEOM.string;
   const cardsPerLine = n <= 12 ? 3 : n <= 24 ? 4 : n <= 48 ? 5 : 6;
   const lines = Math.max(1, Math.ceil(n / cardsPerLine));
   const sidePad = Math.max(18, wallWidth * 0.05);
@@ -154,12 +192,11 @@ function computeLayout(n, wallWidth) {
   let cardW = (avail - gapX * (cardsPerLine - 1)) / cardsPerLine;
   cardW = Math.max(64, Math.min(150, cardW));
   const cardH = (cardW * 4) / 3;
-  const stringBase = 20;
-  const stringJitter = 12;
-  const rotJitter = 7;
-  const vJitter = 10;
-  const lineGap = cardH + stringBase + stringJitter + vJitter + 36;
-  const topPad = 40;
+  const lineGap = cardH + geom.base + geom.jitter + geom.vJitter + geom.extra;
+  // Shelf cards extend upward from the line (they rest ON the shelf, rather
+  // than hang below it), so the first row needs a full card height of
+  // headroom or it renders off the top of the wall.
+  const topPad = mount === 'shelf' ? cardH + 24 : 40;
 
   const cards = [];
   let idx = 0;
@@ -173,8 +210,8 @@ function computeLayout(n, wallWidth) {
       cards.push({
         x: baseX + jitterX,
         lineY: topPad + line * lineGap,
-        stringLen: stringBase + Math.random() * stringJitter + (Math.random() - 0.5) * vJitter,
-        rot: (Math.random() - 0.5) * 2 * rotJitter,
+        hangLen: geom.base + Math.random() * geom.jitter + (Math.random() - 0.5) * geom.vJitter,
+        rot: (Math.random() - 0.5) * 2 * geom.rotJitter,
         cardW,
         cardH,
       });
@@ -202,17 +239,25 @@ function buildWall() {
   inner.style.height = `${layout.topPad + layout.lines * layout.lineGap}px`;
 
   for (let line = 0; line < layout.lines; line++) {
-    const y = layout.topPad + line * layout.lineGap - 6;
-    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-    svg.setAttribute('class', 'memory-string-line');
-    svg.style.top = `${y}px`;
-    svg.setAttribute('viewBox', '0 0 100 20');
-    svg.setAttribute('preserveAspectRatio', 'none');
-    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-    path.setAttribute('d', 'M0,6 Q50,14 100,6');
-    path.setAttribute('vector-effect', 'non-scaling-stroke');
-    svg.appendChild(path);
-    inner.appendChild(svg);
+    const lineY = layout.topPad + line * layout.lineGap;
+    if (mount === 'string') {
+      const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      svg.setAttribute('class', 'memory-string-line');
+      svg.style.top = `${lineY - 6}px`;
+      svg.setAttribute('viewBox', '0 0 100 20');
+      svg.setAttribute('preserveAspectRatio', 'none');
+      const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+      path.setAttribute('d', 'M0,6 Q50,14 100,6');
+      path.setAttribute('vector-effect', 'non-scaling-stroke');
+      svg.appendChild(path);
+      inner.appendChild(svg);
+    } else if (mount === 'shelf') {
+      const bar = document.createElement('div');
+      bar.className = 'shelf-bar';
+      bar.style.top = `${lineY + 6}px`;
+      inner.appendChild(bar);
+    }
+    // pin mount: no shared line — cards attach straight to the wall
   }
 
   deck.forEach((card, i) => {
@@ -230,20 +275,31 @@ function buildHangCard(card, pos) {
   hangCard.style.top = `${pos.lineY}px`;
   hangCard.dataset.symbolId = card.id;
 
-  const stringEl = document.createElement('div');
-  stringEl.className = 'hang-string';
-  stringEl.style.height = `${pos.stringLen}px`;
-
-  const peg = document.createElement('div');
-  peg.className = 'hang-peg';
-  peg.style.top = `${pos.stringLen - 4}px`;
-
   const swing = document.createElement('div');
   swing.className = 'swing-wrapper';
   swing.style.setProperty('--rest-rotate', `${pos.rot}deg`);
-  swing.style.top = `${pos.stringLen}px`;
   swing.style.width = `${pos.cardW}px`;
   swing.style.height = `${pos.cardH}px`;
+
+  if (mount === 'string') {
+    const stringEl = document.createElement('div');
+    stringEl.className = 'hang-string';
+    stringEl.style.height = `${pos.hangLen}px`;
+    const peg = document.createElement('div');
+    peg.className = 'hang-peg';
+    peg.style.top = `${pos.hangLen - 4}px`;
+    swing.style.top = `${pos.hangLen}px`;
+    hangCard.appendChild(stringEl);
+    hangCard.appendChild(peg);
+  } else if (mount === 'pin') {
+    const pin = document.createElement('div');
+    pin.className = 'hang-pin';
+    swing.style.top = `${pos.hangLen}px`;
+    hangCard.appendChild(pin);
+  } else if (mount === 'shelf') {
+    swing.classList.add('pivot-bottom');
+    swing.style.top = `${-(pos.cardH - 6)}px`;
+  }
 
   const cardEl = document.createElement('div');
   cardEl.className = 'memory-card';
@@ -273,8 +329,6 @@ function buildHangCard(card, pos) {
   inner.appendChild(front);
   cardEl.appendChild(inner);
   swing.appendChild(cardEl);
-  hangCard.appendChild(stringEl);
-  hangCard.appendChild(peg);
   hangCard.appendChild(swing);
 
   hangCard.addEventListener('click', () => handleCardClick({ hangCard, cardEl, swing }));
@@ -282,20 +336,16 @@ function buildHangCard(card, pos) {
 }
 
 function spawnDecor(container) {
+  if (mount === 'pin') return; // clean pinboard look, no extra decor
   const count = 9;
   for (let i = 0; i < count; i++) {
     const decor = document.createElement('div');
     const x = 4 + Math.random() * 92;
     const y = 4 + Math.random() * 14;
+    decor.className = 'fairy-light';
     decor.style.left = `${x}%`;
     decor.style.top = `${y}px`;
     decor.style.animationDelay = `${(Math.random() * 2).toFixed(2)}s`;
-    if (theme === 'holiday') {
-      decor.className = 'bunting-flag';
-      decor.style.transform = `rotate(${(Math.random() - 0.5) * 10}deg)`;
-    } else {
-      decor.className = 'fairy-light';
-    }
     container.appendChild(decor);
   }
 }

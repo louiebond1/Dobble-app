@@ -14,33 +14,47 @@
   <link rel="manifest" href="/manifest.webmanifest" />
   <link rel="stylesheet" href="/style.css" />
 </head>
-<body data-theme="romantic">
+<body data-bg="blush" data-mount="string">
   <div class="wrap wrap-wide">
     <h1>🧠 Memory Match</h1>
     <p class="subtitle">Pick how many, then find every pair</p>
 
     <div class="panel" id="setup">
-      <p class="field-label">Choose your memory wall</p>
-      <div class="theme-select" id="themeSelect">
-        <button type="button" class="theme-card active" data-theme="romantic">
-          <span class="theme-card-swatch theme-swatch-romantic"><span class="theme-swatch-string"></span><i></i><i></i><i></i></span>
-          <span class="theme-card-text">
-            <span class="theme-card-name">💕 Romantic Bedroom</span>
-            <span class="theme-card-desc">Soft pink &amp; lilac, fairy lights</span>
+      <p class="field-label">Wall background</p>
+      <div class="bg-swatches" id="bgSwatches">
+        <button type="button" class="bg-swatch bg-swatch-blush active" data-bg="blush" aria-label="Blush"></button>
+        <button type="button" class="bg-swatch bg-swatch-lilac" data-bg="lilac" aria-label="Lilac"></button>
+        <button type="button" class="bg-swatch bg-swatch-cream" data-bg="cream" aria-label="Cream"></button>
+        <button type="button" class="bg-swatch bg-swatch-sky" data-bg="sky" aria-label="Sky"></button>
+        <button type="button" class="bg-swatch bg-swatch-peach" data-bg="peach" aria-label="Peach"></button>
+        <label class="bg-swatch bg-swatch-upload" id="bgUploadSwatch" aria-label="Upload your own photo">
+          <span>📷</span>
+          <input type="file" id="bgUploadInput" accept="image/*" class="hidden" />
+        </label>
+      </div>
+      <p class="bg-upload-hint hidden" id="bgUploadHint">Using your photo as the wall — pick a swatch to go back.</p>
+
+      <p class="field-label">Hanging style</p>
+      <div class="mount-select" id="mountSelect">
+        <button type="button" class="mount-card active" data-mount="string">
+          <span class="mount-card-icon">🪢</span>
+          <span class="mount-card-text">
+            <span class="mount-card-name">String &amp; Pegs</span>
+            <span class="mount-card-desc">Cards hang from string on little pegs</span>
           </span>
         </button>
-        <button type="button" class="theme-card" data-theme="polaroid">
-          <span class="theme-card-swatch theme-swatch-polaroid"><span class="theme-swatch-string"></span><i></i><i></i><i></i></span>
-          <span class="theme-card-text">
-            <span class="theme-card-name">📸 Polaroid Wall</span>
-            <span class="theme-card-desc">Warm wood pegs, mood-board feel</span>
+        <button type="button" class="mount-card" data-mount="pin">
+          <span class="mount-card-icon">📌</span>
+          <span class="mount-card-text">
+            <span class="mount-card-name">Pinned</span>
+            <span class="mount-card-desc">Cards pinned straight to the wall</span>
           </span>
         </button>
-        <button type="button" class="theme-card" data-theme="holiday">
-          <span class="theme-card-swatch theme-swatch-holiday"><span class="theme-swatch-string"></span><i></i><i></i><i></i></span>
-          <span class="theme-card-text">
-            <span class="theme-card-name">✈️ Holiday Memories</span>
-            <span class="theme-card-desc">Postcards &amp; travel bunting</span>
+        <button type="button" class="mount-card" data-mount="shelf">
+          <span class="mount-card-icon">🪵</span>
+          <span class="mount-card-text">
+            <span class="mount-card-name">Shelf</span>
+            <span class="mount-card-desc">Cards lean upright on little wooden ledges</span>
           </span>
         </button>
       </div>
