@@ -1,26 +1,69 @@
 // Scatters n symbols inside a circular card using a sunflower (phyllotaxis)
-// distribution so they don't overlap, with slight random size/rotation
-// variance for a hand-made Dobble-card feel.
+// distribution for the starting layout, then runs a collision-relaxation
+// pass so symbols of different sizes never actually overlap — the sunflower
+// formula alone only spaces out *centers*, not the varying footprints.
 function layoutSymbols(n, containerSize) {
   const golden = Math.PI * (3 - Math.sqrt(5));
   const cardRadius = containerSize / 2;
   const edgeMargin = containerSize * 0.035; // clears the card's decorative inset rings
-  const baseSize = containerSize * (0.5 / Math.sqrt(n));
-  const positions = [];
+  const baseSize = containerSize * (0.52 / Math.sqrt(n));
+
+  const items = [];
   for (let i = 0; i < n; i++) {
-    const size = baseSize * (0.82 + Math.random() * 0.36);
-    const rotation = Math.random() * 30 - 15;
+    // Tighter size variance (was ±18%) so symbols read as more uniform.
+    const size = baseSize * (0.92 + Math.random() * 0.16);
+    const rotation = Math.random() * 24 - 12;
     // Half-diagonal of the symbol's (rotated) square footprint — the true
     // distance its farthest corner can reach from its own center.
     const halfDiag = size * 0.5 * Math.SQRT2;
     const maxR = Math.max(0, cardRadius - halfDiag - edgeMargin);
     const r = maxR * Math.sqrt((i + 0.5) / n);
     const theta = i * golden + Math.random() * 0.5;
-    const x = containerSize / 2 + r * Math.cos(theta);
-    const y = containerSize / 2 + r * Math.sin(theta);
-    positions.push({ x, y, size, rotation });
+    items.push({
+      x: cardRadius + r * Math.cos(theta),
+      y: cardRadius + r * Math.sin(theta),
+      size,
+      rotation,
+      maxR,
+    });
   }
-  return positions;
+
+  // Push apart any symbols whose footprints collide, then re-clamp each
+  // back inside its own safe radius. A few passes is enough to settle.
+  const GAP = 1.1; // small breathing room beyond just-touching
+  for (let pass = 0; pass < 30; pass++) {
+    for (let i = 0; i < items.length; i++) {
+      for (let j = i + 1; j < items.length; j++) {
+        const a = items[i];
+        const b = items[j];
+        const dx = b.x - a.x;
+        const dy = b.y - a.y;
+        const dist = Math.sqrt(dx * dx + dy * dy) || 0.001;
+        const minDist = ((a.size + b.size) / 2) * GAP;
+        if (dist < minDist) {
+          const push = (minDist - dist) / 2;
+          const nx = dx / dist;
+          const ny = dy / dist;
+          a.x -= nx * push;
+          a.y -= ny * push;
+          b.x += nx * push;
+          b.y += ny * push;
+        }
+      }
+    }
+    for (const it of items) {
+      const dx = it.x - cardRadius;
+      const dy = it.y - cardRadius;
+      const d = Math.sqrt(dx * dx + dy * dy);
+      if (d > it.maxR && d > 0) {
+        const scale = it.maxR / d;
+        it.x = cardRadius + dx * scale;
+        it.y = cardRadius + dy * scale;
+      }
+    }
+  }
+
+  return items.map(({ x, y, size, rotation }) => ({ x, y, size, rotation }));
 }
 
 // Warms the browser's image cache for every symbol up front (called during the
