@@ -109,6 +109,40 @@ input[type="text"], input[type="number"] {
 
 label { display: block; text-align: left; font-weight: 600; font-size: 0.9rem; color: var(--muted); }
 
+.pair-count-field {
+  margin-bottom: 16px;
+}
+
+.pair-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 6px 0 8px;
+}
+
+.chip {
+  appearance: none;
+  border: 2px solid #eeddf3;
+  background: transparent;
+  border-radius: 999px;
+  padding: 6px 14px;
+  font-weight: 700;
+  font-size: 0.82rem;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.chip.active {
+  background: linear-gradient(135deg, var(--accent), var(--accent-dark));
+  border-color: transparent;
+  color: white;
+}
+
+.pair-count-field input[type="number"] {
+  max-width: 110px;
+  margin: 0;
+}
+
 .mode-toggle {
   display: flex;
   gap: 8px;

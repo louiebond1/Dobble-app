@@ -6,6 +6,8 @@ const overPanel = el('memoryOver');
 let symbols = [];
 let players = [];
 let mode = 'solo';
+let pairCount = 12;
+let deckSize = 0;
 let currentPlayer = 0;
 let moves = 0;
 let matchedPairs = 0;
@@ -30,8 +32,22 @@ document.querySelectorAll('.mode-btn').forEach((btn) => {
   });
 });
 
+document.querySelectorAll('.chip').forEach((chip) => {
+  chip.addEventListener('click', () => {
+    document.querySelectorAll('.chip').forEach((c) => c.classList.toggle('active', c === chip));
+    el('pairCountInput').value = chip.dataset.count;
+  });
+});
+
+el('pairCountInput').addEventListener('input', () => {
+  const val = String(el('pairCountInput').value);
+  document.querySelectorAll('.chip').forEach((c) => c.classList.toggle('active', c.dataset.count === val));
+});
+
 el('startBtn').addEventListener('click', () => {
   if (!symbols.length) return; // symbols still loading — button is effectively a no-op until ready
+
+  pairCount = Math.max(4, Math.min(symbols.length, parseInt(el('pairCountInput').value, 10) || 12));
 
   if (mode === 'solo') {
     const name = el('soloNameInput').value.trim() || 'You';
@@ -76,10 +92,22 @@ function shuffle(arr) {
   return arr;
 }
 
+function gridColumnsFor(totalCards) {
+  if (totalCards <= 16) return 4;
+  if (totalCards <= 36) return 6;
+  if (totalCards <= 64) return 8;
+  return null; // large boards fall back to auto-fill
+}
+
 function buildBoard() {
-  const deck = shuffle(symbols.flatMap((s) => [{ ...s, pairKey: `${s.id}a` }, { ...s, pairKey: `${s.id}b` }]));
+  const chosen = shuffle([...symbols]).slice(0, pairCount);
+  deckSize = chosen.length;
+  const deck = shuffle(chosen.flatMap((s) => [{ ...s, pairKey: `${s.id}a` }, { ...s, pairKey: `${s.id}b` }]));
   const grid = el('memoryGrid');
   grid.innerHTML = '';
+  const cols = gridColumnsFor(deck.length);
+  grid.style.gridTemplateColumns = cols ? `repeat(${cols}, 1fr)` : '';
+  el('memoryFound').textContent = `0 / ${deckSize} pairs`;
   deck.forEach((card) => {
     const cardEl = document.createElement('div');
     cardEl.className = 'memory-card';
@@ -138,9 +166,9 @@ function handleCardClick(cardEl) {
       playSuccess();
       hapticSuccess();
       updateHud();
-      el('memoryFound').textContent = `${matchedPairs} / ${symbols.length} pairs`;
+      el('memoryFound').textContent = `${matchedPairs} / ${deckSize} pairs`;
       resetTurnState();
-      if (matchedPairs === symbols.length) endGame();
+      if (matchedPairs === deckSize) endGame();
     }, 420);
   } else {
     setTimeout(() => {
@@ -185,7 +213,7 @@ function startTimer() {
 }
 
 function bestKey(name) {
-  return `memory-solo-best-${name.trim().toLowerCase()}`;
+  return `memory-solo-best-${name.trim().toLowerCase()}-${deckSize}`;
 }
 
 function endGame() {
@@ -194,7 +222,7 @@ function endGame() {
   overPanel.classList.remove('hidden');
 
   const elapsedSec = Math.floor((Date.now() - startedAt) / 1000);
-  el('memoryOverSummary').textContent = `${moves} moves · ${el('memoryTimer').textContent} · all 57 pairs found`;
+  el('memoryOverSummary').textContent = `${moves} moves · ${el('memoryTimer').textContent} · all ${deckSize} pairs found`;
 
   if (mode === 'solo') {
     el('memoryOverTitle').textContent = '🎉 Board Cleared!';

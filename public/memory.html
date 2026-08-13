@@ -17,12 +17,24 @@
 <body>
   <div class="wrap wrap-wide">
     <h1>🧠 Memory Match</h1>
-    <p class="subtitle">All 57 favourites — find every pair</p>
+    <p class="subtitle">Pick how many, then find every pair</p>
 
     <div class="panel" id="setup">
       <div class="mode-toggle" id="modeToggle">
         <button type="button" class="mode-btn active" id="modeSoloBtn" data-mode="solo">🧍 Solo</button>
         <button type="button" class="mode-btn" id="modeDuoBtn" data-mode="duo">🧑‍🤝‍🧑 Head-to-Head</button>
+      </div>
+
+      <div class="pair-count-field">
+        <label for="pairCountInput">How many pairs?</label>
+        <div class="pair-chips" id="pairChips">
+          <button type="button" class="chip" data-count="8">8</button>
+          <button type="button" class="chip active" data-count="12">12</button>
+          <button type="button" class="chip" data-count="16">16</button>
+          <button type="button" class="chip" data-count="24">24</button>
+          <button type="button" class="chip" data-count="57">All 57</button>
+        </div>
+        <input type="number" id="pairCountInput" min="4" max="57" value="12" />
       </div>
 
       <div id="soloFields">
