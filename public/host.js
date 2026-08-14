@@ -7,11 +7,23 @@ let isQuickPlay = false;
 
 const el = (id) => document.getElementById(id);
 const setup = el('setup');
+const spotMatchCard = el('spotMatchCard');
 const moreGames = el('moreGames');
 const lobby = el('lobby');
 const gameArea = el('gameArea');
 const gameOver = el('gameOver');
 const resultOverlay = el('resultOverlay');
+
+spotMatchCard.addEventListener('click', (e) => {
+  e.preventDefault();
+  spotMatchCard.classList.add('hidden');
+  setup.classList.remove('hidden');
+});
+
+el('setupBackBtn').addEventListener('click', () => {
+  setup.classList.add('hidden');
+  spotMatchCard.classList.remove('hidden');
+});
 
 el('createBtn').addEventListener('click', () => {
   const rounds = parseInt(el('roundsInput').value, 10) || 15;
@@ -64,7 +76,8 @@ el('lobbyBackBtn').addEventListener('click', () => {
   myName = null;
   isQuickPlay = false;
   lobby.classList.add('hidden');
-  setup.classList.remove('hidden');
+  setup.classList.add('hidden');
+  spotMatchCard.classList.remove('hidden');
   moreGames.classList.remove('hidden');
 });
 

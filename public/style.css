@@ -287,6 +287,11 @@ label { display: block; text-align: left; font-weight: 600; font-size: 0.9rem; c
   transition: transform 0.12s ease, box-shadow 0.12s ease;
 }
 
+#spotMatchCard {
+  width: 100%;
+  margin-bottom: 16px;
+}
+
 .feature-card:active {
   transform: translateY(1px) scale(0.99);
 }
