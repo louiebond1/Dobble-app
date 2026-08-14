@@ -22,6 +22,22 @@
     <h1>💘 Our Favourite Things</h1>
     <p class="subtitle">Games, memories &amp; date nights — made just for us</p>
 
+    <div class="scoreboard-card">
+      <div class="scoreboard-label">🏆 ALL-TIME</div>
+      <div class="scoreboard-row">
+        <button class="scoreboard-side" id="louieWinBtn">
+          <div class="scoreboard-name">Louie</div>
+          <div class="scoreboard-score" id="louieScore">–</div>
+        </button>
+        <div class="scoreboard-vs">:</div>
+        <button class="scoreboard-side" id="arielWinBtn">
+          <div class="scoreboard-name">Ariel</div>
+          <div class="scoreboard-score" id="arielScore">–</div>
+        </button>
+      </div>
+      <div class="scoreboard-hint" id="scoreboardHint">Tap your name when you win something</div>
+    </div>
+
     <div class="panel" id="setup">
       <div class="panel-eyebrow">
         <span class="panel-eyebrow-emoji">🎴</span>
@@ -40,41 +56,43 @@
       <a href="/trial" class="trial-link">🧪 Just want to practice? Try Solo Trial Mode →</a>
     </div>
 
-    <div class="section-divider"><span>More ways to play</span></div>
+    <div id="moreGames">
+      <div class="section-divider"><span>More ways to play</span></div>
 
-    <div class="feature-cards">
-      <a href="/memory" class="feature-card">
-        <div class="feature-card-emoji">🖼️</div>
-        <div class="feature-card-body">
-          <div class="feature-card-title">MEMORY MATCH</div>
-          <div class="feature-card-sub">Our hanging wall of memories.</div>
-        </div>
-        <div class="feature-card-arrow">›</div>
-      </a>
-      <a href="/predict" class="feature-card">
-        <div class="feature-card-emoji">🧠</div>
-        <div class="feature-card-body">
-          <div class="feature-card-title">WHAT WOULD YOU SAY?</div>
-          <div class="feature-card-sub">How well do you actually know each other?</div>
-        </div>
-        <div class="feature-card-arrow">›</div>
-      </a>
-      <a href="/roulette" class="feature-card">
-        <div class="feature-card-emoji">🎲</div>
-        <div class="feature-card-body">
-          <div class="feature-card-title">DATE ROULETTE</div>
-          <div class="feature-card-sub">Let us choose tonight.</div>
-        </div>
-        <div class="feature-card-arrow">›</div>
-      </a>
-      <a href="/hugo-pong" class="feature-card">
-        <div class="feature-card-emoji">🍹</div>
-        <div class="feature-card-body">
-          <div class="feature-card-title">HUGO PONG</div>
-          <div class="feature-card-sub">Sink the spritz.</div>
-        </div>
-        <div class="feature-card-arrow">›</div>
-      </a>
+      <div class="feature-cards">
+        <a href="/memory" class="feature-card">
+          <div class="feature-card-emoji">🖼️</div>
+          <div class="feature-card-body">
+            <div class="feature-card-title">MEMORY MATCH</div>
+            <div class="feature-card-sub">Our hanging wall of memories.</div>
+          </div>
+          <div class="feature-card-arrow">›</div>
+        </a>
+        <a href="/predict" class="feature-card">
+          <div class="feature-card-emoji">🧠</div>
+          <div class="feature-card-body">
+            <div class="feature-card-title">WHAT WOULD YOU SAY?</div>
+            <div class="feature-card-sub">How well do you actually know each other?</div>
+          </div>
+          <div class="feature-card-arrow">›</div>
+        </a>
+        <a href="/roulette" class="feature-card">
+          <div class="feature-card-emoji">🎲</div>
+          <div class="feature-card-body">
+            <div class="feature-card-title">DATE ROULETTE</div>
+            <div class="feature-card-sub">Let us choose tonight.</div>
+          </div>
+          <div class="feature-card-arrow">›</div>
+        </a>
+        <a href="/hugo-pong" class="feature-card">
+          <div class="feature-card-emoji">🍹</div>
+          <div class="feature-card-body">
+            <div class="feature-card-title">HUGO PONG</div>
+            <div class="feature-card-sub">Sink the spritz.</div>
+          </div>
+          <div class="feature-card-arrow">›</div>
+        </a>
+      </div>
     </div>
 
     <div class="panel hidden" id="lobby">

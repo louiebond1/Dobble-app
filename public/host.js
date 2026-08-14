@@ -6,6 +6,7 @@ let roundActive = false;
 
 const el = (id) => document.getElementById(id);
 const setup = el('setup');
+const moreGames = el('moreGames');
 const lobby = el('lobby');
 const gameArea = el('gameArea');
 const gameOver = el('gameOver');
@@ -20,6 +21,7 @@ el('createBtn').addEventListener('click', () => {
     myName = res.name;
     el('roomCode').textContent = roomCode;
     setup.classList.add('hidden');
+    moreGames.classList.add('hidden');
     lobby.classList.remove('hidden');
     prefetchAllSymbolImages();
     fetch(`/api/qr?code=${roomCode}`)
@@ -38,6 +40,7 @@ el('lobbyBackBtn').addEventListener('click', () => {
   myName = null;
   lobby.classList.add('hidden');
   setup.classList.remove('hidden');
+  moreGames.classList.remove('hidden');
 });
 
 el('startBtn').addEventListener('click', () => {
@@ -135,4 +138,57 @@ function showOverlay(image, emoji, title, label) {
   resultOverlay.classList.remove('hidden');
   setTimeout(() => resultOverlay.classList.add('hidden'), 2600);
 }
+
+// --- All-time couple's scoreboard ------------------------------------------
+const scoreboardHint = el('scoreboardHint');
+let scoreboardHintTimer = null;
+
+function renderScoreboard(scores) {
+  el('louieScore').textContent = scores.louie;
+  el('arielScore').textContent = scores.ariel;
+}
+
+fetch('/api/leaderboard')
+  .then((r) => r.json())
+  .then(renderScoreboard)
+  .catch(() => {});
+
+function logWin(who) {
+  fetch(`/api/leaderboard/win`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ who }),
+  })
+    .then((r) => r.json())
+    .then((scores) => {
+      renderScoreboard(scores);
+      hapticSuccess();
+      playSuccess();
+      const name = who === 'louie' ? 'Louie' : 'Ariel';
+      scoreboardHint.innerHTML = `Logged for ${name} — <a href="#" id="scoreboardUndoLink">undo</a>`;
+      el('scoreboardUndoLink').addEventListener('click', (e) => {
+        e.preventDefault();
+        clearTimeout(scoreboardHintTimer);
+        fetch('/api/leaderboard/undo', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ who }),
+        })
+          .then((r) => r.json())
+          .then((scores) => {
+            renderScoreboard(scores);
+            resetScoreboardHint();
+          });
+      });
+      clearTimeout(scoreboardHintTimer);
+      scoreboardHintTimer = setTimeout(resetScoreboardHint, 4000);
+    });
+}
+
+function resetScoreboardHint() {
+  scoreboardHint.textContent = 'Tap your name when you win something';
+}
+
+el('louieWinBtn').addEventListener('click', () => logWin('louie'));
+el('arielWinBtn').addEventListener('click', () => logWin('ariel'));
 

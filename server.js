@@ -129,6 +129,38 @@ function saveDatesLog() {
 
 loadDatesLog();
 
+// Overall "who's actually winning" tally between the two of them — this app
+// only ever has two players, so it's a flat couple's scoreboard rather than
+// a per-game leaderboard. Logged manually (tap "I won") after playing
+// anything, in the app or in real life.
+const LEADERBOARD_FILE = path.join(STATS_DIR, 'leaderboard.json');
+let leaderboard = { louie: 2, ariel: 3 };
+
+function loadLeaderboard() {
+  try {
+    const raw = fs.readFileSync(LEADERBOARD_FILE, 'utf8');
+    const parsed = JSON.parse(raw);
+    leaderboard = {
+      louie: Number.isFinite(parsed.louie) ? parsed.louie : 0,
+      ariel: Number.isFinite(parsed.ariel) ? parsed.ariel : 0,
+    };
+  } catch (err) {
+    // no file yet — start from the seeded score above
+  }
+}
+
+function saveLeaderboard() {
+  try {
+    fs.mkdirSync(STATS_DIR, { recursive: true });
+    fs.writeFileSync(LEADERBOARD_FILE, JSON.stringify(leaderboard, null, 2));
+  } catch (err) {
+    console.error('Failed to save leaderboard:', err.message);
+  }
+}
+
+loadLeaderboard();
+if (!fs.existsSync(LEADERBOARD_FILE)) saveLeaderboard(); // persist the initial seed on first boot
+
 // Global (not per-room) anti-repeat memory — this app is always the same two
 // players, so "recently used" is tracked once, not per room. Keeps the last
 // third of each pool out of rotation, then lets it reshuffle back in.
@@ -779,6 +811,26 @@ setInterval(() => {
     if (now - room.createdAt > ROOM_TTL_MS) rooms.delete(code);
   }
 }, 30 * 60 * 1000);
+
+app.get('/api/leaderboard', (req, res) => {
+  res.json(leaderboard);
+});
+
+app.post('/api/leaderboard/win', express.json(), (req, res) => {
+  const who = req.body && req.body.who;
+  if (who !== 'louie' && who !== 'ariel') return res.status(400).json({ error: 'who must be "louie" or "ariel"' });
+  leaderboard[who] += 1;
+  saveLeaderboard();
+  res.json(leaderboard);
+});
+
+app.post('/api/leaderboard/undo', express.json(), (req, res) => {
+  const who = req.body && req.body.who;
+  if (who !== 'louie' && who !== 'ariel') return res.status(400).json({ error: 'who must be "louie" or "ariel"' });
+  leaderboard[who] = Math.max(0, leaderboard[who] - 1);
+  saveLeaderboard();
+  res.json(leaderboard);
+});
 
 app.get('/api/symbols', (req, res) => {
   res.json(buildCard(SYMBOLS.map((_, id) => id)));

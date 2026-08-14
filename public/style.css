@@ -268,6 +268,80 @@ label { display: block; text-align: left; font-weight: 600; font-size: 0.9rem; c
   flex-shrink: 0;
 }
 
+.scoreboard-card {
+  width: 100%;
+  background: rgba(255, 255, 255, 0.92);
+  border-radius: 20px;
+  padding: 16px 18px;
+  margin-bottom: 16px;
+  box-shadow: 0 14px 34px rgba(20, 8, 40, 0.3);
+  backdrop-filter: blur(10px);
+  text-align: center;
+}
+
+.scoreboard-label {
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  color: var(--muted);
+  margin-bottom: 8px;
+}
+
+.scoreboard-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+}
+
+.scoreboard-side {
+  appearance: none;
+  border: none;
+  background: transparent;
+  flex: 1;
+  max-width: 130px;
+  padding: 6px 4px;
+  border-radius: 14px;
+  cursor: pointer;
+  transition: transform 0.12s ease, background 0.12s ease;
+}
+.scoreboard-side:active {
+  transform: scale(0.95);
+  background: rgba(239, 77, 149, 0.1);
+}
+
+.scoreboard-name {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--muted);
+}
+
+.scoreboard-score {
+  font-size: 2rem;
+  font-weight: 900;
+  color: var(--accent-dark);
+  line-height: 1.1;
+}
+
+.scoreboard-vs {
+  font-size: 1.4rem;
+  font-weight: 700;
+  color: rgba(44, 33, 56, 0.25);
+}
+
+.scoreboard-hint {
+  margin-top: 6px;
+  font-size: 0.72rem;
+  color: var(--muted);
+  font-weight: 500;
+}
+
+.scoreboard-hint a {
+  color: var(--accent-dark);
+  font-weight: 700;
+  text-decoration: none;
+}
+
 .pair-count-field input[type="number"] {
   max-width: 110px;
   margin: 0;
