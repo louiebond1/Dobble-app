@@ -467,6 +467,64 @@ io.on('connection', (socket) => {
     io.to(code).emit('players:update', scoreboard(room));
   });
 
+  // Fast path for the two of them specifically: no code to share, no QR to
+  // scan. Both devices join the same well-known room — whoever gets here
+  // first creates it (and becomes host), the second just joins it. "OURS"
+  // can never collide with a random makeRoomCode() code since 'O' is
+  // excluded from CODE_CHARS.
+  socket.on('quickplay:join', (payload, ack) => {
+    const name = String((payload && payload.name) || '').trim().slice(0, 20) || 'Player';
+    const code = 'OURS';
+    let room = rooms.get(code);
+    // Quick play doesn't persist the hostToken across page reloads, so a
+    // room abandoned without a clean host:cancel (tab closed, next-day
+    // reopen) can be left with a hostSocketId/players pointing at sockets
+    // that are no longer connected. Prune those before deciding host status
+    // so the fixed 'OURS' room never gets permanently stuck host-less.
+    if (room) {
+      for (const pid of room.players.keys()) {
+        if (!io.sockets.sockets.has(pid)) room.players.delete(pid);
+      }
+    }
+    let isHost = false;
+    let hostToken = null;
+    if (!room || room.players.size === 0 || !io.sockets.sockets.has(room.hostSocketId)) {
+      isHost = true;
+      hostToken = crypto.randomUUID();
+      if (!room) {
+        room = {
+          code,
+          players: new Map(),
+          started: false,
+          totalRounds: 15,
+          roundNumber: 0,
+          cardOrder: [],
+          roundActive: false,
+          currentCommonId: null,
+          roundTimer: null,
+          roundStartedAt: null,
+          createdAt: Date.now(),
+        };
+        rooms.set(code, room);
+      } else {
+        clearTimeout(room.roundTimer);
+        room.started = false;
+        room.roundNumber = 0;
+        room.roundActive = false;
+      }
+      room.hostToken = hostToken;
+      room.hostSocketId = socket.id;
+    }
+    room.players.set(socket.id, { name, score: 0, totalTimeMs: 0 });
+    socket.join(code);
+    socket.data.role = isHost ? 'host' : 'player';
+    socket.data.code = code;
+    if (typeof ack === 'function') {
+      ack({ ok: true, code, name, isHost, hostToken, started: room.started });
+    }
+    io.to(code).emit('players:update', scoreboard(room));
+  });
+
   // Re-claims host privileges for a room after the host's socket reconnects
   // (e.g. iOS suspends a backgrounded home-screen app and issues a new
   // socket id on resume) — otherwise host:start/host:playAgain silently

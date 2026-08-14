@@ -3,6 +3,7 @@ let roomCode = null;
 let hostToken = null;
 let myName = null;
 let roundActive = false;
+let isQuickPlay = false;
 
 const el = (id) => document.getElementById(id);
 const setup = el('setup');
@@ -16,13 +17,12 @@ el('createBtn').addEventListener('click', () => {
   const rounds = parseInt(el('roundsInput').value, 10) || 15;
   const name = el('hostNameInput').value.trim();
   socket.emit('host:create', { rounds, name }, (res) => {
+    isQuickPlay = false;
     roomCode = res.code;
     hostToken = res.hostToken;
     myName = res.name;
     el('roomCode').textContent = roomCode;
-    setup.classList.add('hidden');
-    moreGames.classList.add('hidden');
-    lobby.classList.remove('hidden');
+    enterLobby();
     prefetchAllSymbolImages();
     fetch(`/api/qr?code=${roomCode}`)
       .then((r) => r.json())
@@ -33,11 +33,36 @@ el('createBtn').addEventListener('click', () => {
   });
 });
 
+function quickPlayJoin(name) {
+  socket.emit('quickplay:join', { name }, (res) => {
+    if (!res || !res.ok) return;
+    isQuickPlay = true;
+    roomCode = res.code;
+    hostToken = res.hostToken || null;
+    myName = res.name;
+    enterLobby();
+    prefetchAllSymbolImages();
+  });
+}
+
+el('quickPlayLouieBtn').addEventListener('click', () => quickPlayJoin('Louie'));
+el('quickPlayArielBtn').addEventListener('click', () => quickPlayJoin('Ariel'));
+
+function enterLobby() {
+  setup.classList.add('hidden');
+  moreGames.classList.add('hidden');
+  lobby.classList.remove('hidden');
+  el('roomCode').classList.toggle('hidden', isQuickPlay);
+  el('qrImg').classList.toggle('hidden', isQuickPlay);
+  el('joinUrlText').classList.toggle('hidden', isQuickPlay);
+}
+
 el('lobbyBackBtn').addEventListener('click', () => {
   if (roomCode) socket.emit('host:cancel', { code: roomCode });
   roomCode = null;
   hostToken = null;
   myName = null;
+  isQuickPlay = false;
   lobby.classList.add('hidden');
   setup.classList.remove('hidden');
   moreGames.classList.remove('hidden');
@@ -45,14 +70,10 @@ el('lobbyBackBtn').addEventListener('click', () => {
 
 el('startBtn').addEventListener('click', () => {
   socket.emit('host:start', { code: roomCode });
-  lobby.classList.add('hidden');
-  gameArea.classList.remove('hidden');
 });
 
 el('playAgainBtn').addEventListener('click', () => {
   socket.emit('host:playAgain', { code: roomCode });
-  gameOver.classList.add('hidden');
-  gameArea.classList.remove('hidden');
 });
 
 // iOS suspends a backgrounded home-screen app and can hand it a fresh
@@ -70,10 +91,22 @@ socket.on('players:update', (scores) => {
   updateLobby(scores);
 });
 
+function amHost() {
+  return !isQuickPlay || !!hostToken;
+}
+
 function updateLobby(scores) {
+  const amHost_ = amHost();
   el('playerCount').textContent = scores.length;
+  el('startBtn').classList.toggle('hidden', !amHost_);
   el('startBtn').disabled = scores.length < 2;
-  el('lobbyHint').classList.toggle('hidden', scores.length >= 2);
+  if (amHost_) {
+    el('lobbyHint').textContent = 'Waiting for at least one more player to join…';
+    el('lobbyHint').classList.toggle('hidden', scores.length >= 2);
+  } else {
+    el('lobbyHint').textContent = 'Waiting for the host to start the game…';
+    el('lobbyHint').classList.remove('hidden');
+  }
   el('playerList').innerHTML = scores.map((p) => `<li>${label(p.name)}</li>`).join('');
   renderLeaderboard('leaderboard', scores, { labelFn: label });
 }
@@ -95,6 +128,9 @@ function handleTap(symbolId, node) {
 socket.on('round:new', async (data) => {
   roundActive = false;
   roundsPlayed = data.roundNumber;
+  lobby.classList.add('hidden');
+  gameOver.classList.add('hidden');
+  gameArea.classList.remove('hidden');
   el('roundNum').textContent = data.roundNumber;
   el('totalRounds').textContent = data.totalRounds;
   await revealRound(
@@ -127,6 +163,7 @@ socket.on('game:over', (data) => {
   gameArea.classList.add('hidden');
   gameOver.classList.remove('hidden');
   el('roundsCompletedCount').textContent = roundsPlayed;
+  el('playAgainBtn').classList.toggle('hidden', !amHost());
   renderLeaderboard('finalLeaderboard', data.scores, { labelFn: label });
   renderLeaderboard('allTimeLeaderboard', data.allTime, { valueKey: 'wins', labelFn: label });
 });

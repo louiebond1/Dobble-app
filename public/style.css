@@ -192,6 +192,61 @@ label { display: block; text-align: left; font-weight: 600; font-size: 0.9rem; c
 }
 .trial-link:active { opacity: 0.6; }
 
+.quickplay-row {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.quickplay-btn {
+  flex: 1;
+  appearance: none;
+  border: none;
+  border-radius: 16px;
+  padding: 16px 10px;
+  font-size: 1rem;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  color: white;
+  background: linear-gradient(135deg, var(--accent), var(--accent-dark));
+  box-shadow: 0 10px 24px rgba(181, 45, 112, 0.35);
+  cursor: pointer;
+  transition: transform 0.12s ease, box-shadow 0.12s ease;
+}
+
+.quickplay-btn:active {
+  transform: translateY(1px) scale(0.98);
+  box-shadow: 0 6px 14px rgba(181, 45, 112, 0.3);
+}
+
+.quickplay-hint {
+  text-align: center;
+  font-size: 0.78rem;
+  color: var(--muted);
+  font-weight: 500;
+  margin-bottom: 4px;
+}
+
+.or-divider {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  margin: 18px 0 16px;
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.or-divider::before,
+.or-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: rgba(44, 33, 56, 0.12);
+}
+
 .section-divider {
   display: flex;
   align-items: center;
