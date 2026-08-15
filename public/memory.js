@@ -2,6 +2,9 @@ const el = (id) => document.getElementById(id);
 const setup = el('setup');
 const gameArea = el('memoryGameArea');
 const overPanel = el('memoryOver');
+const memoryLobby = el('memoryLobby');
+
+const socket = io();
 
 let symbols = [];
 let photos = [];
@@ -12,6 +15,7 @@ let players = [];
 let mode = 'solo';
 let pairCount = 12;
 let deckSize = 0;
+let deck = [];
 let currentPlayer = 0;
 let moves = 0;
 let matchedPairs = 0;
@@ -20,6 +24,14 @@ let secondCard = null;
 let lock = false;
 let startedAt = null;
 let timerInterval = null;
+
+// Networked Head-to-Head state
+let roomCode = null;
+let hostToken = null;
+let isHost = false;
+let myName = null;
+let duoConfig = null; // { source, pairCount } captured when tapping Quick Play
+let turnName = null;
 
 const CHIP_PRESETS = { favourites: [8, 12, 16, 24], photos: [6, 10, 14] };
 
@@ -64,10 +76,10 @@ el('bgUploadInput').addEventListener('change', (e) => {
   reader.readAsDataURL(file);
 });
 
-document.querySelectorAll('.mount-card').forEach((btn) => {
+document.querySelectorAll('.mount-chip').forEach((btn) => {
   btn.addEventListener('click', () => {
     mount = btn.dataset.mount;
-    document.querySelectorAll('.mount-card').forEach((b) => b.classList.toggle('active', b === btn));
+    document.querySelectorAll('.mount-chip').forEach((b) => b.classList.toggle('active', b === btn));
     document.body.dataset.mount = mount;
   });
 });
@@ -121,23 +133,117 @@ el('pairCountInput').addEventListener('input', () => {
   document.querySelectorAll('.chip').forEach((c) => c.classList.toggle('active', c.dataset.count === val));
 });
 
+// --- Solo mode --------------------------------------------------------------
+
 el('startBtn').addEventListener('click', () => {
   const pool = currentPool();
   if (!pool.length) return; // still loading — button is effectively a no-op until ready
 
+  mode = 'solo';
   pairCount = Math.max(2, Math.min(pool.length, parseInt(el('pairCountInput').value, 10) || 12));
+  const name = el('soloNameInput').value.trim() || 'You';
+  players = [{ name, pairs: 0 }];
+  currentPlayer = 0;
 
-  if (mode === 'solo') {
-    const name = el('soloNameInput').value.trim() || 'You';
-    players = [{ name, pairs: 0 }];
+  const chosen = shuffle([...currentPool()]).slice(0, pairCount);
+  startGame(shuffle(chosen.flatMap((s) => [s, s])));
+});
+
+// --- Head-to-Head (networked) ------------------------------------------------
+
+el('memoryLouieBtn').addEventListener('click', () => quickPlayJoin('Louie'));
+el('memoryArielBtn').addEventListener('click', () => quickPlayJoin('Ariel'));
+
+function quickPlayJoin(name) {
+  const pool = currentPool();
+  duoConfig = {
+    source,
+    pairCount: Math.max(2, Math.min(pool.length || 57, parseInt(el('pairCountInput').value, 10) || 12)),
+  };
+  socket.emit('memory:quickplay:join', { name }, (res) => {
+    if (!res || !res.ok) return;
+    mode = 'duo';
+    isHost = res.isHost;
+    hostToken = res.hostToken || null;
+    roomCode = res.code;
+    myName = res.name;
+    setup.classList.add('hidden');
+    overPanel.classList.add('hidden');
+    memoryLobby.classList.remove('hidden');
+  });
+}
+
+el('memoryLobbyBackBtn').addEventListener('click', () => {
+  if (roomCode) socket.emit('memory:host:cancel', { code: roomCode });
+  resetDuoState();
+  memoryLobby.classList.add('hidden');
+  setup.classList.remove('hidden');
+});
+
+el('memoryStartBtn').addEventListener('click', () => {
+  if (!isHost || !roomCode || !duoConfig) return;
+  socket.emit('memory:host:start', { code: roomCode, source: duoConfig.source, pairCount: duoConfig.pairCount });
+});
+
+function resetDuoState() {
+  roomCode = null;
+  hostToken = null;
+  isHost = false;
+  myName = null;
+  turnName = null;
+}
+
+socket.on('memory:players:update', (list) => {
+  players = list;
+  updateMemoryLobby();
+});
+
+function updateMemoryLobby() {
+  el('memoryPlayerCount').textContent = players.length;
+  el('memoryStartBtn').classList.toggle('hidden', !isHost);
+  el('memoryStartBtn').disabled = players.length < 2;
+  if (isHost) {
+    el('memoryLobbyHint').textContent = 'Waiting for at least one more player to join…';
+    el('memoryLobbyHint').classList.toggle('hidden', players.length >= 2);
   } else {
-    const p1 = el('p1Input').value.trim() || 'Player 1';
-    const p2 = el('p2Input').value.trim() || 'Player 2';
-    players = [
-      { name: p1, pairs: 0 },
-      { name: p2, pairs: 0 },
-    ];
+    el('memoryLobbyHint').textContent = 'Waiting for the host to start the game…';
+    el('memoryLobbyHint').classList.remove('hidden');
   }
+  el('memoryPlayerList').innerHTML = players
+    .map((p) => `<li>${p.name === myName ? `${p.name} (You)` : p.name}</li>`)
+    .join('');
+}
+
+socket.on('memory:round:start', (data) => {
+  mode = 'duo';
+  source = data.source;
+  players = data.players;
+  turnName = data.turnName;
+  memoryLobby.classList.add('hidden');
+  startGame(data.deck);
+});
+
+socket.on('memory:room:cancelled', () => {
+  resetDuoState();
+  memoryLobby.classList.add('hidden');
+  gameArea.classList.add('hidden');
+  overPanel.classList.add('hidden');
+  setup.classList.remove('hidden');
+});
+
+function updateDuoHud() {
+  el('hudP1Score').textContent = players[0].pairs;
+  el('hudP1').classList.toggle('active', players[0].name === turnName);
+  if (players[1]) {
+    el('hudP2Score').textContent = players[1].pairs;
+    el('hudP2').classList.toggle('active', players[1].name === turnName);
+  }
+  el('memoryTurn').textContent = turnName === myName ? 'Your turn' : `${turnName}'s turn`;
+}
+
+// --- Shared game start --------------------------------------------------
+
+function startGame(builtDeck) {
   currentPlayer = 0;
   moves = 0;
   matchedPairs = 0;
@@ -146,22 +252,21 @@ el('startBtn').addEventListener('click', () => {
   lock = false;
 
   setup.classList.add('hidden');
+  memoryLobby.classList.add('hidden');
   overPanel.classList.add('hidden');
   gameArea.classList.remove('hidden');
-  el('memoryHud').classList.toggle('hidden', mode === 'solo');
+  el('memoryHud').classList.toggle('hidden', mode !== 'duo');
   el('memoryMoves').textContent = '0 moves';
 
-  el('hudP1Name').textContent = players[0].name;
-  if (players[1]) el('hudP2Name').textContent = players[1].name;
-  updateHud();
-  buildWall();
-  startTimer();
-});
+  if (mode === 'duo') {
+    el('hudP1Name').textContent = players[0].name;
+    if (players[1]) el('hudP2Name').textContent = players[1].name;
+    updateDuoHud();
+  }
 
-el('memoryPlayAgainBtn').addEventListener('click', () => {
-  overPanel.classList.add('hidden');
-  setup.classList.remove('hidden');
-});
+  buildWall(builtDeck);
+  startTimer();
+}
 
 function shuffle(arr) {
   for (let i = arr.length - 1; i > 0; i--) {
@@ -251,10 +356,9 @@ function computeLayout(n, wallWidth, wallHeight) {
   return { cards, lines, lineGap, topPad, cardW, cardH };
 }
 
-function buildWall() {
-  const chosen = shuffle([...currentPool()]).slice(0, pairCount);
-  deckSize = chosen.length;
-  const deck = shuffle(chosen.flatMap((s) => [s, s]));
+function buildWall(builtDeck) {
+  deck = builtDeck;
+  deckSize = deck.length / 2;
 
   const wall = el('memoryWall');
   wall.innerHTML = '';
@@ -293,18 +397,19 @@ function buildWall() {
 
   deck.forEach((card, i) => {
     const pos = layout.cards[i];
-    inner.appendChild(buildHangCard(card, pos));
+    inner.appendChild(buildHangCard(card, pos, i));
   });
 
   spawnDecor(inner);
 }
 
-function buildHangCard(card, pos) {
+function buildHangCard(card, pos, index) {
   const hangCard = document.createElement('div');
   hangCard.className = 'hang-card';
   hangCard.style.left = `${pos.x}px`;
   hangCard.style.top = `${pos.lineY}px`;
   hangCard.dataset.symbolId = card.id;
+  hangCard.dataset.index = index;
 
   const swing = document.createElement('div');
   swing.className = 'swing-wrapper';
@@ -362,7 +467,7 @@ function buildHangCard(card, pos) {
   swing.appendChild(cardEl);
   hangCard.appendChild(swing);
 
-  hangCard.addEventListener('click', () => handleCardClick({ hangCard, cardEl, swing }));
+  hangCard.addEventListener('click', () => handleCardClick({ hangCard, cardEl, swing, index }));
   return hangCard;
 }
 
@@ -382,6 +487,11 @@ function spawnDecor(container) {
 }
 
 function handleCardClick(picked) {
+  if (mode === 'duo') return handleDuoClick(picked);
+  return handleSoloClick(picked);
+}
+
+function handleSoloClick(picked) {
   if (lock) return;
   if (picked.cardEl.classList.contains('flipped') || picked.hangCard.classList.contains('matched')) return;
 
@@ -415,7 +525,6 @@ function handleCardClick(picked) {
       players[currentPlayer].pairs += 1;
       playSuccess();
       hapticSuccess();
-      updateHud();
       el('memoryFound').textContent = `${matchedPairs} / ${deckSize} pairs`;
       resetTurnState();
       if (matchedPairs === deckSize) endGame();
@@ -428,28 +537,74 @@ function handleCardClick(picked) {
           cardEl.classList.remove('flipped');
           swing.classList.remove('mismatch');
         });
-        if (players.length > 1) currentPlayer = 1 - currentPlayer;
-        updateHud();
         resetTurnState();
       }, 500);
     }, 650);
   }
 }
 
+function handleDuoClick(picked) {
+  if (turnName !== myName) return; // not your turn
+  if (picked.cardEl.classList.contains('flipped') || picked.hangCard.classList.contains('matched')) return;
+  socket.emit('memory:flip', { code: roomCode, index: picked.index });
+}
+
+socket.on('memory:flip', (data) => {
+  const hangCard = document.querySelector(`.hang-card[data-index="${data.index}"]`);
+  if (!hangCard) return;
+  const cardEl = hangCard.querySelector('.memory-card');
+  const swing = hangCard.querySelector('.swing-wrapper');
+  hapticTap();
+  swing.classList.add('swinging');
+  setTimeout(() => swing.classList.remove('swinging'), 500);
+  cardEl.classList.add('flipped');
+});
+
+socket.on('memory:resolve', (data) => {
+  const card1 = document.querySelector(`.hang-card[data-index="${data.index1}"]`);
+  const card2 = document.querySelector(`.hang-card[data-index="${data.index2}"]`);
+  players = data.players;
+  turnName = data.turnName;
+  moves += 1;
+  el('memoryMoves').textContent = `${moves} move${moves === 1 ? '' : 's'}`;
+
+  if (data.matched) {
+    [card1, card2].forEach((hangCard) => {
+      if (!hangCard) return;
+      const swing = hangCard.querySelector('.swing-wrapper');
+      hangCard.classList.add('matched');
+      swing.classList.add('match-pulse');
+      const flag = document.createElement('span');
+      flag.className = 'match-flag';
+      flag.textContent = 'Match! 💕';
+      swing.appendChild(flag);
+      setTimeout(() => flag.remove(), 800);
+    });
+    matchedPairs += 1;
+    playSuccess();
+    hapticSuccess();
+    el('memoryFound').textContent = `${matchedPairs} / ${deckSize} pairs`;
+  } else {
+    [card1, card2].forEach((hangCard) => {
+      if (hangCard) hangCard.querySelector('.swing-wrapper').classList.add('mismatch');
+    });
+    setTimeout(() => {
+      [card1, card2].forEach((hangCard) => {
+        if (!hangCard) return;
+        hangCard.querySelector('.memory-card').classList.remove('flipped');
+        hangCard.querySelector('.swing-wrapper').classList.remove('mismatch');
+      });
+    }, 500);
+  }
+
+  updateDuoHud();
+  if (data.over) setTimeout(() => endGame(), 500);
+});
+
 function resetTurnState() {
   firstCard = null;
   secondCard = null;
   lock = false;
-}
-
-function updateHud() {
-  el('hudP1Score').textContent = players[0].pairs;
-  el('hudP1').classList.toggle('active', currentPlayer === 0);
-  if (players[1]) {
-    el('hudP2Score').textContent = players[1].pairs;
-    el('hudP2').classList.toggle('active', currentPlayer === 1);
-  }
-  el('memoryTurn').textContent = `${players[currentPlayer].name}'s turn`;
 }
 
 function startTimer() {
@@ -471,6 +626,7 @@ function endGame() {
   clearInterval(timerInterval);
   gameArea.classList.add('hidden');
   overPanel.classList.remove('hidden');
+  el('memoryPlayAgainBtn').classList.toggle('hidden', mode === 'duo' && !isHost);
 
   const elapsedSec = Math.floor((Date.now() - startedAt) / 1000);
   el('memoryOverSummary').textContent = `${moves} moves · ${el('memoryTimer').textContent} · all ${deckSize} pairs found`;
@@ -509,3 +665,12 @@ function endGame() {
     renderLeaderboard('memoryFinalBoard', [...players].sort((a, b) => b.pairs - a.pairs), { valueKey: 'pairs' });
   }
 }
+
+el('memoryPlayAgainBtn').addEventListener('click', () => {
+  overPanel.classList.add('hidden');
+  if (mode === 'duo' && isHost && roomCode && duoConfig) {
+    socket.emit('memory:host:start', { code: roomCode, source: duoConfig.source, pairCount: duoConfig.pairCount });
+  } else if (mode !== 'duo') {
+    setup.classList.remove('hidden');
+  }
+});

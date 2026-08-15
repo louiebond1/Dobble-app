@@ -489,7 +489,7 @@ label { display: block; text-align: left; font-weight: 600; font-size: 0.9rem; c
   word-break: break-all;
 }
 
-#playerList {
+#playerList, .player-list {
   list-style: none;
   padding: 0;
   margin: 10px 0;
@@ -499,7 +499,7 @@ label { display: block; text-align: left; font-weight: 600; font-size: 0.9rem; c
   justify-content: center;
 }
 
-#playerList li {
+#playerList li, .player-list li {
   background: #f3e5f9;
   border-radius: 999px;
   padding: 6px 14px;
@@ -796,6 +796,17 @@ label { display: block; text-align: left; font-weight: 600; font-size: 0.9rem; c
   text-align: left;
 }
 
+.field-group {
+  margin-bottom: 20px;
+  padding-bottom: 20px;
+  border-bottom: 1px solid rgba(44, 33, 56, 0.08);
+}
+
+.field-group:last-of-type {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
 .bg-swatches {
   display: flex;
   flex-wrap: wrap;
@@ -839,51 +850,42 @@ label { display: block; text-align: left; font-weight: 600; font-size: 0.9rem; c
   text-align: left;
 }
 
-.mount-select {
-  margin-bottom: 18px;
+.mount-chips {
+  display: flex;
+  gap: 8px;
 }
 
-.mount-card {
+.mount-chip {
+  flex: 1;
   display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 12px;
-  width: 100%;
-  text-align: left;
+  gap: 4px;
   appearance: none;
   border: 2px solid #eeddf3;
   border-radius: 14px;
   background: #fff;
-  padding: 8px 12px;
-  margin-bottom: 8px;
+  padding: 10px 8px;
   cursor: pointer;
 }
 
-.mount-card.active {
+.mount-chip.active {
   border-color: var(--accent);
   box-shadow: 0 0 0 3px rgba(239, 77, 149, 0.15);
 }
 
-.mount-card-icon {
-  flex-shrink: 0;
-  width: 44px;
-  text-align: center;
-  font-size: 1.5rem;
+.mount-chip-icon {
+  font-size: 1.3rem;
 }
 
-.mount-card-text {
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-}
-
-.mount-card-name {
+.mount-chip-name {
   font-weight: 700;
-  font-size: 0.9rem;
+  font-size: 0.78rem;
+  color: var(--muted);
 }
 
-.mount-card-desc {
-  font-size: 0.74rem;
-  color: var(--muted);
+.mount-chip.active .mount-chip-name {
+  color: var(--accent-dark);
 }
 
 /* ---------- Memory Match: the hanging wall ---------- */

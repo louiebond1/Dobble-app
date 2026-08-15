@@ -21,6 +21,9 @@ const ROOM_TTL_MS = 6 * 60 * 60 * 1000;
 /** @type {Map<string, any>} */
 const rooms = new Map();
 
+/** @type {Map<string, any>} */
+const memoryRooms = new Map();
+
 // Lifetime win/speed stats, keyed by lowercased player name so "Louie" and
 // "louie" are the same person. Persisted to a local JSON file — this survives
 // normal restarts but NOT a fresh Railway deploy (new container, blank disk)
@@ -385,6 +388,32 @@ function scoreboard(room) {
     .sort((a, b) => b.score - a.score);
 }
 
+function memoryPool(source) {
+  return source === 'photos' ? PHOTOS : buildCard(SYMBOLS.map((_, id) => id));
+}
+
+function buildMemoryDeck(source, pairCount) {
+  const pool = memoryPool(source);
+  const n = Math.max(2, Math.min(pool.length, pairCount));
+  const chosen = shuffledIndices(pool.length).slice(0, n).map((i) => pool[i]);
+  const doubled = [...chosen, ...chosen];
+  const order = shuffledIndices(doubled.length);
+  return order.map((i) => {
+    const c = doubled[i];
+    return { id: c.id, label: c.label, image: c.image || null, emoji: c.emoji || null };
+  });
+}
+
+function memoryRoomPlayers(room) {
+  return Array.from(room.players.values()).map((p) => ({ name: p.name, pairs: p.pairs }));
+}
+
+function memoryTurnName(room) {
+  const id = room.playerOrder[room.turnIndex];
+  const p = id && room.players.get(id);
+  return p ? p.name : null;
+}
+
 function buildCard(indices) {
   return indices.map((id) => ({
     id,
@@ -645,6 +674,138 @@ io.on('connection', (socket) => {
     setTimeout(() => startRound(code), 3000);
   });
 
+  // --- Memory Match (networked head-to-head) ------------------------------
+  // Same fixed-code Quick Play pattern as the matching game's 'OURS' room,
+  // but on its own Map/io-room namespace ('mem:OURS') so the two games never
+  // cross-broadcast. The deck is built and owned server-side so both phones
+  // stay in sync — clients only render what they're told and emit taps.
+
+  socket.on('memory:quickplay:join', (payload, ack) => {
+    const name = String((payload && payload.name) || '').trim().slice(0, 20) || 'Player';
+    const code = 'OURS';
+    let room = memoryRooms.get(code);
+    // Same staleness guard as the matching game's quickplay:join — quick
+    // play never persists a hostToken across reloads, so an abandoned room
+    // (tab closed without a clean cancel) must not get stuck host-less.
+    if (room) {
+      for (const pid of room.players.keys()) {
+        if (!io.sockets.sockets.has(pid)) room.players.delete(pid);
+      }
+    }
+    let isHost = false;
+    let hostToken = null;
+    if (!room || room.players.size === 0 || !io.sockets.sockets.has(room.hostSocketId)) {
+      isHost = true;
+      hostToken = crypto.randomUUID();
+      if (!room) {
+        room = {
+          code,
+          players: new Map(),
+          started: false,
+          source: 'favourites',
+          pairCount: 12,
+          deck: [],
+          matched: [],
+          pending: [],
+          turnIndex: 0,
+          playerOrder: [],
+          createdAt: Date.now(),
+        };
+        memoryRooms.set(code, room);
+      } else {
+        room.started = false;
+        room.deck = [];
+        room.matched = [];
+        room.pending = [];
+        room.turnIndex = 0;
+        room.playerOrder = [];
+      }
+      room.hostToken = hostToken;
+      room.hostSocketId = socket.id;
+    }
+    room.players.set(socket.id, { name, pairs: 0 });
+    socket.join(`mem:${code}`);
+    socket.data.memoryRole = isHost ? 'host' : 'player';
+    socket.data.memoryCode = code;
+    if (typeof ack === 'function') {
+      ack({ ok: true, code, name, isHost, hostToken, started: room.started });
+    }
+    io.to(`mem:${code}`).emit('memory:players:update', memoryRoomPlayers(room));
+  });
+
+  socket.on('memory:host:cancel', (payload) => {
+    const code = String((payload && payload.code) || '').toUpperCase();
+    const room = memoryRooms.get(code);
+    if (!room || room.hostSocketId !== socket.id) return;
+    io.to(`mem:${code}`).emit('memory:room:cancelled');
+    memoryRooms.delete(code);
+  });
+
+  socket.on('memory:host:start', (payload) => {
+    const code = String((payload && payload.code) || '').toUpperCase();
+    const room = memoryRooms.get(code);
+    if (!room || room.hostSocketId !== socket.id || room.players.size < 2) return;
+    const source = (payload && payload.source) === 'photos' ? 'photos' : 'favourites';
+    const pool = memoryPool(source);
+    const pairCount = Math.max(2, Math.min(pool.length, Number(payload && payload.pairCount) || 12));
+
+    room.source = source;
+    room.pairCount = pairCount;
+    room.deck = buildMemoryDeck(source, pairCount);
+    room.matched = [];
+    room.pending = [];
+    room.turnIndex = 0;
+    room.playerOrder = Array.from(room.players.keys());
+    room.started = true;
+    for (const p of room.players.values()) p.pairs = 0;
+
+    io.to(`mem:${code}`).emit('memory:round:start', {
+      deck: room.deck,
+      source,
+      pairCount,
+      players: memoryRoomPlayers(room),
+      turnName: memoryTurnName(room),
+    });
+  });
+
+  socket.on('memory:flip', (payload) => {
+    const code = String((payload && payload.code) || '').toUpperCase();
+    const index = Number(payload && payload.index);
+    const room = memoryRooms.get(code);
+    if (!room || !room.started) return;
+    if (room.playerOrder[room.turnIndex] !== socket.id) return;
+    if (!Number.isInteger(index) || index < 0 || index >= room.deck.length) return;
+    if (room.matched.includes(index) || room.pending.includes(index)) return;
+    if (room.pending.length >= 2) return;
+
+    room.pending.push(index);
+    io.to(`mem:${code}`).emit('memory:flip', { index });
+    if (room.pending.length < 2) return;
+
+    const [i1, i2] = room.pending;
+    const isMatch = room.deck[i1].id === room.deck[i2].id;
+    setTimeout(() => {
+      if (isMatch) {
+        room.matched.push(i1, i2);
+        const turnPlayer = room.players.get(room.playerOrder[room.turnIndex]);
+        if (turnPlayer) turnPlayer.pairs += 1;
+      } else {
+        room.turnIndex = 1 - room.turnIndex;
+      }
+      room.pending = [];
+      const over = room.matched.length === room.deck.length;
+      if (over) room.started = false;
+      io.to(`mem:${code}`).emit('memory:resolve', {
+        index1: i1,
+        index2: i2,
+        matched: isMatch,
+        players: memoryRoomPlayers(room),
+        turnName: memoryTurnName(room),
+        over,
+      });
+    }, 700);
+  });
+
   socket.on('disconnect', () => {
     const code = socket.data.code;
     if (code) {
@@ -659,6 +820,13 @@ io.on('connection', (socket) => {
       if (room) {
         room.sockets.delete(socket.id);
         io.to(predictCode).emit('predict:roles:update', predictRoomState(room));
+      }
+    }
+    const memoryCode = socket.data.memoryCode;
+    if (memoryCode) {
+      const room = memoryRooms.get(memoryCode);
+      if (room && socket.data.memoryRole === 'player' && room.players.delete(socket.id)) {
+        io.to(`mem:${memoryCode}`).emit('memory:players:update', memoryRoomPlayers(room));
       }
     }
   });
@@ -867,6 +1035,9 @@ setInterval(() => {
   const now = Date.now();
   for (const [code, room] of rooms) {
     if (now - room.createdAt > ROOM_TTL_MS) rooms.delete(code);
+  }
+  for (const [code, room] of memoryRooms) {
+    if (now - room.createdAt > ROOM_TTL_MS) memoryRooms.delete(code);
   }
 }, 30 * 60 * 1000);
 
