@@ -1069,6 +1069,14 @@ app.get('/api/photos', (req, res) => {
   res.json(PHOTOS);
 });
 
+// Raw deck structure (which symbol ids are on each of the 57 cards) so Trial
+// Mode can generate rounds entirely client-side — offline-capable once this
+// and /api/symbols are cached, instead of round-tripping to the server on
+// every round.
+app.get('/api/deck', (req, res) => {
+  res.json({ deck: DECK });
+});
+
 app.get('/api/qr', async (req, res) => {
   const code = String(req.query.code || '').toUpperCase();
   const type = req.query.type === 'predict' ? 'predict' : 'play';
@@ -1113,16 +1121,6 @@ app.get('/roulette', (req, res) => {
 
 app.get('/hugo-pong', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'hugo-pong.html'));
-});
-
-app.get('/api/trial', (req, res) => {
-  const a = Math.floor(Math.random() * DECK.length);
-  let b = Math.floor(Math.random() * DECK.length);
-  while (b === a) b = Math.floor(Math.random() * DECK.length);
-  const cardA = DECK[a];
-  const cardB = DECK[b];
-  const commonId = commonSymbol(cardA, cardB);
-  res.json({ cardA: buildCard(cardA), cardB: buildCard(cardB), commonId });
 });
 
 function pickRandomDistinct(arr, n) {
