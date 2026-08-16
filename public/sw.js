@@ -1,15 +1,15 @@
 // Bump this on any release that changes cached files, so old clients pick
 // up the new versions instead of serving stale ones forever.
-const CACHE_VERSION = 'v2';
+const CACHE_VERSION = 'v3';
 const CACHE_NAME = `favethings-${CACHE_VERSION}`;
 
 // Precached at install: the app shell for pages that work without a live
-// two-person connection — home shell, Memory Match, Trial Mode, Hugo Pong.
-// Two-person modes (Quick Play, What Would You Say, Date Roulette) sync two
-// separate phones through the live server by design and aren't included —
-// there's no meaningful "offline" version of a game two people play together
-// in real time. Those still get a friendly offline.html instead of a broken
-// page — see the fetch handler below.
+// two-person connection — home shell, Memory Match, Trial Mode.
+// Two-person modes (Quick Play, What Would You Say, Date Roulette, Doodle
+// Duel) sync two separate phones through the live server by design and
+// aren't included — there's no meaningful "offline" version of a game two
+// people play together in real time. Those still get a friendly
+// offline.html instead of a broken page — see the fetch handler below.
 const SHELL_URLS = [
   '/',
   '/offline.html',
@@ -26,9 +26,6 @@ const SHELL_URLS = [
   '/memory.js',
   '/trial',
   '/trial.js',
-  '/hugo-pong',
-  '/hugo-pong.js',
-  '/hugo-pong.css',
   '/api/symbols',
   '/api/photos',
   '/api/deck',

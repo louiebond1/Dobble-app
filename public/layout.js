@@ -1,7 +1,7 @@
 // Registered on every page so solo-playable modes (Memory Match, Trial
-// Mode, Hugo Pong) keep working with no signal once they've been opened
-// at least once. Two-person modes still need a live connection to sync
-// the other phone — this only covers the app shell + solo game data.
+// Mode) keep working with no signal once they've been opened at least
+// once. Two-person modes still need a live connection to sync the other
+// phone — this only covers the app shell + solo game data.
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('/sw.js').catch(() => {});

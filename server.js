@@ -1346,10 +1346,6 @@ app.get('/roulette', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'roulette.html'));
 });
 
-app.get('/hugo-pong', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'hugo-pong.html'));
-});
-
 app.get('/draw', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'draw.html'));
 });
