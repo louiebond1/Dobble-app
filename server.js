@@ -9,7 +9,6 @@ const { SYMBOLS, DECK } = require('./lib/deck');
 const { PHOTOS } = require('./lib/photos');
 const { QUESTIONS, CATEGORIES: PREDICT_CATEGORIES, DIFFICULTY_POINTS } = require('./lib/whatWouldYouSay');
 const { DATES, CATEGORIES: DATE_CATEGORIES } = require('./lib/dates');
-const { DECK: DRAW_WORDS } = require('./lib/drawWords');
 
 const app = express();
 const server = http.createServer(app);
@@ -24,10 +23,6 @@ const rooms = new Map();
 
 /** @type {Map<string, any>} */
 const memoryRooms = new Map();
-
-/** @type {Map<string, any>} */
-const drawRooms = new Map();
-const DRAW_ROUND_MS = 70000;
 
 // Lifetime win/speed stats, keyed by lowercased player name so "Louie" and
 // "louie" are the same person. Persisted to a local JSON file — this survives
@@ -417,85 +412,6 @@ function memoryTurnName(room) {
   const id = room.playerOrder[room.turnIndex];
   const p = id && room.players.get(id);
   return p ? p.name : null;
-}
-
-function drawRoomPlayers(room) {
-  return Array.from(room.players.values()).map((p) => ({ name: p.name, score: p.score }));
-}
-
-function pickDrawWord(usedIds) {
-  const pool = DRAW_WORDS.filter((w) => !usedIds.has(w.id));
-  const source = pool.length ? pool : DRAW_WORDS; // ran out of fresh words — allow repeats
-  return source[Math.floor(Math.random() * source.length)];
-}
-
-function normalizeGuess(s) {
-  return String(s || '').trim().toLowerCase().replace(/\s+/g, ' ');
-}
-
-function startDrawRound(code) {
-  const room = drawRooms.get(code);
-  if (!room) return;
-
-  if (room.roundNumber >= room.totalRounds) {
-    endDrawGame(code);
-    return;
-  }
-
-  room.roundNumber += 1;
-  const drawerId = room.playerOrder[(room.roundNumber - 1) % 2];
-  const guesserId = room.playerOrder[1 - ((room.roundNumber - 1) % 2)];
-  const word = pickDrawWord(room.usedWordIds);
-  room.usedWordIds.add(word.id);
-  room.currentWord = word;
-  room.drawerSocketId = drawerId;
-  room.guesserSocketId = guesserId;
-  room.roundDeadline = Date.now() + DRAW_ROUND_MS;
-  room.roundActive = true;
-
-  const drawer = room.players.get(drawerId);
-  const guesser = room.players.get(guesserId);
-
-  io.to(`draw:${code}`).emit('draw:round:start', {
-    roundNumber: room.roundNumber,
-    totalRounds: room.totalRounds,
-    word: word.word,
-    drawerName: drawer && drawer.name,
-    guesserName: guesser && guesser.name,
-    deadline: room.roundDeadline,
-    players: drawRoomPlayers(room),
-  });
-
-  clearTimeout(room.roundTimer);
-  room.roundTimer = setTimeout(() => resolveDrawRound(code, { timedOut: true }), DRAW_ROUND_MS);
-}
-
-function resolveDrawRound(code, { timedOut = false } = {}) {
-  const room = drawRooms.get(code);
-  if (!room || !room.roundActive) return;
-  clearTimeout(room.roundTimer);
-  room.roundActive = false;
-
-  if (!timedOut) {
-    const guesser = room.players.get(room.guesserSocketId);
-    if (guesser) guesser.score += 1;
-  }
-
-  io.to(`draw:${code}`).emit('draw:round:result', {
-    timedOut,
-    word: room.currentWord.word,
-    players: drawRoomPlayers(room),
-  });
-
-  setTimeout(() => startDrawRound(code), 2600);
-}
-
-function endDrawGame(code) {
-  const room = drawRooms.get(code);
-  if (!room) return;
-  room.started = false;
-  clearTimeout(room.roundTimer);
-  io.to(`draw:${code}`).emit('draw:game:over', { players: drawRoomPlayers(room) });
 }
 
 function buildCard(indices) {
@@ -890,136 +806,6 @@ io.on('connection', (socket) => {
     }, 700);
   });
 
-  // --- Doodle Duel (networked draw & guess) --------------------------------
-  // Same fixed-code Quick Play pattern as the other two-person games. The
-  // word is broadcast to both players (same trust model the rest of this
-  // private app already uses) — the client just doesn't display it to
-  // whoever isn't the drawer. Pen strokes are relayed live, drawer -> guesser
-  // only, with the server owning the round timer, word choice, and scoring.
-
-  socket.on('draw:quickplay:join', (payload, ack) => {
-    const name = String((payload && payload.name) || '').trim().slice(0, 20) || 'Player';
-    const code = 'OURS';
-    let room = drawRooms.get(code);
-    if (room) {
-      for (const pid of room.players.keys()) {
-        if (!io.sockets.sockets.has(pid)) room.players.delete(pid);
-      }
-    }
-    let isHost = false;
-    let hostToken = null;
-    if (!room || room.players.size === 0 || !io.sockets.sockets.has(room.hostSocketId)) {
-      isHost = true;
-      hostToken = crypto.randomUUID();
-      if (!room) {
-        room = {
-          code,
-          players: new Map(),
-          started: false,
-          totalRounds: 8,
-          roundNumber: 0,
-          roundActive: false,
-          currentWord: null,
-          drawerSocketId: null,
-          guesserSocketId: null,
-          roundDeadline: null,
-          roundTimer: null,
-          usedWordIds: new Set(),
-          playerOrder: [],
-          createdAt: Date.now(),
-        };
-        drawRooms.set(code, room);
-      } else {
-        clearTimeout(room.roundTimer);
-        room.started = false;
-        room.roundNumber = 0;
-        room.roundActive = false;
-        room.currentWord = null;
-        room.usedWordIds = new Set();
-        room.playerOrder = [];
-      }
-      room.hostToken = hostToken;
-      room.hostSocketId = socket.id;
-    }
-    room.players.set(socket.id, { name, score: 0 });
-    socket.join(`draw:${code}`);
-    socket.data.drawRole = isHost ? 'host' : 'player';
-    socket.data.drawCode = code;
-    if (typeof ack === 'function') {
-      ack({ ok: true, code, name, isHost, hostToken, started: room.started });
-    }
-    io.to(`draw:${code}`).emit('draw:players:update', drawRoomPlayers(room));
-  });
-
-  socket.on('draw:host:cancel', (payload) => {
-    const code = String((payload && payload.code) || '').toUpperCase();
-    const room = drawRooms.get(code);
-    if (!room || room.hostSocketId !== socket.id) return;
-    clearTimeout(room.roundTimer);
-    io.to(`draw:${code}`).emit('draw:room:cancelled');
-    drawRooms.delete(code);
-  });
-
-  socket.on('draw:host:start', (payload) => {
-    const code = String((payload && payload.code) || '').toUpperCase();
-    const room = drawRooms.get(code);
-    if (!room || room.hostSocketId !== socket.id || room.players.size < 2) return;
-    room.totalRounds = Math.max(2, Math.min(20, Number(payload && payload.rounds) || 8));
-    room.roundNumber = 0;
-    room.usedWordIds = new Set();
-    room.playerOrder = Array.from(room.players.keys());
-    room.started = true;
-    for (const p of room.players.values()) p.score = 0;
-    startDrawRound(code);
-  });
-
-  socket.on('draw:stroke', (payload) => {
-    const code = String((payload && payload.code) || '').toUpperCase();
-    const room = drawRooms.get(code);
-    if (!room || !room.roundActive || socket.id !== room.drawerSocketId) return;
-    socket.to(`draw:${code}`).emit('draw:stroke', {
-      type: payload && payload.type,
-      x: Number(payload && payload.x),
-      y: Number(payload && payload.y),
-    });
-  });
-
-  socket.on('draw:clear', (payload) => {
-    const code = String((payload && payload.code) || '').toUpperCase();
-    const room = drawRooms.get(code);
-    if (!room || !room.roundActive || socket.id !== room.drawerSocketId) return;
-    socket.to(`draw:${code}`).emit('draw:clear');
-  });
-
-  socket.on('draw:skip', (payload) => {
-    const code = String((payload && payload.code) || '').toUpperCase();
-    const room = drawRooms.get(code);
-    if (!room || !room.roundActive || socket.id !== room.drawerSocketId) return;
-
-    clearTimeout(room.roundTimer);
-    const word = pickDrawWord(room.usedWordIds);
-    room.usedWordIds.add(word.id);
-    room.currentWord = word;
-    room.roundDeadline = Date.now() + DRAW_ROUND_MS;
-
-    io.to(`draw:${code}`).emit('draw:word:skipped', { word: word.word, deadline: room.roundDeadline });
-    room.roundTimer = setTimeout(() => resolveDrawRound(code, { timedOut: true }), DRAW_ROUND_MS);
-  });
-
-  socket.on('draw:guess', (payload) => {
-    const code = String((payload && payload.code) || '').toUpperCase();
-    const text = String((payload && payload.text) || '').slice(0, 60);
-    const room = drawRooms.get(code);
-    if (!room || !room.roundActive || socket.id !== room.guesserSocketId || !text.trim()) return;
-
-    const guesser = room.players.get(socket.id);
-    if (!guesser) return;
-
-    const correct = normalizeGuess(text) === normalizeGuess(room.currentWord.word);
-    io.to(`draw:${code}`).emit('draw:guess', { name: guesser.name, text, correct });
-    if (correct) resolveDrawRound(code, { timedOut: false });
-  });
-
   socket.on('disconnect', () => {
     const code = socket.data.code;
     if (code) {
@@ -1041,13 +827,6 @@ io.on('connection', (socket) => {
       const room = memoryRooms.get(memoryCode);
       if (room && socket.data.memoryRole === 'player' && room.players.delete(socket.id)) {
         io.to(`mem:${memoryCode}`).emit('memory:players:update', memoryRoomPlayers(room));
-      }
-    }
-    const drawCode = socket.data.drawCode;
-    if (drawCode) {
-      const room = drawRooms.get(drawCode);
-      if (room && socket.data.drawRole === 'player' && room.players.delete(socket.id)) {
-        io.to(`draw:${drawCode}`).emit('draw:players:update', drawRoomPlayers(room));
       }
     }
   });
@@ -1260,12 +1039,6 @@ setInterval(() => {
   for (const [code, room] of memoryRooms) {
     if (now - room.createdAt > ROOM_TTL_MS) memoryRooms.delete(code);
   }
-  for (const [code, room] of drawRooms) {
-    if (now - room.createdAt > ROOM_TTL_MS) {
-      clearTimeout(room.roundTimer);
-      drawRooms.delete(code);
-    }
-  }
 }, 30 * 60 * 1000);
 
 app.get('/api/leaderboard', (req, res) => {
@@ -1348,10 +1121,6 @@ app.get('/roulette', (req, res) => {
 
 app.get('/hugo-pong', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'hugo-pong.html'));
-});
-
-app.get('/draw', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'draw.html'));
 });
 
 function pickRandomDistinct(arr, n) {
