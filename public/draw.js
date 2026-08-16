@@ -20,6 +20,12 @@ let roundDeadline = null;
 let timerInterval = null;
 let currentColor = '#2c2138';
 let drawing = false;
+let eraserMode = false;
+let strokes = []; // finalized strokes: { tool: 'pen'|'eraser', color, points: [{x,y},...] }
+let activeStroke = null; // in-progress stroke, mine or the remote drawer's
+
+const PEN_WIDTH = 4;
+const ERASER_WIDTH = 16;
 
 // --- Round-count picker ------------------------------------------------
 
@@ -137,26 +143,54 @@ function clearCanvas() {
   ctx.clearRect(0, 0, w, h);
 }
 
+function resetStrokes() {
+  strokes = [];
+  activeStroke = null;
+}
+
 function pointFromEvent(e) {
   const rect = canvas.getBoundingClientRect();
   return { x: (e.clientX - rect.left) / rect.width, y: (e.clientY - rect.top) / rect.height };
 }
 
-function drawSegment(type, nx, ny, color) {
-  const { w, h } = cssSize();
-  const x = nx * w;
-  const y = ny * h;
-  if (type === 'start') {
-    ctx.beginPath();
+function applyTool(tool, color) {
+  if (tool === 'eraser') {
+    ctx.globalCompositeOperation = 'destination-out';
+    ctx.lineWidth = ERASER_WIDTH;
+  } else {
+    ctx.globalCompositeOperation = 'source-over';
     ctx.strokeStyle = color || currentColor;
-    ctx.moveTo(x, y);
-    // Draw a dot for a single tap (no move before release)
-    ctx.lineTo(x + 0.01, y + 0.01);
-    ctx.stroke();
-  } else if (type === 'move') {
-    ctx.lineTo(x, y);
-    ctx.stroke();
+    ctx.lineWidth = PEN_WIDTH;
   }
+}
+
+function beginStroke(nx, ny, tool, color) {
+  const { w, h } = cssSize();
+  ctx.beginPath();
+  applyTool(tool, color);
+  ctx.moveTo(nx * w, ny * h);
+  // Draw a dot for a single tap (no move before release)
+  ctx.lineTo(nx * w + 0.01, ny * h + 0.01);
+  ctx.stroke();
+}
+
+function continueStroke(nx, ny) {
+  const { w, h } = cssSize();
+  ctx.lineTo(nx * w, ny * h);
+  ctx.stroke();
+}
+
+// Replays the full stroke history from scratch — used for undo, since
+// pixels erased by the eraser can't be un-erased any other way than
+// redrawing everything up to (but not including) the removed stroke.
+function redrawAll() {
+  clearCanvas();
+  strokes.forEach((s) => {
+    if (!s.points.length) return;
+    beginStroke(s.points[0].x, s.points[0].y, s.tool, s.color);
+    for (let i = 1; i < s.points.length; i++) continueStroke(s.points[i].x, s.points[i].y);
+  });
+  ctx.globalCompositeOperation = 'source-over';
 }
 
 canvas.addEventListener('pointerdown', (e) => {
@@ -164,21 +198,28 @@ canvas.addEventListener('pointerdown', (e) => {
   drawing = true;
   canvas.setPointerCapture(e.pointerId);
   const p = pointFromEvent(e);
-  drawSegment('start', p.x, p.y, currentColor);
-  socket.emit('draw:stroke', { code: roomCode, type: 'start', x: p.x, y: p.y });
+  const tool = eraserMode ? 'eraser' : 'pen';
+  activeStroke = { tool, color: currentColor, points: [{ x: p.x, y: p.y }] };
+  beginStroke(p.x, p.y, tool, currentColor);
+  socket.emit('draw:stroke', { code: roomCode, type: 'start', tool, color: currentColor, x: p.x, y: p.y });
 });
 
 canvas.addEventListener('pointermove', (e) => {
   if (myRole !== 'drawer' || !drawing) return;
   const p = pointFromEvent(e);
-  drawSegment('move', p.x, p.y);
+  if (activeStroke) activeStroke.points.push({ x: p.x, y: p.y });
+  continueStroke(p.x, p.y);
   socket.emit('draw:stroke', { code: roomCode, type: 'move', x: p.x, y: p.y });
 });
 
-function endStroke(e) {
+function endStroke() {
   if (myRole !== 'drawer' || !drawing) return;
   drawing = false;
-  socket.emit('draw:stroke', { code: roomCode, type: 'end', x: 0, y: 0 });
+  if (activeStroke) {
+    strokes.push(activeStroke);
+    activeStroke = null;
+  }
+  socket.emit('draw:stroke', { code: roomCode, type: 'end' });
 }
 canvas.addEventListener('pointerup', endStroke);
 canvas.addEventListener('pointercancel', endStroke);
@@ -187,12 +228,27 @@ canvas.addEventListener('pointerleave', endStroke);
 document.querySelectorAll('.color-swatch').forEach((btn) => {
   btn.addEventListener('click', () => {
     currentColor = btn.dataset.color;
+    eraserMode = false;
+    el('eraserBtn').classList.remove('active');
     document.querySelectorAll('.color-swatch').forEach((b) => b.classList.toggle('active', b === btn));
   });
 });
 
+el('eraserBtn').addEventListener('click', () => {
+  eraserMode = !eraserMode;
+  el('eraserBtn').classList.toggle('active', eraserMode);
+});
+
+el('undoBtn').addEventListener('click', () => {
+  if (myRole !== 'drawer' || !strokes.length) return;
+  strokes.pop();
+  redrawAll();
+  socket.emit('draw:undo', { code: roomCode });
+});
+
 el('clearCanvasBtn').addEventListener('click', () => {
   if (myRole !== 'drawer') return;
+  resetStrokes();
   clearCanvas();
   socket.emit('draw:clear', { code: roomCode });
 });
@@ -203,11 +259,27 @@ el('skipWordBtn').addEventListener('click', () => {
 });
 
 socket.on('draw:stroke', (data) => {
-  if (data.type === 'end') return;
-  drawSegment(data.type, data.x, data.y);
+  if (data.type === 'start') {
+    activeStroke = { tool: data.tool || 'pen', color: data.color, points: [{ x: data.x, y: data.y }] };
+    beginStroke(data.x, data.y, activeStroke.tool, activeStroke.color);
+  } else if (data.type === 'move') {
+    if (activeStroke) activeStroke.points.push({ x: data.x, y: data.y });
+    continueStroke(data.x, data.y);
+  } else if (data.type === 'end' && activeStroke) {
+    strokes.push(activeStroke);
+    activeStroke = null;
+  }
 });
 
-socket.on('draw:clear', () => clearCanvas());
+socket.on('draw:clear', () => {
+  resetStrokes();
+  clearCanvas();
+});
+
+socket.on('draw:undo', () => {
+  strokes.pop();
+  redrawAll();
+});
 
 // --- Round lifecycle -------------------------------------------------
 
@@ -229,6 +301,9 @@ socket.on('draw:round:start', (data) => {
   el('guessFeed').innerHTML = '';
   el('guessInput').value = '';
 
+  resetStrokes();
+  eraserMode = false;
+  el('eraserBtn').classList.remove('active');
   requestAnimationFrame(() => {
     resizeCanvas();
     clearCanvas();
@@ -285,6 +360,7 @@ socket.on('draw:word:skipped', (data) => {
   if (myRole === 'drawer') {
     el('wordBanner').textContent = `✏️ Draw: ${data.word}`;
   }
+  resetStrokes();
   clearCanvas();
   startCountdown();
 });

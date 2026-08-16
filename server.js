@@ -981,6 +981,8 @@ io.on('connection', (socket) => {
       type: payload && payload.type,
       x: Number(payload && payload.x),
       y: Number(payload && payload.y),
+      tool: payload && payload.tool === 'eraser' ? 'eraser' : 'pen',
+      color: String((payload && payload.color) || '').slice(0, 20),
     });
   });
 
@@ -989,6 +991,13 @@ io.on('connection', (socket) => {
     const room = drawRooms.get(code);
     if (!room || !room.roundActive || socket.id !== room.drawerSocketId) return;
     socket.to(`draw:${code}`).emit('draw:clear');
+  });
+
+  socket.on('draw:undo', (payload) => {
+    const code = String((payload && payload.code) || '').toUpperCase();
+    const room = drawRooms.get(code);
+    if (!room || !room.roundActive || socket.id !== room.drawerSocketId) return;
+    socket.to(`draw:${code}`).emit('draw:undo');
   });
 
   socket.on('draw:skip', (payload) => {
