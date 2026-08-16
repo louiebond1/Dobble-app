@@ -193,9 +193,18 @@ function redrawAll() {
   ctx.globalCompositeOperation = 'source-over';
 }
 
+// Tracks the single pointerId currently drawing so a second touch (a palm
+// resting on the screen, a stray finger) can't hijack or corrupt the
+// in-progress stroke — without this, a second pointerdown while already
+// drawing would overwrite activeStroke mid-stroke and could leave the
+// canvas, the stroke history, and what gets sent to the other player all
+// out of sync with each other.
+let activePointerId = null;
+
 canvas.addEventListener('pointerdown', (e) => {
-  if (myRole !== 'drawer') return;
+  if (myRole !== 'drawer' || drawing) return;
   drawing = true;
+  activePointerId = e.pointerId;
   canvas.setPointerCapture(e.pointerId);
   const p = pointFromEvent(e);
   const tool = eraserMode ? 'eraser' : 'pen';
@@ -205,16 +214,17 @@ canvas.addEventListener('pointerdown', (e) => {
 });
 
 canvas.addEventListener('pointermove', (e) => {
-  if (myRole !== 'drawer' || !drawing) return;
+  if (myRole !== 'drawer' || !drawing || e.pointerId !== activePointerId) return;
   const p = pointFromEvent(e);
   if (activeStroke) activeStroke.points.push({ x: p.x, y: p.y });
   continueStroke(p.x, p.y);
   socket.emit('draw:stroke', { code: roomCode, type: 'move', x: p.x, y: p.y });
 });
 
-function endStroke() {
-  if (myRole !== 'drawer' || !drawing) return;
+function endStroke(e) {
+  if (myRole !== 'drawer' || !drawing || (e && e.pointerId !== activePointerId)) return;
   drawing = false;
+  activePointerId = null;
   if (activeStroke) {
     strokes.push(activeStroke);
     activeStroke = null;
@@ -302,6 +312,8 @@ socket.on('draw:round:start', (data) => {
   el('guessInput').value = '';
 
   resetStrokes();
+  drawing = false;
+  activePointerId = null;
   eraserMode = false;
   el('eraserBtn').classList.remove('active');
   requestAnimationFrame(() => {
@@ -361,6 +373,8 @@ socket.on('draw:word:skipped', (data) => {
     el('wordBanner').textContent = `✏️ Draw: ${data.word}`;
   }
   resetStrokes();
+  drawing = false;
+  activePointerId = null;
   clearCanvas();
   startCountdown();
 });
