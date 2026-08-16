@@ -10,6 +10,8 @@ const { PHOTOS } = require('./lib/photos');
 const { QUESTIONS, CATEGORIES: PREDICT_CATEGORIES, DIFFICULTY_POINTS } = require('./lib/whatWouldYouSay');
 const { DATES, CATEGORIES: DATE_CATEGORIES } = require('./lib/dates');
 const { DECK: DRAW_WORDS } = require('./lib/drawWords');
+const { TRIVIA_QUESTIONS } = require('./lib/triviaQuestions');
+const { SCRAMBLE_WORDS } = require('./lib/scrambleWords');
 
 const app = express();
 const server = http.createServer(app);
@@ -28,6 +30,19 @@ const memoryRooms = new Map();
 /** @type {Map<string, any>} */
 const drawRooms = new Map();
 const DRAW_ROUND_MS = 70000;
+
+/** @type {Map<string, any>} */
+const reactionRooms = new Map();
+const REACTION_MIN_DELAY_MS = 1200;
+const REACTION_MAX_DELAY_MS = 4500;
+
+/** @type {Map<string, any>} */
+const triviaRooms = new Map();
+const TRIVIA_ROUND_MS = 20000;
+
+/** @type {Map<string, any>} */
+const scrambleRooms = new Map();
+const SCRAMBLE_ROUND_MS = 35000;
 
 // Lifetime win/speed stats, keyed by lowercased player name so "Louie" and
 // "louie" are the same person. Persisted to a local JSON file — this survives
@@ -496,6 +511,186 @@ function endDrawGame(code) {
   room.started = false;
   clearTimeout(room.roundTimer);
   io.to(`draw:${code}`).emit('draw:game:over', { players: drawRoomPlayers(room) });
+}
+
+// --- Reaction Duel helpers -------------------------------------------------
+
+function reactionRoomPlayers(room) {
+  return Array.from(room.players.values()).map((p) => ({ name: p.name, score: p.score }));
+}
+
+function startReactionRound(code) {
+  const room = reactionRooms.get(code);
+  if (!room) return;
+
+  if (room.roundNumber >= room.totalRounds) {
+    room.started = false;
+    io.to(`reaction:${code}`).emit('reaction:game:over', { players: reactionRoomPlayers(room) });
+    return;
+  }
+
+  room.roundNumber += 1;
+  room.phase = 'waiting';
+  room.goAt = null;
+  clearTimeout(room.goTimer);
+
+  io.to(`reaction:${code}`).emit('reaction:round:start', {
+    roundNumber: room.roundNumber,
+    totalRounds: room.totalRounds,
+    players: reactionRoomPlayers(room),
+  });
+
+  const delay = REACTION_MIN_DELAY_MS + Math.random() * (REACTION_MAX_DELAY_MS - REACTION_MIN_DELAY_MS);
+  room.goTimer = setTimeout(() => {
+    room.phase = 'go';
+    room.goAt = Date.now();
+    io.to(`reaction:${code}`).emit('reaction:go', { at: room.goAt });
+  }, delay);
+}
+
+// --- Trivia Showdown helpers -------------------------------------------------
+
+function triviaRoomPlayers(room) {
+  return Array.from(room.players.values()).map((p) => ({ name: p.name, score: p.score }));
+}
+
+function pickTriviaQuestion(usedIds) {
+  const pool = TRIVIA_QUESTIONS.filter((q) => !usedIds.has(q.id));
+  const source = pool.length ? pool : TRIVIA_QUESTIONS;
+  return source[Math.floor(Math.random() * source.length)];
+}
+
+function startTriviaRound(code) {
+  const room = triviaRooms.get(code);
+  if (!room) return;
+
+  if (room.roundNumber >= room.totalRounds) {
+    room.started = false;
+    io.to(`trivia:${code}`).emit('trivia:game:over', { players: triviaRoomPlayers(room) });
+    return;
+  }
+
+  room.roundNumber += 1;
+  const question = pickTriviaQuestion(room.usedQuestionIds);
+  room.usedQuestionIds.add(question.id);
+  room.currentQuestion = question;
+  room.roundActive = true;
+  room.wrongAnswerers = new Set();
+
+  io.to(`trivia:${code}`).emit('trivia:round:start', {
+    roundNumber: room.roundNumber,
+    totalRounds: room.totalRounds,
+    category: question.category,
+    question: question.question,
+    options: question.options,
+    players: triviaRoomPlayers(room),
+  });
+
+  clearTimeout(room.roundTimer);
+  room.roundTimer = setTimeout(() => resolveTriviaRound(code, { timedOut: true }), TRIVIA_ROUND_MS);
+}
+
+function resolveTriviaRound(code, { timedOut = false, winnerSocketId = null } = {}) {
+  const room = triviaRooms.get(code);
+  if (!room || !room.roundActive) return;
+  clearTimeout(room.roundTimer);
+  room.roundActive = false;
+
+  let winner = null;
+  if (winnerSocketId) {
+    winner = room.players.get(winnerSocketId);
+    if (winner) winner.score += 1;
+  }
+
+  io.to(`trivia:${code}`).emit('trivia:round:result', {
+    timedOut,
+    winnerName: winner ? winner.name : null,
+    correctIndex: room.currentQuestion.correctIndex,
+    correctText: room.currentQuestion.options[room.currentQuestion.correctIndex],
+    players: triviaRoomPlayers(room),
+  });
+
+  room.currentQuestion = null;
+  setTimeout(() => startTriviaRound(code), 2800);
+}
+
+// --- Word Scramble Sprint helpers -------------------------------------------------
+
+function scrambleRoomPlayers(room) {
+  return Array.from(room.players.values()).map((p) => ({ name: p.name, score: p.score }));
+}
+
+function pickScrambleWord(usedIds) {
+  const pool = SCRAMBLE_WORDS.filter((w) => !usedIds.has(w.id));
+  const source = pool.length ? pool : SCRAMBLE_WORDS;
+  return source[Math.floor(Math.random() * source.length)];
+}
+
+function scrambleLetters(word) {
+  const letters = word.split('');
+  let scrambled = word;
+  let attempts = 0;
+  // Reshuffle until it actually differs from the original (a short word can
+  // otherwise shuffle right back into itself) — capped so it can't loop forever.
+  while (scrambled === word && attempts < 20) {
+    for (let i = letters.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [letters[i], letters[j]] = [letters[j], letters[i]];
+    }
+    scrambled = letters.join('');
+    attempts += 1;
+  }
+  return scrambled;
+}
+
+function startScrambleRound(code) {
+  const room = scrambleRooms.get(code);
+  if (!room) return;
+
+  if (room.roundNumber >= room.totalRounds) {
+    room.started = false;
+    io.to(`scramble:${code}`).emit('scramble:game:over', { players: scrambleRoomPlayers(room) });
+    return;
+  }
+
+  room.roundNumber += 1;
+  const word = pickScrambleWord(room.usedWordIds);
+  room.usedWordIds.add(word.id);
+  room.currentWord = word.word;
+  room.roundActive = true;
+
+  io.to(`scramble:${code}`).emit('scramble:round:start', {
+    roundNumber: room.roundNumber,
+    totalRounds: room.totalRounds,
+    scrambled: scrambleLetters(word.word),
+    players: scrambleRoomPlayers(room),
+  });
+
+  clearTimeout(room.roundTimer);
+  room.roundTimer = setTimeout(() => resolveScrambleRound(code, { timedOut: true }), SCRAMBLE_ROUND_MS);
+}
+
+function resolveScrambleRound(code, { timedOut = false, winnerSocketId = null } = {}) {
+  const room = scrambleRooms.get(code);
+  if (!room || !room.roundActive) return;
+  clearTimeout(room.roundTimer);
+  room.roundActive = false;
+
+  let winner = null;
+  if (winnerSocketId) {
+    winner = room.players.get(winnerSocketId);
+    if (winner) winner.score += 1;
+  }
+
+  io.to(`scramble:${code}`).emit('scramble:round:result', {
+    timedOut,
+    winnerName: winner ? winner.name : null,
+    word: room.currentWord,
+    players: scrambleRoomPlayers(room),
+  });
+
+  room.currentWord = null;
+  setTimeout(() => startScrambleRound(code), 2400);
 }
 
 function buildCard(indices) {
@@ -1029,6 +1224,293 @@ io.on('connection', (socket) => {
     if (correct) resolveDrawRound(code, { timedOut: false });
   });
 
+  // --- Reaction Duel (networked reflex race) --------------------------------
+  // Same fixed-code Quick Play pattern as the other two-person games. The
+  // "go" moment is decided server-side and only broadcast at the instant it
+  // actually happens — the delay itself is never sent to the client ahead of
+  // time, so there's nothing to time or cheat. First tap the server receives
+  // during the 'go' phase wins; a tap during 'waiting' is an instant false
+  // start for whoever sent it.
+
+  socket.on('reaction:quickplay:join', (payload, ack) => {
+    const name = String((payload && payload.name) || '').trim().slice(0, 20) || 'Player';
+    const code = 'OURS';
+    let room = reactionRooms.get(code);
+    if (room) {
+      for (const pid of room.players.keys()) {
+        if (!io.sockets.sockets.has(pid)) room.players.delete(pid);
+      }
+    }
+    let isHost = false;
+    let hostToken = null;
+    if (!room || room.players.size === 0 || !io.sockets.sockets.has(room.hostSocketId)) {
+      isHost = true;
+      hostToken = crypto.randomUUID();
+      if (!room) {
+        room = {
+          code,
+          players: new Map(),
+          started: false,
+          totalRounds: 8,
+          roundNumber: 0,
+          phase: 'idle',
+          goAt: null,
+          goTimer: null,
+          createdAt: Date.now(),
+        };
+        reactionRooms.set(code, room);
+      } else {
+        clearTimeout(room.goTimer);
+        room.started = false;
+        room.roundNumber = 0;
+        room.phase = 'idle';
+        room.goAt = null;
+      }
+      room.hostToken = hostToken;
+      room.hostSocketId = socket.id;
+    }
+    room.players.set(socket.id, { name, score: 0 });
+    socket.join(`reaction:${code}`);
+    socket.data.reactionRole = isHost ? 'host' : 'player';
+    socket.data.reactionCode = code;
+    if (typeof ack === 'function') {
+      ack({ ok: true, code, name, isHost, hostToken, started: room.started });
+    }
+    io.to(`reaction:${code}`).emit('reaction:players:update', reactionRoomPlayers(room));
+  });
+
+  socket.on('reaction:host:cancel', (payload) => {
+    const code = String((payload && payload.code) || '').toUpperCase();
+    const room = reactionRooms.get(code);
+    if (!room || room.hostSocketId !== socket.id) return;
+    clearTimeout(room.goTimer);
+    io.to(`reaction:${code}`).emit('reaction:room:cancelled');
+    reactionRooms.delete(code);
+  });
+
+  socket.on('reaction:host:start', (payload) => {
+    const code = String((payload && payload.code) || '').toUpperCase();
+    const room = reactionRooms.get(code);
+    if (!room || room.hostSocketId !== socket.id || room.players.size < 2) return;
+    room.totalRounds = Math.max(2, Math.min(20, Number(payload && payload.rounds) || 8));
+    room.roundNumber = 0;
+    room.started = true;
+    for (const p of room.players.values()) p.score = 0;
+    startReactionRound(code);
+  });
+
+  socket.on('reaction:tap', (payload) => {
+    const code = String((payload && payload.code) || '').toUpperCase();
+    const room = reactionRooms.get(code);
+    if (!room || !room.started || room.phase === 'idle' || room.phase === 'resolved') return;
+    const player = room.players.get(socket.id);
+    if (!player) return;
+
+    if (room.phase === 'waiting') {
+      room.phase = 'resolved';
+      clearTimeout(room.goTimer);
+      const opponent = Array.from(room.players.values()).find((p) => p !== player);
+      if (opponent) opponent.score += 1;
+      io.to(`reaction:${code}`).emit('reaction:round:result', {
+        falseStart: true,
+        loserName: player.name,
+        winnerName: opponent ? opponent.name : null,
+        players: reactionRoomPlayers(room),
+      });
+      setTimeout(() => startReactionRound(code), 2200);
+      return;
+    }
+
+    // room.phase === 'go' — first tap the server processes wins the round.
+    room.phase = 'resolved';
+    const reactionMs = Date.now() - room.goAt;
+    player.score += 1;
+    io.to(`reaction:${code}`).emit('reaction:round:result', {
+      falseStart: false,
+      winnerName: player.name,
+      reactionMs,
+      players: reactionRoomPlayers(room),
+    });
+    setTimeout(() => startReactionRound(code), 2200);
+  });
+
+  // --- Trivia Showdown (networked buzzer race) ------------------------------
+
+  socket.on('trivia:quickplay:join', (payload, ack) => {
+    const name = String((payload && payload.name) || '').trim().slice(0, 20) || 'Player';
+    const code = 'OURS';
+    let room = triviaRooms.get(code);
+    if (room) {
+      for (const pid of room.players.keys()) {
+        if (!io.sockets.sockets.has(pid)) room.players.delete(pid);
+      }
+    }
+    let isHost = false;
+    let hostToken = null;
+    if (!room || room.players.size === 0 || !io.sockets.sockets.has(room.hostSocketId)) {
+      isHost = true;
+      hostToken = crypto.randomUUID();
+      if (!room) {
+        room = {
+          code,
+          players: new Map(),
+          started: false,
+          totalRounds: 8,
+          roundNumber: 0,
+          roundActive: false,
+          currentQuestion: null,
+          wrongAnswerers: new Set(),
+          usedQuestionIds: new Set(),
+          roundTimer: null,
+          createdAt: Date.now(),
+        };
+        triviaRooms.set(code, room);
+      } else {
+        clearTimeout(room.roundTimer);
+        room.started = false;
+        room.roundNumber = 0;
+        room.roundActive = false;
+        room.currentQuestion = null;
+        room.usedQuestionIds = new Set();
+      }
+      room.hostToken = hostToken;
+      room.hostSocketId = socket.id;
+    }
+    room.players.set(socket.id, { name, score: 0 });
+    socket.join(`trivia:${code}`);
+    socket.data.triviaRole = isHost ? 'host' : 'player';
+    socket.data.triviaCode = code;
+    if (typeof ack === 'function') {
+      ack({ ok: true, code, name, isHost, hostToken, started: room.started });
+    }
+    io.to(`trivia:${code}`).emit('trivia:players:update', triviaRoomPlayers(room));
+  });
+
+  socket.on('trivia:host:cancel', (payload) => {
+    const code = String((payload && payload.code) || '').toUpperCase();
+    const room = triviaRooms.get(code);
+    if (!room || room.hostSocketId !== socket.id) return;
+    clearTimeout(room.roundTimer);
+    io.to(`trivia:${code}`).emit('trivia:room:cancelled');
+    triviaRooms.delete(code);
+  });
+
+  socket.on('trivia:host:start', (payload) => {
+    const code = String((payload && payload.code) || '').toUpperCase();
+    const room = triviaRooms.get(code);
+    if (!room || room.hostSocketId !== socket.id || room.players.size < 2) return;
+    room.totalRounds = Math.max(2, Math.min(25, Number(payload && payload.rounds) || 8));
+    room.roundNumber = 0;
+    room.usedQuestionIds = new Set();
+    room.started = true;
+    for (const p of room.players.values()) p.score = 0;
+    startTriviaRound(code);
+  });
+
+  socket.on('trivia:answer', (payload) => {
+    const code = String((payload && payload.code) || '').toUpperCase();
+    const index = Number(payload && payload.index);
+    const room = triviaRooms.get(code);
+    if (!room || !room.roundActive) return;
+    if (!room.players.has(socket.id) || room.wrongAnswerers.has(socket.id)) return;
+
+    if (index === room.currentQuestion.correctIndex) {
+      resolveTriviaRound(code, { timedOut: false, winnerSocketId: socket.id });
+      return;
+    }
+
+    room.wrongAnswerers.add(socket.id);
+    const player = room.players.get(socket.id);
+    io.to(`trivia:${code}`).emit('trivia:wrong', { name: player.name, index });
+    if (room.wrongAnswerers.size >= room.players.size) {
+      resolveTriviaRound(code, { timedOut: false, winnerSocketId: null });
+    }
+  });
+
+  // --- Word Scramble Sprint (networked unscramble race) ---------------------
+
+  socket.on('scramble:quickplay:join', (payload, ack) => {
+    const name = String((payload && payload.name) || '').trim().slice(0, 20) || 'Player';
+    const code = 'OURS';
+    let room = scrambleRooms.get(code);
+    if (room) {
+      for (const pid of room.players.keys()) {
+        if (!io.sockets.sockets.has(pid)) room.players.delete(pid);
+      }
+    }
+    let isHost = false;
+    let hostToken = null;
+    if (!room || room.players.size === 0 || !io.sockets.sockets.has(room.hostSocketId)) {
+      isHost = true;
+      hostToken = crypto.randomUUID();
+      if (!room) {
+        room = {
+          code,
+          players: new Map(),
+          started: false,
+          totalRounds: 8,
+          roundNumber: 0,
+          roundActive: false,
+          currentWord: null,
+          usedWordIds: new Set(),
+          roundTimer: null,
+          createdAt: Date.now(),
+        };
+        scrambleRooms.set(code, room);
+      } else {
+        clearTimeout(room.roundTimer);
+        room.started = false;
+        room.roundNumber = 0;
+        room.roundActive = false;
+        room.currentWord = null;
+        room.usedWordIds = new Set();
+      }
+      room.hostToken = hostToken;
+      room.hostSocketId = socket.id;
+    }
+    room.players.set(socket.id, { name, score: 0 });
+    socket.join(`scramble:${code}`);
+    socket.data.scrambleRole = isHost ? 'host' : 'player';
+    socket.data.scrambleCode = code;
+    if (typeof ack === 'function') {
+      ack({ ok: true, code, name, isHost, hostToken, started: room.started });
+    }
+    io.to(`scramble:${code}`).emit('scramble:players:update', scrambleRoomPlayers(room));
+  });
+
+  socket.on('scramble:host:cancel', (payload) => {
+    const code = String((payload && payload.code) || '').toUpperCase();
+    const room = scrambleRooms.get(code);
+    if (!room || room.hostSocketId !== socket.id) return;
+    clearTimeout(room.roundTimer);
+    io.to(`scramble:${code}`).emit('scramble:room:cancelled');
+    scrambleRooms.delete(code);
+  });
+
+  socket.on('scramble:host:start', (payload) => {
+    const code = String((payload && payload.code) || '').toUpperCase();
+    const room = scrambleRooms.get(code);
+    if (!room || room.hostSocketId !== socket.id || room.players.size < 2) return;
+    room.totalRounds = Math.max(2, Math.min(25, Number(payload && payload.rounds) || 8));
+    room.roundNumber = 0;
+    room.usedWordIds = new Set();
+    room.started = true;
+    for (const p of room.players.values()) p.score = 0;
+    startScrambleRound(code);
+  });
+
+  socket.on('scramble:guess', (payload) => {
+    const code = String((payload && payload.code) || '').toUpperCase();
+    const text = String((payload && payload.text) || '').slice(0, 40);
+    const room = scrambleRooms.get(code);
+    if (!room || !room.roundActive || !room.players.has(socket.id) || !text.trim()) return;
+
+    const player = room.players.get(socket.id);
+    const correct = text.trim().toUpperCase() === room.currentWord;
+    io.to(`scramble:${code}`).emit('scramble:guess', { name: player.name, text, correct });
+    if (correct) resolveScrambleRound(code, { timedOut: false, winnerSocketId: socket.id });
+  });
+
   socket.on('disconnect', () => {
     const code = socket.data.code;
     if (code) {
@@ -1057,6 +1539,27 @@ io.on('connection', (socket) => {
       const room = drawRooms.get(drawCode);
       if (room && socket.data.drawRole === 'player' && room.players.delete(socket.id)) {
         io.to(`draw:${drawCode}`).emit('draw:players:update', drawRoomPlayers(room));
+      }
+    }
+    const reactionCode = socket.data.reactionCode;
+    if (reactionCode) {
+      const room = reactionRooms.get(reactionCode);
+      if (room && socket.data.reactionRole === 'player' && room.players.delete(socket.id)) {
+        io.to(`reaction:${reactionCode}`).emit('reaction:players:update', reactionRoomPlayers(room));
+      }
+    }
+    const triviaCode = socket.data.triviaCode;
+    if (triviaCode) {
+      const room = triviaRooms.get(triviaCode);
+      if (room && socket.data.triviaRole === 'player' && room.players.delete(socket.id)) {
+        io.to(`trivia:${triviaCode}`).emit('trivia:players:update', triviaRoomPlayers(room));
+      }
+    }
+    const scrambleCode = socket.data.scrambleCode;
+    if (scrambleCode) {
+      const room = scrambleRooms.get(scrambleCode);
+      if (room && socket.data.scrambleRole === 'player' && room.players.delete(socket.id)) {
+        io.to(`scramble:${scrambleCode}`).emit('scramble:players:update', scrambleRoomPlayers(room));
       }
     }
   });
@@ -1275,6 +1778,24 @@ setInterval(() => {
       drawRooms.delete(code);
     }
   }
+  for (const [code, room] of reactionRooms) {
+    if (now - room.createdAt > ROOM_TTL_MS) {
+      clearTimeout(room.goTimer);
+      reactionRooms.delete(code);
+    }
+  }
+  for (const [code, room] of triviaRooms) {
+    if (now - room.createdAt > ROOM_TTL_MS) {
+      clearTimeout(room.roundTimer);
+      triviaRooms.delete(code);
+    }
+  }
+  for (const [code, room] of scrambleRooms) {
+    if (now - room.createdAt > ROOM_TTL_MS) {
+      clearTimeout(room.roundTimer);
+      scrambleRooms.delete(code);
+    }
+  }
 }, 30 * 60 * 1000);
 
 app.get('/api/leaderboard', (req, res) => {
@@ -1357,6 +1878,18 @@ app.get('/roulette', (req, res) => {
 
 app.get('/draw', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'draw.html'));
+});
+
+app.get('/reaction', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'reaction.html'));
+});
+
+app.get('/trivia', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'trivia.html'));
+});
+
+app.get('/scramble', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'scramble.html'));
 });
 
 function pickRandomDistinct(arr, n) {
