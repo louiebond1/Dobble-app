@@ -99,6 +99,13 @@
   text-wrap: balance;
 }
 
+.duel-solo-summary {
+  color: rgba(255, 255, 255, 0.85);
+  font-weight: 600;
+  font-size: 0.92rem;
+  margin: -8px 0 16px;
+}
+
 /* Centers a game's main content in the space between the HUD and whatever
    sits at the bottom (input row, etc.) instead of it clinging to the top
    with dead space below. */

@@ -1,19 +1,22 @@
 // Bump this on any release that changes cached files, so old clients pick
 // up the new versions instead of serving stale ones forever.
-const CACHE_VERSION = 'v3';
+const CACHE_VERSION = 'v4';
 const CACHE_NAME = `favethings-${CACHE_VERSION}`;
 
 // Precached at install: the app shell for pages that work without a live
-// two-person connection — home shell, Memory Match, Trial Mode.
-// Two-person modes (Quick Play, What Would You Say, Date Roulette, Doodle
-// Duel) sync two separate phones through the live server by design and
-// aren't included — there's no meaningful "offline" version of a game two
-// people play together in real time. Those still get a friendly
-// offline.html instead of a broken page — see the fetch handler below.
+// two-person connection — home shell, Memory Match, Trial Mode, and the
+// Solo/practice modes of Reaction Duel, Trivia Showdown, and Word Scramble
+// Sprint. Two-person modes (Quick Play, What Would You Say, Date Roulette,
+// Doodle Duel, and the Head-to-Head side of the three duel games) sync two
+// separate phones through the live server by design and aren't included —
+// there's no meaningful "offline" version of a game two people play
+// together in real time. Those still get a friendly offline.html instead
+// of a broken page — see the fetch handler below.
 const SHELL_URLS = [
   '/',
   '/offline.html',
   '/style.css',
+  '/duel.css',
   '/layout.js',
   '/manifest.webmanifest',
   '/favicon.ico',
@@ -26,9 +29,17 @@ const SHELL_URLS = [
   '/memory.js',
   '/trial',
   '/trial.js',
+  '/reaction',
+  '/reaction.js',
+  '/trivia',
+  '/trivia.js',
+  '/scramble',
+  '/scramble.js',
   '/api/symbols',
   '/api/photos',
   '/api/deck',
+  '/api/trivia',
+  '/api/scramble-words',
 ];
 
 self.addEventListener('install', (event) => {

@@ -1834,6 +1834,17 @@ app.get('/api/deck', (req, res) => {
   res.json({ deck: DECK });
 });
 
+// Powers solo/practice modes for Trivia Showdown and Word Scramble Sprint —
+// fetched once, then played entirely client-side with no server round-trip
+// per question/word, same reasoning as /api/deck for Trial Mode.
+app.get('/api/trivia', (req, res) => {
+  res.json({ questions: TRIVIA_QUESTIONS });
+});
+
+app.get('/api/scramble-words', (req, res) => {
+  res.json({ words: SCRAMBLE_WORDS });
+});
+
 app.get('/api/qr', async (req, res) => {
   const code = String(req.query.code || '').toUpperCase();
   const type = req.query.type === 'predict' ? 'predict' : 'play';

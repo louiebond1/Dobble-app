@@ -27,11 +27,27 @@
         <input type="number" id="roundsInput" min="2" max="20" value="8" class="hidden" />
       </div>
 
-      <div class="quickplay-row">
-        <button type="button" class="quickplay-btn" id="joinLouieBtn">⚡ I'm Louie</button>
-        <button type="button" class="quickplay-btn" id="joinArielBtn">⚡ I'm Ariel</button>
+      <div class="field-group">
+        <p class="field-label">Players</p>
+        <div class="mode-toggle" id="modeToggle">
+          <button type="button" class="mode-btn" id="modeSoloBtn" data-mode="solo">🧍 Solo</button>
+          <button type="button" class="mode-btn active" id="modeDuoBtn" data-mode="duo">🧑‍🤝‍🧑 Head-to-Head</button>
+        </div>
       </div>
-      <p class="quickplay-hint">Just the two of us — no code needed, both tap in and go.</p>
+
+      <div id="soloFields" class="hidden">
+        <label for="soloNameInput">Your name</label>
+        <input type="text" id="soloNameInput" maxlength="20" placeholder="e.g. Louie" />
+        <button class="btn" id="soloStartBtn">⚡ Start Practice</button>
+      </div>
+
+      <div id="duoFields">
+        <div class="quickplay-row">
+          <button type="button" class="quickplay-btn" id="joinLouieBtn">⚡ I'm Louie</button>
+          <button type="button" class="quickplay-btn" id="joinArielBtn">⚡ I'm Ariel</button>
+        </div>
+        <p class="quickplay-hint">Just the two of us — no code needed, both tap in and go.</p>
+      </div>
 
       <a href="/" class="btn btn-outline">← Back to Home</a>
     </div>
@@ -73,6 +89,7 @@
     <div class="duel-over-content">
       <div class="duel-over-emoji">🎉</div>
       <h2 id="overTitle">Game Complete!</h2>
+      <p class="duel-solo-summary" id="soloSummary"></p>
       <div class="leaderboard" id="finalBoard"></div>
       <button class="btn hidden" id="playAgainBtn">🔁 Play Again</button>
       <a href="/" class="btn btn-outline">← Back to Home</a>
