@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#4a3070" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <title>Balloon Pop Blitz — Our Favourite Things</title>
+  <link rel="icon" href="/favicon.ico" sizes="any" />
+  <link rel="icon" href="/favicon-32.png" type="image/png" />
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <link rel="stylesheet" href="/style.css" />
+  <link rel="stylesheet" href="/duel.css" />
+</head>
+<body>
+  <div class="wrap" id="setupWrap">
+    <h1>🎈 Balloon Pop Blitz</h1>
+    <p class="subtitle">Pop balloons, dodge bombs — highest score wins the round</p>
+
+    <div class="panel" id="setup">
+      <div class="field-group">
+        <p class="field-label">How many rounds</p>
+        <div class="pair-chips" id="roundChips"></div>
+        <input type="number" id="roundsInput" min="2" max="10" value="5" class="hidden" />
+      </div>
+
+      <div class="field-group">
+        <p class="field-label">Players</p>
+        <div class="mode-toggle" id="modeToggle">
+          <button type="button" class="mode-btn" id="modeSoloBtn" data-mode="solo">🧍 Solo</button>
+          <button type="button" class="mode-btn active" id="modeDuoBtn" data-mode="duo">🧑‍🤝‍🧑 Head-to-Head</button>
+        </div>
+      </div>
+
+      <div id="soloFields" class="hidden">
+        <label for="soloNameInput">Your name</label>
+        <input type="text" id="soloNameInput" maxlength="20" placeholder="e.g. Louie" />
+        <button class="btn" id="soloStartBtn">🎈 Start Practice</button>
+      </div>
+
+      <div id="duoFields">
+        <div class="quickplay-row">
+          <button type="button" class="quickplay-btn" id="joinLouieBtn">⚡ I'm Louie</button>
+          <button type="button" class="quickplay-btn" id="joinArielBtn">⚡ I'm Ariel</button>
+        </div>
+        <p class="quickplay-hint">Just the two of us — no code needed, both tap in and go.</p>
+      </div>
+
+      <a href="/" class="btn btn-outline">← Back to Home</a>
+    </div>
+
+    <div class="panel hidden" id="lobby">
+      <div class="panel-header">
+        <button class="btn-back" id="lobbyBackBtn">← Back</button>
+      </div>
+      <h3>Players (<span id="playerCount">0</span>)</h3>
+      <ul id="playerList" class="player-list"></ul>
+      <button class="btn" id="startBtn" disabled>Start Game</button>
+      <p class="lobby-hint" id="lobbyHint">Waiting for at least one more player to join…</p>
+    </div>
+  </div>
+
+  <div class="duel-stage hidden" id="gameArea">
+    <div class="duel-topbar">
+      <a href="/balloon" class="btn-back duel-quit">← Quit</a>
+      <div class="duel-round-info">Round <span id="roundNum"></span> / <span id="totalRounds"></span></div>
+    </div>
+
+    <div class="duel-hud" id="duelHud">
+      <div class="duel-player" id="hudP1">
+        <span class="duel-player-name" id="hudP1Name"></span>
+        <span class="duel-player-score" id="hudP1Score">0</span>
+      </div>
+      <div class="duel-player" id="hudP2">
+        <span class="duel-player-name" id="hudP2Name"></span>
+        <span class="duel-player-score" id="hudP2Score">0</span>
+      </div>
+    </div>
+
+    <div class="balloon-status-bar">
+      🎈 Popped: <span id="balloonLive">0</span> &nbsp; <span class="balloon-timer" id="balloonTimer">12s</span>
+    </div>
+
+    <div class="balloon-arena" id="balloonArena"></div>
+  </div>
+
+  <div class="duel-stage duel-stage-over hidden" id="gameOver">
+    <div class="duel-over-content">
+      <div class="duel-over-emoji">🎉</div>
+      <h2 id="overTitle">Game Complete!</h2>
+      <p class="duel-solo-summary" id="soloSummary"></p>
+      <div class="leaderboard" id="finalBoard"></div>
+      <button class="btn hidden" id="playAgainBtn">🔁 Play Again</button>
+      <a href="/" class="btn btn-outline">← Back to Home</a>
+    </div>
+  </div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="/layout.js"></script>
+  <script src="/balloon.js"></script>
+</body>
+</html>
