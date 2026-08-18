@@ -266,6 +266,42 @@ function renderResultPhoto(frameEl, image, emoji, label) {
   }
 }
 
+// --- Party Mashup leg glue -------------------------------------------------
+// Shared helpers used by every "duel"-style game when it's opened as a single
+// leg of a Party Mashup match (?mashup=1&code=OURS in the URL) instead of
+// being played standalone from its own setup screen. Keeping this in one
+// place means each game only needs a few branch lines, not a full copy.
+
+// Returns { code, name } if this page load is a mashup leg, else null.
+function mashupParams() {
+  const params = new URLSearchParams(location.search);
+  if (params.get('mashup') !== '1') return null;
+  const name = sessionStorage.getItem('mashupName');
+  if (!name) return null;
+  return { code: params.get('code') || 'OURS', name };
+}
+
+// Sends a "← Quit" link back to the mashup hub instead of this game's own
+// setup screen, so leaving mid-leg doesn't strand the player.
+function rewireMashupQuitLink() {
+  const quit = document.querySelector('.duel-quit');
+  if (quit) quit.href = '/mashup';
+}
+
+// Called from a game's own `*:game:over` handler when mashupMode is true.
+// Works out the round's winner from the two-player score list every game's
+// game:over payload already carries, reports it to the mashup room on the
+// same already-connected socket, then hands control back to /mashup.
+function reportMashupLegResult(socket, players) {
+  const code = new URLSearchParams(location.search).get('code') || 'OURS';
+  const [p1, p2] = players || [];
+  let winnerName = null;
+  if (p1 && p2 && p1.score !== p2.score) winnerName = p1.score > p2.score ? p1.name : p2.name;
+  socket.emit('mashup:leg:result', { code, winnerName }, () => {
+    window.location.href = `/mashup?code=${encodeURIComponent(code)}`;
+  });
+}
+
 // Renders a scored leaderboard list — used for both the live "this game"
 // leaderboard (valueKey 'score') and the "all-time" lifetime one (valueKey
 // 'wins'). Rows may optionally carry avgTimeMs, shown as a small time badge.

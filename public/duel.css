@@ -313,7 +313,9 @@
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 4px;
+  width: 100%;
   max-width: 320px;
+  box-sizing: border-box;
   margin: 8px auto 0;
   padding: 0 16px;
 }
@@ -338,7 +340,9 @@
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 8px;
+  width: 100%;
   max-width: 320px;
+  box-sizing: border-box;
   margin: 12px auto 0;
   padding: 0 16px;
 }
@@ -408,30 +412,19 @@
 
 .balloon-item {
   position: absolute;
-  bottom: -10px;
-  font-size: 2.3rem;
+  bottom: -14px;
+  width: 58px;
+  height: 58px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 2.1rem;
   line-height: 1;
   cursor: pointer;
   user-select: none;
   touch-action: manipulation;
   will-change: transform;
   filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.25));
-}
-
-.balloon-item.popped {
-  animation: balloonPop 160ms ease forwards;
-}
-
-.balloon-item.popped-bomb {
-  animation: bombFlash 160ms ease forwards;
-}
-
-@keyframes balloonPop {
-  to { transform: scale(1.6); opacity: 0; }
-}
-
-@keyframes bombFlash {
-  to { transform: scale(1.3); opacity: 0; filter: brightness(2) drop-shadow(0 0 12px #ff6b6b); }
 }
 
 /* --- Category Blitz --- */

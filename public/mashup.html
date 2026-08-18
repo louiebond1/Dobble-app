@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#4a3070" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <title>Party Mashup — Our Favourite Things</title>
+  <link rel="icon" href="/favicon.ico" sizes="any" />
+  <link rel="icon" href="/favicon-32.png" type="image/png" />
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <link rel="stylesheet" href="/style.css" />
+  <link rel="stylesheet" href="/duel.css" />
+  <link rel="stylesheet" href="/mashup.css" />
+</head>
+<body>
+  <div class="wrap" id="nameWrap">
+    <h1>🎉 Party Mashup</h1>
+    <p class="subtitle">Every leg is a different game — most legs won takes the whole match</p>
+
+    <div class="panel" id="namePanel">
+      <div class="quickplay-row">
+        <button type="button" class="quickplay-btn" id="joinLouieBtn">⚡ I'm Louie</button>
+        <button type="button" class="quickplay-btn" id="joinArielBtn">⚡ I'm Ariel</button>
+      </div>
+      <p class="quickplay-hint">Just the two of us — no code needed, both tap in and go.</p>
+      <a href="/" class="btn btn-outline">← Back to Home</a>
+    </div>
+  </div>
+
+  <div class="wrap hidden" id="lobbyWrap">
+    <h1>🎉 Party Mashup</h1>
+    <div class="panel" id="lobbyPanel">
+      <h3>Players (<span id="playerCount">0</span>)</h3>
+      <ul id="playerList" class="player-list"></ul>
+
+      <div id="hostConfig" class="hidden">
+        <div class="field-group">
+          <p class="field-label">Which games are in play?</p>
+          <div class="mashup-game-picker" id="gamePicker"></div>
+        </div>
+        <div class="field-group">
+          <p class="field-label">How many legs</p>
+          <div class="pair-chips" id="legChips"></div>
+        </div>
+        <button class="btn" id="startMashupBtn">🎉 Start Mashup</button>
+      </div>
+      <p class="lobby-hint" id="lobbyHint">Waiting for the host to configure and start…</p>
+      <a href="/" class="btn btn-outline">← Back to Home</a>
+    </div>
+  </div>
+
+  <div class="duel-stage hidden" id="redirectStage">
+    <div class="duel-middle mashup-loading">
+      <div class="mashup-loading-emoji" id="loadingEmoji">🎮</div>
+      <p class="mashup-loading-text" id="loadingText">Loading next event…</p>
+    </div>
+  </div>
+
+  <div class="duel-stage hidden" id="transitionStage">
+    <div class="duel-topbar">
+      <div class="duel-round-info">Leg <span id="legNum"></span> / <span id="legTotal"></span></div>
+    </div>
+    <div class="duel-hud" id="mashupHud">
+      <div class="duel-player" id="mHudP1">
+        <span class="duel-player-name" id="mHudP1Name"></span>
+        <span class="duel-player-score" id="mHudP1Score">0</span>
+      </div>
+      <div class="duel-player" id="mHudP2">
+        <span class="duel-player-name" id="mHudP2Name"></span>
+        <span class="duel-player-score" id="mHudP2Score">0</span>
+      </div>
+    </div>
+    <div class="duel-middle">
+      <div class="mashup-leg-result" id="legResultCard"></div>
+      <p class="mashup-next-up" id="nextUpText"></p>
+    </div>
+  </div>
+
+  <div class="duel-stage duel-stage-over hidden" id="finalStage">
+    <div class="duel-over-content">
+      <div class="duel-over-emoji">🏆</div>
+      <h2 id="finalTitle">Mashup Complete!</h2>
+      <div class="leaderboard" id="finalBoard"></div>
+      <div class="mashup-leg-breakdown" id="legBreakdown"></div>
+      <button class="btn hidden" id="playAgainBtn">🔁 New Mashup</button>
+      <a href="/" class="btn btn-outline">← Back to Home</a>
+    </div>
+  </div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="/layout.js"></script>
+  <script src="/mashup.js"></script>
+</body>
+</html>

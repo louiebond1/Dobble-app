@@ -17,6 +17,8 @@ let players = [];
 let totalRounds = 8;
 let roundNumber = 0;
 let phase = 'idle'; // 'idle' | 'waiting' | 'go' | 'resolved'
+let mashupMode = false;
+let mashupAutoStarted = false;
 
 const REACTION_MIN_DELAY = 1200;
 const REACTION_MAX_DELAY = 4500;
@@ -106,6 +108,11 @@ function updateLobby() {
   el('playerList').innerHTML = players
     .map((p) => `<li>${p.name === myName ? `${p.name} (You)` : p.name}</li>`)
     .join('');
+
+  if (mashupMode && amHost() && players.length >= 2 && !mashupAutoStarted) {
+    mashupAutoStarted = true;
+    socket.emit('reaction:host:start', { code: roomCode, rounds: 1 });
+  }
 }
 
 el('startBtn').addEventListener('click', () => {
@@ -195,6 +202,7 @@ socket.on('reaction:round:result', (data) => {
 });
 
 socket.on('reaction:game:over', (data) => {
+  if (mashupMode) return reportMashupLegResult(socket, data.players);
   if (mode !== 'duo') return;
   gameArea.classList.add('hidden');
   gameOver.classList.remove('hidden');
@@ -335,3 +343,12 @@ function endSoloGame() {
     el('soloSummary').textContent = `Average ${avg}ms · Best ${best}ms · Personal best average: ${bestEver.avg}ms`;
   }
 }
+
+// --- Party Mashup: auto-join and auto-start a single-round leg ------------
+(function initMashup() {
+  const mp = mashupParams();
+  if (!mp) return;
+  mashupMode = true;
+  rewireMashupQuitLink();
+  quickPlayJoin(mp.name);
+})();

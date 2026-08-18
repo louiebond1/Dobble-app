@@ -90,6 +90,9 @@ function resetRoomState() {
   myName = null;
 }
 
+let mashupMode = false;
+let mashupAutoStarted = false;
+
 function amHost() {
   return mode === 'solo' || !!hostToken;
 }
@@ -113,6 +116,11 @@ function updateLobby() {
   el('playerList').innerHTML = players
     .map((p) => `<li>${p.name === myName ? `${p.name} (You)` : p.name}</li>`)
     .join('');
+
+  if (mashupMode && amHost() && players.length >= 2 && !mashupAutoStarted) {
+    mashupAutoStarted = true;
+    socket.emit('puzzle:host:start', { code: roomCode, rounds: 1 });
+  }
 }
 
 el('startBtn').addEventListener('click', () => {
@@ -246,6 +254,7 @@ socket.on('puzzle:round:result', (data) => {
 });
 
 socket.on('puzzle:game:over', (data) => {
+  if (mashupMode) return reportMashupLegResult(socket, data.players);
   if (mode !== 'duo') return;
   gameArea.classList.add('hidden');
   gameOver.classList.remove('hidden');
@@ -365,3 +374,12 @@ function endSoloGame() {
     el('soloSummary').textContent = `Average ${(avg / 1000).toFixed(1)}s per puzzle · Personal best: ${(bestEver.avg / 1000).toFixed(1)}s`;
   }
 }
+
+// --- Party Mashup: auto-join and auto-start a single-round leg ------------
+(function initMashup() {
+  const mp = mashupParams();
+  if (!mp) return;
+  mashupMode = true;
+  rewireMashupQuitLink();
+  quickPlayJoin(mp.name);
+})();

@@ -84,6 +84,9 @@ function resetRoomState() {
   myName = null;
 }
 
+let mashupMode = false;
+let mashupAutoStarted = false;
+
 function amHost() {
   return mode === 'solo' || !!hostToken;
 }
@@ -107,6 +110,11 @@ function updateLobby() {
   el('playerList').innerHTML = players
     .map((p) => `<li>${p.name === myName ? `${p.name} (You)` : p.name}</li>`)
     .join('');
+
+  if (mashupMode && amHost() && players.length >= 2 && !mashupAutoStarted) {
+    mashupAutoStarted = true;
+    socket.emit('balloon:host:start', { code: roomCode, rounds: 1 });
+  }
 }
 
 el('startBtn').addEventListener('click', () => {
@@ -142,8 +150,8 @@ function spawnOne() {
   const item = document.createElement('div');
   item.className = 'balloon-item' + (isBomb ? ' bomb' : '');
   item.textContent = isBomb ? '💣' : '🎈';
-  item.style.left = `${6 + Math.random() * 84}%`;
-  const duration = 2200 + Math.random() * 900;
+  item.style.left = `${4 + Math.random() * 76}%`;
+  const duration = 2800 + Math.random() * 1100;
   item.style.transition = `transform ${duration}ms linear`;
   arena.appendChild(item);
 
@@ -161,14 +169,22 @@ function spawnOne() {
       clearTimeout(removeTimer);
       if (isBomb) {
         liveScore = Math.max(0, liveScore - 1);
-        item.classList.add('popped-bomb');
       } else {
         liveScore += 1;
-        item.classList.add('popped');
         hapticTap();
       }
       el('balloonLive').textContent = liveScore;
       item.style.pointerEvents = 'none';
+      // Pop in place from wherever the rise animation currently has it —
+      // grabbing the live computed transform (rather than swapping to a CSS
+      // keyframe class, which would reset transform and make it visibly
+      // jump back to its start position before popping).
+      const currentTransform = getComputedStyle(item).transform;
+      const base = currentTransform === 'none' ? '' : currentTransform;
+      item.style.transition = 'transform 160ms ease, opacity 160ms ease';
+      item.style.transform = `${base} scale(${isBomb ? 1.3 : 1.6})`;
+      item.style.opacity = '0';
+      if (isBomb) item.style.filter = 'brightness(2) drop-shadow(0 0 12px #ff6b6b)';
       setTimeout(() => item.remove(), 160);
     },
     { once: true }
@@ -179,7 +195,7 @@ function scheduleNextSpawn() {
   spawnTimer = setTimeout(() => {
     spawnOne();
     if (spawning) scheduleNextSpawn();
-  }, 480 + Math.random() * 360);
+  }, 420 + Math.random() * 320);
 }
 
 function startArenaRound(durationMs, deadline) {
@@ -243,6 +259,7 @@ socket.on('balloon:round:result', (data) => {
 });
 
 socket.on('balloon:game:over', (data) => {
+  if (mashupMode) return reportMashupLegResult(socket, data.players);
   if (mode !== 'duo') return;
   gameArea.classList.add('hidden');
   gameOver.classList.remove('hidden');
@@ -348,3 +365,12 @@ function endSoloGame() {
     el('soloSummary').textContent = `${soloScore} popped total · Best round ${soloBestSingleRound} · Personal best: ${bestEver.total} total`;
   }
 }
+
+// --- Party Mashup: auto-join and auto-start a single-round leg ------------
+(function initMashup() {
+  const mp = mashupParams();
+  if (!mp) return;
+  mashupMode = true;
+  rewireMashupQuitLink();
+  quickPlayJoin(mp.name);
+})();

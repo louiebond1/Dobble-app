@@ -1,0 +1,94 @@
+/* Party Mashup — setup/lobby game picker, between-leg transition screen, and
+   final results breakdown. Reuses .duel-stage/.duel-hud/.duel-middle etc.
+   from duel.css for the in-match screens. */
+
+.mashup-game-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.mashup-game-check {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.08);
+  font-weight: 600;
+  font-size: 0.92rem;
+  cursor: pointer;
+}
+
+.mashup-game-check input {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--accent);
+  margin: 0;
+}
+
+.mashup-loading {
+  align-items: center;
+  text-align: center;
+}
+
+.mashup-loading-emoji {
+  font-size: 3.4rem;
+  animation: mashupPulse 1s ease infinite alternate;
+}
+
+@keyframes mashupPulse {
+  from { transform: scale(1); opacity: 0.85; }
+  to { transform: scale(1.12); opacity: 1; }
+}
+
+.mashup-loading-text {
+  color: rgba(255, 255, 255, 0.85);
+  font-weight: 700;
+  margin-top: 10px;
+}
+
+.mashup-leg-result {
+  margin: 20px 16px 0;
+  padding: 20px 16px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.92);
+  color: var(--ink);
+  text-align: center;
+}
+
+.mashup-leg-title {
+  font-size: 1.3rem;
+  font-weight: 800;
+}
+
+.mashup-leg-winner {
+  margin-top: 6px;
+  font-weight: 600;
+  color: var(--accent-dark);
+}
+
+.mashup-next-up {
+  text-align: center;
+  color: rgba(255, 255, 255, 0.8);
+  font-weight: 600;
+  margin-top: 14px;
+}
+
+.mashup-leg-breakdown {
+  margin-top: 14px;
+  max-height: 220px;
+  overflow-y: auto;
+  text-align: left;
+}
+
+.mashup-leg-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 6px 4px;
+  font-size: 0.85rem;
+  color: rgba(255, 255, 255, 0.85);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}

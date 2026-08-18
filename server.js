@@ -77,6 +77,28 @@ const puzzleRooms = new Map();
 const PUZZLE_ROUND_MS = 90000;
 const PUZZLE_SIZE = 3; // 3x3, 8 tiles + 1 blank
 
+// Party Mashup — a decathlon-style match where each "leg" is a single round
+// (rounds: 1) of a different existing duel game, played on that game's own
+// page. It doesn't reimplement any game's rendering: reportMashupLegResult()
+// (public/layout.js) reads the winner off that game's own game:over payload
+// and reports it here, then the player is bounced back to /mashup for the
+// next leg. Compatibility Quiz is excluded — it has no single-round winner
+// (both players always score together), which doesn't fit "who won this leg".
+/** @type {Map<string, any>} */
+const mashupRooms = new Map();
+const MASHUP_GAMES = [
+  { key: 'reaction', label: 'Reaction Duel', emoji: '⚡', route: '/reaction' },
+  { key: 'trivia', label: 'Trivia Showdown', emoji: '🧠', route: '/trivia' },
+  { key: 'scramble', label: 'Word Scramble Sprint', emoji: '🔤', route: '/scramble' },
+  { key: 'blitz', label: 'Category Blitz', emoji: '🎯', route: '/blitz' },
+  { key: 'emoji', label: 'Emoji Decode', emoji: '🎭', route: '/emoji' },
+  { key: 'balloon', label: 'Balloon Pop Blitz', emoji: '🎈', route: '/balloon' },
+  { key: 'ttt', label: 'Tic-Tac-Toe Showdown', emoji: '⭕', route: '/ttt' },
+  { key: 'puzzle', label: 'Sliding Puzzle Race', emoji: '🧩', route: '/puzzle' },
+  { key: 'draw', label: 'Doodle Duel', emoji: '🎨', route: '/draw' },
+];
+const MASHUP_GAME_KEYS = new Set(MASHUP_GAMES.map((g) => g.key));
+
 // Lifetime win/speed stats, keyed by lowercased player name so "Louie" and
 // "louie" are the same person. Persisted to a local JSON file — this survives
 // normal restarts but NOT a fresh Railway deploy (new container, blank disk)
@@ -907,7 +929,20 @@ function emojiRoomPlayers(room) {
 function pickEmojiPuzzle(usedIds) {
   const pool = EMOJI_PUZZLES.filter((q) => !usedIds.has(q.id));
   const source = pool.length ? pool : EMOJI_PUZZLES;
-  return source[Math.floor(Math.random() * source.length)];
+  const puzzle = source[Math.floor(Math.random() * source.length)];
+  // The bank's own option order clusters the correct answer at index 0 far
+  // more than chance would — shuffle per-deal so the answer position isn't
+  // predictable round to round.
+  return { ...puzzle, ...shuffleOptions(puzzle.options, puzzle.correctIndex) };
+}
+
+function shuffleOptions(options, correctIndex) {
+  const order = options.map((_, i) => i);
+  for (let i = order.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [order[i], order[j]] = [order[j], order[i]];
+  }
+  return { options: order.map((i) => options[i]), correctIndex: order.indexOf(correctIndex) };
 }
 
 function startEmojiRound(code) {
@@ -1169,6 +1204,54 @@ function resolvePuzzleRound(code, { timedOut = false, winnerSocketId = null } = 
 
   room.currentPhoto = null;
   setTimeout(() => startPuzzleRound(code), 2800);
+}
+
+// --- Party Mashup helpers ----------------------------------------------------
+
+function mashupRoomPlayers(room) {
+  return Array.from(room.players.values()).map((p) => ({ name: p.name, score: p.score }));
+}
+
+// Builds a leg order of exactly `totalLegs` game keys with no repeats until
+// every selected game has appeared once (repeated shuffled passes through
+// the pool, concatenated and trimmed) — a fair rotation instead of pure
+// random-with-replacement, which could otherwise repeat the same game twice
+// in a row.
+function buildMashupLegOrder(gameKeys, totalLegs) {
+  const pool = gameKeys && gameKeys.length ? gameKeys : MASHUP_GAMES.map((g) => g.key);
+  const order = [];
+  while (order.length < totalLegs) {
+    const shuffled = pool.slice();
+    for (let i = shuffled.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+    }
+    order.push(...shuffled);
+  }
+  return order.slice(0, totalLegs);
+}
+
+// Dispatches the next leg: picks the next game in legOrder, marks the room
+// as awaiting that leg's result, and broadcasts it so any client currently
+// sitting on /mashup (lobby or leg-transition screen) redirects to it.
+// Clients that reconnect later (having already navigated away) instead learn
+// about the active leg from the join ack — see mashup:quickplay:join.
+function startMashupLeg(code) {
+  const room = mashupRooms.get(code);
+  if (!room || room.awaitingResult || room.legIndex >= room.legOrder.length) return;
+
+  const gameKey = room.legOrder[room.legIndex];
+  const game = MASHUP_GAMES.find((g) => g.key === gameKey);
+  room.legIndex += 1;
+  room.awaitingResult = true;
+  room.currentGame = game;
+
+  io.to(`mashup:${code}`).emit('mashup:leg:start', {
+    legIndex: room.legIndex,
+    totalLegs: room.legOrder.length,
+    game,
+    players: mashupRoomPlayers(room),
+  });
 }
 
 function buildCard(indices) {
@@ -1637,7 +1720,7 @@ io.on('connection', (socket) => {
     const code = String((payload && payload.code) || '').toUpperCase();
     const room = drawRooms.get(code);
     if (!room || room.hostSocketId !== socket.id || room.players.size < 2) return;
-    room.totalRounds = Math.max(2, Math.min(20, Number(payload && payload.rounds) || 8));
+    room.totalRounds = Math.max(1, Math.min(20, Number(payload && payload.rounds) || 8));
     room.roundNumber = 0;
     room.usedWordIds = new Set();
     room.playerOrder = Array.from(room.players.keys());
@@ -1770,7 +1853,7 @@ io.on('connection', (socket) => {
     const code = String((payload && payload.code) || '').toUpperCase();
     const room = reactionRooms.get(code);
     if (!room || room.hostSocketId !== socket.id || room.players.size < 2) return;
-    room.totalRounds = Math.max(2, Math.min(20, Number(payload && payload.rounds) || 8));
+    room.totalRounds = Math.max(1, Math.min(20, Number(payload && payload.rounds) || 8));
     room.roundNumber = 0;
     room.started = true;
     for (const p of room.players.values()) p.score = 0;
@@ -1877,7 +1960,7 @@ io.on('connection', (socket) => {
     const code = String((payload && payload.code) || '').toUpperCase();
     const room = triviaRooms.get(code);
     if (!room || room.hostSocketId !== socket.id || room.players.size < 2) return;
-    room.totalRounds = Math.max(2, Math.min(25, Number(payload && payload.rounds) || 8));
+    room.totalRounds = Math.max(1, Math.min(25, Number(payload && payload.rounds) || 8));
     room.roundNumber = 0;
     room.usedQuestionIds = new Set();
     room.started = true;
@@ -1969,7 +2052,7 @@ io.on('connection', (socket) => {
     const code = String((payload && payload.code) || '').toUpperCase();
     const room = scrambleRooms.get(code);
     if (!room || room.hostSocketId !== socket.id || room.players.size < 2) return;
-    room.totalRounds = Math.max(2, Math.min(25, Number(payload && payload.rounds) || 8));
+    room.totalRounds = Math.max(1, Math.min(25, Number(payload && payload.rounds) || 8));
     room.roundNumber = 0;
     room.usedWordIds = new Set();
     room.started = true;
@@ -2143,7 +2226,7 @@ io.on('connection', (socket) => {
     const code = String((payload && payload.code) || '').toUpperCase();
     const room = blitzRooms.get(code);
     if (!room || room.hostSocketId !== socket.id || room.players.size < 2) return;
-    room.totalRounds = Math.max(2, Math.min(10, Number(payload && payload.rounds) || 5));
+    room.totalRounds = Math.max(1, Math.min(10, Number(payload && payload.rounds) || 5));
     room.roundNumber = 0;
     room.started = true;
     for (const p of room.players.values()) p.score = 0;
@@ -2230,7 +2313,7 @@ io.on('connection', (socket) => {
     const code = String((payload && payload.code) || '').toUpperCase();
     const room = emojiRooms.get(code);
     if (!room || room.hostSocketId !== socket.id || room.players.size < 2) return;
-    room.totalRounds = Math.max(2, Math.min(25, Number(payload && payload.rounds) || 8));
+    room.totalRounds = Math.max(1, Math.min(25, Number(payload && payload.rounds) || 8));
     room.roundNumber = 0;
     room.usedPuzzleIds = new Set();
     room.started = true;
@@ -2320,7 +2403,7 @@ io.on('connection', (socket) => {
     const code = String((payload && payload.code) || '').toUpperCase();
     const room = balloonRooms.get(code);
     if (!room || room.hostSocketId !== socket.id || room.players.size < 2) return;
-    room.totalRounds = Math.max(2, Math.min(10, Number(payload && payload.rounds) || 5));
+    room.totalRounds = Math.max(1, Math.min(10, Number(payload && payload.rounds) || 5));
     room.roundNumber = 0;
     room.started = true;
     for (const p of room.players.values()) p.score = 0;
@@ -2501,7 +2584,7 @@ io.on('connection', (socket) => {
     const code = String((payload && payload.code) || '').toUpperCase();
     const room = puzzleRooms.get(code);
     if (!room || room.hostSocketId !== socket.id || room.players.size < 2) return;
-    room.totalRounds = Math.max(2, Math.min(10, Number(payload && payload.rounds) || 5));
+    room.totalRounds = Math.max(1, Math.min(10, Number(payload && payload.rounds) || 5));
     room.roundNumber = 0;
     room.usedPhotoIds = new Set();
     room.started = true;
@@ -2514,6 +2597,155 @@ io.on('connection', (socket) => {
     const room = puzzleRooms.get(code);
     if (!room || !room.roundActive || !room.players.has(socket.id)) return;
     resolvePuzzleRound(code, { timedOut: false, winnerSocketId: socket.id });
+  });
+
+  // --- Party Mashup ------------------------------------------------------
+  // Unlike every other game's quickplay:join, this one has to survive full
+  // page navigations *mid-match* — each leg is played on a different game's
+  // own page, so the player's socket disconnects and reconnects with a new
+  // socket.id between every leg. Re-attach by matching on name instead of
+  // wiping the room, so an in-progress match (legOrder/legIndex/scores)
+  // isn't reset just because someone's tab navigated away and back.
+
+  socket.on('mashup:quickplay:join', (payload, ack) => {
+    const name = String((payload && payload.name) || '').trim().slice(0, 20) || 'Player';
+    const code = 'OURS';
+    let room = mashupRooms.get(code);
+
+    // Deliberately no dead-socket pruning here (unlike every other game's
+    // quickplay:join) — a mashup player's socket disconnects and
+    // reconnects with a new socket.id on *every single leg transition* by
+    // design (full page navigation to and from each game). Pruning by
+    // socket id would delete the score-bearing player entry the instant
+    // they leave for a leg, right before the name-match reattach below
+    // could reclaim it. The reattach logic already handles staleness
+    // correctly on its own.
+    if (!room) {
+      room = {
+        code,
+        players: new Map(),
+        hostSocketId: null,
+        hostToken: null,
+        started: false,
+        legOrder: [],
+        legIndex: 0,
+        legResults: [],
+        awaitingResult: false,
+        currentGame: null,
+        createdAt: Date.now(),
+      };
+      mashupRooms.set(code, room);
+    }
+
+    const existingEntry = Array.from(room.players.entries()).find(([, p]) => p.name === name);
+    if (existingEntry) {
+      const [oldSocketId, playerData] = existingEntry;
+      room.players.delete(oldSocketId);
+      room.players.set(socket.id, playerData);
+      if (room.hostSocketId === oldSocketId) room.hostSocketId = socket.id;
+    } else {
+      room.players.set(socket.id, { name, score: 0 });
+    }
+
+    let isHost = false;
+    let hostToken = null;
+    if (!room.hostSocketId || !io.sockets.sockets.has(room.hostSocketId)) {
+      isHost = true;
+      hostToken = crypto.randomUUID();
+      room.hostToken = hostToken;
+      room.hostSocketId = socket.id;
+    } else if (room.hostSocketId === socket.id) {
+      isHost = true;
+      hostToken = room.hostToken;
+    }
+
+    socket.join(`mashup:${code}`);
+    socket.data.mashupRole = 'player';
+    socket.data.mashupCode = code;
+    if (typeof ack === 'function') {
+      ack({
+        ok: true,
+        code,
+        name,
+        isHost,
+        hostToken,
+        started: room.started,
+        awaitingResult: room.awaitingResult,
+        currentGame: room.currentGame,
+        legIndex: room.legIndex,
+        totalLegs: room.legOrder.length,
+        legs: room.legResults,
+        players: mashupRoomPlayers(room),
+      });
+    }
+    io.to(`mashup:${code}`).emit('mashup:players:update', mashupRoomPlayers(room));
+  });
+
+  socket.on('mashup:host:cancel', (payload) => {
+    const code = String((payload && payload.code) || '').toUpperCase();
+    const room = mashupRooms.get(code);
+    if (!room || room.hostSocketId !== socket.id) return;
+    io.to(`mashup:${code}`).emit('mashup:room:cancelled');
+    mashupRooms.delete(code);
+  });
+
+  socket.on('mashup:host:start', (payload, ack) => {
+    const code = String((payload && payload.code) || '').toUpperCase();
+    const room = mashupRooms.get(code);
+    if (!room || room.hostSocketId !== socket.id || room.players.size < 2) {
+      if (typeof ack === 'function') ack({ ok: false });
+      return;
+    }
+    const requestedGames = Array.isArray(payload && payload.games)
+      ? payload.games.filter((g) => MASHUP_GAME_KEYS.has(g))
+      : [];
+    const totalLegs = Math.max(3, Math.min(20, Number(payload && payload.legs) || 7));
+    room.legOrder = buildMashupLegOrder(requestedGames, totalLegs);
+    room.legIndex = 0;
+    room.legResults = [];
+    room.awaitingResult = false;
+    room.currentGame = null;
+    room.started = true;
+    for (const p of room.players.values()) p.score = 0;
+    if (typeof ack === 'function') ack({ ok: true });
+    startMashupLeg(code);
+  });
+
+  // Requests the next leg — sent by the host's client after it's shown the
+  // previous leg's result for a couple of seconds. Harmless if a race causes
+  // a duplicate call: startMashupLeg() no-ops once awaitingResult is true.
+  socket.on('mashup:next', (payload) => {
+    const code = String((payload && payload.code) || '').toUpperCase();
+    startMashupLeg(code);
+  });
+
+  // Fired by an individual game's client (reportMashupLegResult in
+  // layout.js) once its single-round leg has resolved. Both players in that
+  // game typically report at nearly the same instant since they both
+  // receive that game's own game:over broadcast together — awaitingResult
+  // makes the second report a harmless no-op that still acks (so both
+  // clients redirect back to /mashup).
+  socket.on('mashup:leg:result', (payload, ack) => {
+    const code = String((payload && payload.code) || '').toUpperCase();
+    const room = mashupRooms.get(code);
+    if (!room || !room.started || !room.awaitingResult) {
+      if (typeof ack === 'function') ack();
+      return;
+    }
+    room.awaitingResult = false;
+    const winnerName = payload && payload.winnerName ? String(payload.winnerName).slice(0, 20) : null;
+    if (winnerName) {
+      for (const p of room.players.values()) {
+        if (p.name === winnerName) p.score += 1;
+      }
+    }
+    room.legResults.push({ game: room.currentGame, winnerName });
+    room.currentGame = null;
+    if (typeof ack === 'function') ack();
+    io.to(`mashup:${code}`).emit('mashup:leg:result', {
+      legs: room.legResults,
+      players: mashupRoomPlayers(room),
+    });
   });
 
   socket.on('disconnect', () => {
@@ -2609,6 +2841,11 @@ io.on('connection', (socket) => {
         io.to(`puzzle:${puzzleCode}`).emit('puzzle:players:update', puzzleRoomPlayers(room));
       }
     }
+    // Deliberately no cleanup here — a mashup player's socket disconnects on
+    // every single leg transition by design (see mashup:quickplay:join), so
+    // deleting the player entry on disconnect would wipe their score right
+    // before they reattach on the next page. Genuinely abandoned mashup
+    // rooms are still reclaimed by the periodic TTL sweep below.
   });
 
   // --- "What Would You Say?" ---------------------------------------------
@@ -2876,6 +3113,9 @@ setInterval(() => {
       puzzleRooms.delete(code);
     }
   }
+  for (const [code, room] of mashupRooms) {
+    if (now - room.createdAt > ROOM_TTL_MS) mashupRooms.delete(code);
+  }
 }, 30 * 60 * 1000);
 
 app.get('/api/leaderboard', (req, res) => {
@@ -3015,6 +3255,17 @@ app.get('/ttt', (req, res) => {
 
 app.get('/puzzle', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'puzzle.html'));
+});
+
+app.get('/mashup', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'mashup.html'));
+});
+
+// Small static catalog the setup screen's game picker renders from — kept
+// server-side too so MASHUP_GAME_KEYS stays the single source of truth for
+// which games are eligible.
+app.get('/api/mashup-games', (req, res) => {
+  res.json({ games: MASHUP_GAMES });
 });
 
 function pickRandomDistinct(arr, n) {

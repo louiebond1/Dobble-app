@@ -87,6 +87,9 @@ function resetRoomState() {
   myName = null;
 }
 
+let mashupMode = false;
+let mashupAutoStarted = false;
+
 function amHost() {
   return !!hostToken;
 }
@@ -110,6 +113,11 @@ function updateLobby() {
   el('playerList').innerHTML = players
     .map((p) => `<li>${p.name === myName ? `${p.name} (You)` : p.name}</li>`)
     .join('');
+
+  if (mashupMode && amHost() && players.length >= 2 && !mashupAutoStarted) {
+    mashupAutoStarted = true;
+    socket.emit('emoji:host:start', { code: roomCode, rounds: 1 });
+  }
 }
 
 el('startBtn').addEventListener('click', () => {
@@ -223,6 +231,7 @@ socket.on('emoji:round:result', (data) => {
 });
 
 socket.on('emoji:game:over', (data) => {
+  if (mashupMode) return reportMashupLegResult(socket, data.players);
   if (mode !== 'duo') return;
   gameArea.classList.add('hidden');
   gameOver.classList.remove('hidden');
@@ -267,6 +276,13 @@ function shuffle(arr) {
   return a;
 }
 
+// The bank's own option order clusters the correct answer at index 0 far
+// more than chance would — shuffle per-deal so it isn't predictable.
+function shuffleOptions(options, correctIndex) {
+  const order = shuffle(options.map((_, i) => i));
+  return { options: order.map((i) => options[i]), correctIndex: order.indexOf(correctIndex) };
+}
+
 el('soloStartBtn').addEventListener('click', () => {
   if (!allPuzzles.length) return; // still loading — button is effectively a no-op until ready
   soloName = el('soloNameInput').value.trim() || 'You';
@@ -296,7 +312,8 @@ function startSoloRound() {
   if (roundNumber >= totalRounds) return endSoloGame();
 
   roundNumber += 1;
-  soloCurrentPuzzle = soloQueue[roundNumber - 1];
+  const raw = soloQueue[roundNumber - 1];
+  soloCurrentPuzzle = { ...raw, ...shuffleOptions(raw.options, raw.correctIndex) };
   roundActive = true;
   myWrong = false;
   el('hudP1Score').textContent = soloScore;
@@ -380,3 +397,12 @@ function endSoloGame() {
     el('soloSummary').textContent = `${soloScore} / ${totalRounds} correct (${pct}%) · Personal best: ${bestEver.score} / ${bestEver.total}`;
   }
 }
+
+// --- Party Mashup: auto-join and auto-start a single-round leg ------------
+(function initMashup() {
+  const mp = mashupParams();
+  if (!mp) return;
+  mashupMode = true;
+  rewireMashupQuitLink();
+  quickPlayJoin(mp.name);
+})();

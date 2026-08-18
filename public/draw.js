@@ -78,6 +78,9 @@ function resetRoomState() {
   myName = null;
 }
 
+let mashupMode = false;
+let mashupAutoStarted = false;
+
 function amHost() {
   return !!hostToken;
 }
@@ -101,6 +104,11 @@ function updateLobby() {
   el('playerList').innerHTML = players
     .map((p) => `<li>${p.name === myName ? `${p.name} (You)` : p.name}</li>`)
     .join('');
+
+  if (mashupMode && amHost() && players.length >= 2 && !mashupAutoStarted) {
+    mashupAutoStarted = true;
+    socket.emit('draw:host:start', { code: roomCode, rounds: 1 });
+  }
 }
 
 el('startBtn').addEventListener('click', () => {
@@ -416,6 +424,7 @@ socket.on('draw:round:result', (data) => {
 });
 
 socket.on('draw:game:over', (data) => {
+  if (mashupMode) return reportMashupLegResult(socket, data.players);
   clearInterval(timerInterval);
   gameArea.classList.add('hidden');
   gameOver.classList.remove('hidden');
@@ -438,3 +447,12 @@ el('playAgainBtn').addEventListener('click', () => {
 window.addEventListener('resize', () => {
   if (!gameArea.classList.contains('hidden')) resizeCanvas();
 });
+
+// --- Party Mashup: auto-join and auto-start a single-round leg ------------
+(function initMashup() {
+  const mp = mashupParams();
+  if (!mp) return;
+  mashupMode = true;
+  rewireMashupQuitLink();
+  quickPlayJoin(mp.name);
+})();
