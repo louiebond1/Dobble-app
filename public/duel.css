@@ -381,52 +381,6 @@
   color: white;
 }
 
-/* --- Balloon Pop Blitz --- */
-
-.balloon-status-bar {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-  margin: 0 16px 8px;
-  color: white;
-  font-weight: 700;
-  font-size: 0.9rem;
-}
-
-.balloon-timer {
-  color: rgba(255, 255, 255, 0.8);
-  font-weight: 600;
-}
-
-.balloon-arena {
-  position: relative;
-  flex: 1;
-  min-height: 0;
-  margin: 0 16px calc(14px + env(safe-area-inset-bottom));
-  border-radius: 18px;
-  background: rgba(255, 255, 255, 0.08);
-  overflow: hidden;
-  touch-action: manipulation;
-}
-
-.balloon-item {
-  position: absolute;
-  bottom: -14px;
-  width: 58px;
-  height: 58px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 2.1rem;
-  line-height: 1;
-  cursor: pointer;
-  user-select: none;
-  touch-action: manipulation;
-  will-change: transform;
-  filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.25));
-}
-
 /* --- Category Blitz --- */
 
 .blitz-letter-bar {

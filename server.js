@@ -61,10 +61,6 @@ const emojiRooms = new Map();
 const EMOJI_ROUND_MS = 18000;
 
 /** @type {Map<string, any>} */
-const balloonRooms = new Map();
-const BALLOON_ROUND_MS = 12000;
-
-/** @type {Map<string, any>} */
 const tttRooms = new Map();
 const TTT_LINES = [
   [0, 1, 2], [3, 4, 5], [6, 7, 8],
@@ -92,7 +88,6 @@ const MASHUP_GAMES = [
   { key: 'scramble', label: 'Word Scramble Sprint', emoji: '🔤', route: '/scramble' },
   { key: 'blitz', label: 'Category Blitz', emoji: '🎯', route: '/blitz' },
   { key: 'emoji', label: 'Emoji Decode', emoji: '🎭', route: '/emoji' },
-  { key: 'balloon', label: 'Balloon Pop Blitz', emoji: '🎈', route: '/balloon' },
   { key: 'ttt', label: 'Tic-Tac-Toe Showdown', emoji: '⭕', route: '/ttt' },
   { key: 'puzzle', label: 'Sliding Puzzle Race', emoji: '🧩', route: '/puzzle' },
   { key: 'draw', label: 'Doodle Duel', emoji: '🎨', route: '/draw' },
@@ -997,64 +992,6 @@ function resolveEmojiRound(code, { timedOut = false, winnerSocketId = null } = {
 
   room.currentPuzzle = null;
   setTimeout(() => startEmojiRound(code), 2800);
-}
-
-// --- Balloon Pop Blitz helpers -----------------------------------------------
-// Each side pops balloons on their own screen for a fixed window and reports
-// their final tally — a score-attack round rather than a synced race.
-
-function balloonRoomPlayers(room) {
-  return Array.from(room.players.values()).map((p) => ({ name: p.name, score: p.score }));
-}
-
-function startBalloonRound(code) {
-  const room = balloonRooms.get(code);
-  if (!room) return;
-
-  if (room.roundNumber >= room.totalRounds) {
-    room.started = false;
-    io.to(`balloon:${code}`).emit('balloon:game:over', { players: balloonRoomPlayers(room) });
-    return;
-  }
-
-  room.roundNumber += 1;
-  room.roundActive = true;
-  room.roundScores = new Map();
-  room.roundDeadline = Date.now() + BALLOON_ROUND_MS;
-
-  io.to(`balloon:${code}`).emit('balloon:round:start', {
-    roundNumber: room.roundNumber,
-    totalRounds: room.totalRounds,
-    durationMs: BALLOON_ROUND_MS,
-    deadline: room.roundDeadline,
-    players: balloonRoomPlayers(room),
-  });
-
-  clearTimeout(room.roundTimer);
-  // Extra grace beyond the round duration for the client's final score report to arrive.
-  room.roundTimer = setTimeout(() => resolveBalloonRound(code), BALLOON_ROUND_MS + 1500);
-}
-
-function resolveBalloonRound(code) {
-  const room = balloonRooms.get(code);
-  if (!room || !room.roundActive) return;
-  clearTimeout(room.roundTimer);
-  room.roundActive = false;
-
-  const socketIds = Array.from(room.players.keys());
-  const scores = socketIds.map((sid) => room.roundScores.get(sid) || 0);
-  if (scores.length === 2 && scores[0] !== scores[1]) {
-    const winnerId = socketIds[scores[0] > scores[1] ? 0 : 1];
-    const winner = room.players.get(winnerId);
-    if (winner) winner.score += 1;
-  }
-
-  io.to(`balloon:${code}`).emit('balloon:round:result', {
-    roundScores: socketIds.map((sid, i) => ({ name: (room.players.get(sid) || {}).name, popped: scores[i] })),
-    players: balloonRoomPlayers(room),
-  });
-
-  setTimeout(() => startBalloonRound(code), 2800);
 }
 
 // --- Tic-Tac-Toe Showdown helpers --------------------------------------------
@@ -2341,88 +2278,6 @@ io.on('connection', (socket) => {
     }
   });
 
-  // --- Balloon Pop Blitz -------------------------------------------------------
-
-  socket.on('balloon:quickplay:join', (payload, ack) => {
-    const name = String((payload && payload.name) || '').trim().slice(0, 20) || 'Player';
-    const code = 'OURS';
-    let room = balloonRooms.get(code);
-    if (room) {
-      for (const pid of room.players.keys()) {
-        if (!io.sockets.sockets.has(pid)) room.players.delete(pid);
-      }
-    }
-    let isHost = false;
-    let hostToken = null;
-    if (!room || room.players.size === 0 || !io.sockets.sockets.has(room.hostSocketId)) {
-      isHost = true;
-      hostToken = crypto.randomUUID();
-      if (!room) {
-        room = {
-          code,
-          players: new Map(),
-          started: false,
-          totalRounds: 5,
-          roundNumber: 0,
-          roundActive: false,
-          roundScores: new Map(),
-          roundDeadline: null,
-          roundTimer: null,
-          createdAt: Date.now(),
-        };
-        balloonRooms.set(code, room);
-      } else {
-        clearTimeout(room.roundTimer);
-        room.started = false;
-        room.roundNumber = 0;
-        room.roundActive = false;
-      }
-      room.hostToken = hostToken;
-      room.hostSocketId = socket.id;
-    }
-    room.players.set(socket.id, { name, score: 0 });
-    socket.join(`balloon:${code}`);
-    socket.data.balloonRole = isHost ? 'host' : 'player';
-    socket.data.balloonCode = code;
-    if (typeof ack === 'function') {
-      ack({ ok: true, code, name, isHost, hostToken, started: room.started });
-    }
-    io.to(`balloon:${code}`).emit('balloon:players:update', balloonRoomPlayers(room));
-  });
-
-  socket.on('balloon:host:cancel', (payload) => {
-    const code = String((payload && payload.code) || '').toUpperCase();
-    const room = balloonRooms.get(code);
-    if (!room || room.hostSocketId !== socket.id) return;
-    clearTimeout(room.roundTimer);
-    io.to(`balloon:${code}`).emit('balloon:room:cancelled');
-    balloonRooms.delete(code);
-  });
-
-  socket.on('balloon:host:start', (payload) => {
-    const code = String((payload && payload.code) || '').toUpperCase();
-    const room = balloonRooms.get(code);
-    if (!room || room.hostSocketId !== socket.id || room.players.size < 2) return;
-    room.totalRounds = Math.max(1, Math.min(10, Number(payload && payload.rounds) || 5));
-    room.roundNumber = 0;
-    room.started = true;
-    for (const p of room.players.values()) p.score = 0;
-    startBalloonRound(code);
-  });
-
-  socket.on('balloon:score', (payload) => {
-    const code = String((payload && payload.code) || '').toUpperCase();
-    const score = Math.max(0, Math.min(999, Number(payload && payload.score) || 0));
-    const room = balloonRooms.get(code);
-    if (!room || !room.roundActive || !room.players.has(socket.id)) return;
-    if (room.roundScores.has(socket.id)) return;
-    room.roundScores.set(socket.id, score);
-    socket.to(`balloon:${code}`).emit('balloon:opponent:done');
-    if (room.roundScores.size >= room.players.size) {
-      resolveBalloonRound(code);
-    }
-  });
-
   // --- Tic-Tac-Toe Showdown -----------------------------------------------------
 
   socket.on('ttt:quickplay:join', (payload, ack) => {
@@ -2820,13 +2675,6 @@ io.on('connection', (socket) => {
         io.to(`emoji:${emojiCode}`).emit('emoji:players:update', emojiRoomPlayers(room));
       }
     }
-    const balloonCode = socket.data.balloonCode;
-    if (balloonCode) {
-      const room = balloonRooms.get(balloonCode);
-      if (room && socket.data.balloonRole === 'player' && room.players.delete(socket.id)) {
-        io.to(`balloon:${balloonCode}`).emit('balloon:players:update', balloonRoomPlayers(room));
-      }
-    }
     const tttCode = socket.data.tttCode;
     if (tttCode) {
       const room = tttRooms.get(tttCode);
@@ -3098,12 +2946,6 @@ setInterval(() => {
       emojiRooms.delete(code);
     }
   }
-  for (const [code, room] of balloonRooms) {
-    if (now - room.createdAt > ROOM_TTL_MS) {
-      clearTimeout(room.roundTimer);
-      balloonRooms.delete(code);
-    }
-  }
   for (const [code, room] of tttRooms) {
     if (now - room.createdAt > ROOM_TTL_MS) tttRooms.delete(code);
   }
@@ -3243,10 +3085,6 @@ app.get('/blitz', (req, res) => {
 
 app.get('/emoji', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'emoji.html'));
-});
-
-app.get('/balloon', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'balloon.html'));
 });
 
 app.get('/ttt', (req, res) => {
