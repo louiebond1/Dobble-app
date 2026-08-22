@@ -12,9 +12,6 @@ const { DATES, CATEGORIES: DATE_CATEGORIES } = require('./lib/dates');
 const { DECK: DRAW_WORDS } = require('./lib/drawWords');
 const { TRIVIA_QUESTIONS } = require('./lib/triviaQuestions');
 const { SCRAMBLE_WORDS } = require('./lib/scrambleWords');
-const { QUESTIONS: COMPAT_QUESTIONS } = require('./lib/compatibilityQuestions');
-const { CATEGORIES: BLITZ_CATEGORIES, LETTER_POOL: BLITZ_LETTERS } = require('./lib/categories');
-const { EMOJI_PUZZLES } = require('./lib/emojiPuzzles');
 
 const app = express();
 const server = http.createServer(app);
@@ -48,19 +45,6 @@ const scrambleRooms = new Map();
 const SCRAMBLE_ROUND_MS = 35000;
 
 /** @type {Map<string, any>} */
-const compatRooms = new Map();
-const COMPAT_ROUND_MS = 15000;
-
-/** @type {Map<string, any>} */
-const blitzRooms = new Map();
-const BLITZ_ROUND_MS = 60000;
-const BLITZ_CATEGORIES_PER_ROUND = 4;
-
-/** @type {Map<string, any>} */
-const emojiRooms = new Map();
-const EMOJI_ROUND_MS = 18000;
-
-/** @type {Map<string, any>} */
 const tttRooms = new Map();
 const TTT_LINES = [
   [0, 1, 2], [3, 4, 5], [6, 7, 8],
@@ -78,16 +62,13 @@ const PUZZLE_SIZE = 3; // 3x3, 8 tiles + 1 blank
 // page. It doesn't reimplement any game's rendering: reportMashupLegResult()
 // (public/layout.js) reads the winner off that game's own game:over payload
 // and reports it here, then the player is bounced back to /mashup for the
-// next leg. Compatibility Quiz is excluded — it has no single-round winner
-// (both players always score together), which doesn't fit "who won this leg".
+// next leg.
 /** @type {Map<string, any>} */
 const mashupRooms = new Map();
 const MASHUP_GAMES = [
   { key: 'reaction', label: 'Reaction Duel', emoji: '⚡', route: '/reaction' },
   { key: 'trivia', label: 'Trivia Showdown', emoji: '🧠', route: '/trivia' },
   { key: 'scramble', label: 'Word Scramble Sprint', emoji: '🔤', route: '/scramble' },
-  { key: 'blitz', label: 'Category Blitz', emoji: '🎯', route: '/blitz' },
-  { key: 'emoji', label: 'Emoji Decode', emoji: '🎭', route: '/emoji' },
   { key: 'ttt', label: 'Tic-Tac-Toe Showdown', emoji: '⭕', route: '/ttt' },
   { key: 'puzzle', label: 'Sliding Puzzle Race', emoji: '🧩', route: '/puzzle' },
   { key: 'draw', label: 'Doodle Duel', emoji: '🎨', route: '/draw' },
@@ -741,257 +722,6 @@ function resolveScrambleRound(code, { timedOut = false, winnerSocketId = null } 
 
   room.currentWord = null;
   setTimeout(() => startScrambleRound(code), 2400);
-}
-
-// --- Compatibility Quiz helpers ---------------------------------------------
-// Unlike a race game, both players answer the same "about us" question
-// simultaneously and privately; a round resolves once both have answered (or
-// the timer runs out) and scores only when their picks match.
-
-function compatRoomPlayers(room) {
-  return Array.from(room.players.values()).map((p) => ({ name: p.name, score: p.score }));
-}
-
-function pickCompatQuestion(usedIds) {
-  const pool = COMPAT_QUESTIONS.filter((q) => !usedIds.has(q.id));
-  const source = pool.length ? pool : COMPAT_QUESTIONS;
-  return source[Math.floor(Math.random() * source.length)];
-}
-
-function startCompatRound(code) {
-  const room = compatRooms.get(code);
-  if (!room) return;
-
-  if (room.roundNumber >= room.totalRounds) {
-    room.started = false;
-    io.to(`compat:${code}`).emit('compat:game:over', { players: compatRoomPlayers(room), inSync: room.inSync });
-    return;
-  }
-
-  room.roundNumber += 1;
-  const question = pickCompatQuestion(room.usedQuestionIds);
-  room.usedQuestionIds.add(question.id);
-  room.currentQuestion = question;
-  room.roundActive = true;
-  room.answers = new Map();
-
-  io.to(`compat:${code}`).emit('compat:round:start', {
-    roundNumber: room.roundNumber,
-    totalRounds: room.totalRounds,
-    question: question.question,
-    options: question.options,
-    players: compatRoomPlayers(room),
-  });
-
-  clearTimeout(room.roundTimer);
-  room.roundTimer = setTimeout(() => resolveCompatRound(code, { timedOut: true }), COMPAT_ROUND_MS);
-}
-
-function resolveCompatRound(code, { timedOut = false } = {}) {
-  const room = compatRooms.get(code);
-  if (!room || !room.roundActive) return;
-  clearTimeout(room.roundTimer);
-  room.roundActive = false;
-
-  const choices = {};
-  for (const [sid, choice] of room.answers) {
-    const p = room.players.get(sid);
-    if (p) choices[p.name] = choice;
-  }
-  const values = Object.values(choices);
-  const matched = room.players.size === 2 && values.length === 2 && values[0] === values[1];
-  if (matched) {
-    room.inSync += 1;
-    for (const p of room.players.values()) p.score += 1;
-  }
-
-  io.to(`compat:${code}`).emit('compat:round:result', {
-    timedOut,
-    matched,
-    choices,
-    options: room.currentQuestion.options,
-    players: compatRoomPlayers(room),
-  });
-
-  room.currentQuestion = null;
-  setTimeout(() => startCompatRound(code), 3200);
-}
-
-// --- Category Blitz helpers -------------------------------------------------
-
-function blitzRoomPlayers(room) {
-  return Array.from(room.players.values()).map((p) => ({ name: p.name, score: p.score }));
-}
-
-function pickBlitzRound() {
-  const letter = BLITZ_LETTERS[Math.floor(Math.random() * BLITZ_LETTERS.length)];
-  const pool = BLITZ_CATEGORIES.slice();
-  const categories = [];
-  while (categories.length < BLITZ_CATEGORIES_PER_ROUND && pool.length) {
-    const i = Math.floor(Math.random() * pool.length);
-    categories.push(pool.splice(i, 1)[0]);
-  }
-  return { letter, categories };
-}
-
-function scoreBlitzAnswer(text, letter) {
-  const v = String(text || '').trim();
-  return v.length > 0 && v[0].toUpperCase() === letter;
-}
-
-function startBlitzRound(code) {
-  const room = blitzRooms.get(code);
-  if (!room) return;
-
-  if (room.roundNumber >= room.totalRounds) {
-    room.started = false;
-    io.to(`blitz:${code}`).emit('blitz:game:over', { players: blitzRoomPlayers(room) });
-    return;
-  }
-
-  room.roundNumber += 1;
-  const { letter, categories } = pickBlitzRound();
-  room.currentLetter = letter;
-  room.currentCategories = categories;
-  room.roundActive = true;
-  room.submissions = new Map();
-  room.roundDeadline = Date.now() + BLITZ_ROUND_MS;
-
-  io.to(`blitz:${code}`).emit('blitz:round:start', {
-    roundNumber: room.roundNumber,
-    totalRounds: room.totalRounds,
-    letter,
-    categories,
-    deadline: room.roundDeadline,
-    players: blitzRoomPlayers(room),
-  });
-
-  clearTimeout(room.roundTimer);
-  room.roundTimer = setTimeout(() => resolveBlitzRound(code), BLITZ_ROUND_MS);
-}
-
-function resolveBlitzRound(code) {
-  const room = blitzRooms.get(code);
-  if (!room || !room.roundActive) return;
-  clearTimeout(room.roundTimer);
-  room.roundActive = false;
-
-  const socketIds = Array.from(room.players.keys());
-  const perPlayerAnswers = socketIds.map(
-    (sid) => room.submissions.get(sid) || room.currentCategories.map(() => '')
-  );
-  const breakdown = room.currentCategories.map((cat, i) => {
-    const a0 = (perPlayerAnswers[0] && perPlayerAnswers[0][i]) || '';
-    const a1 = socketIds.length > 1 ? (perPlayerAnswers[1] && perPlayerAnswers[1][i]) || '' : null;
-    const valid0 = scoreBlitzAnswer(a0, room.currentLetter);
-    const valid1 = a1 != null ? scoreBlitzAnswer(a1, room.currentLetter) : null;
-    let pts0 = 0;
-    let pts1 = 0;
-    if (socketIds.length > 1) {
-      const same = valid0 && valid1 && a0.trim().toLowerCase() === a1.trim().toLowerCase();
-      if (valid0) pts0 = same ? 1 : 2;
-      if (valid1) pts1 = same ? 1 : 2;
-    } else if (valid0) {
-      pts0 = 1;
-    }
-    return { category: cat, answers: a1 != null ? [a0, a1] : [a0], points: a1 != null ? [pts0, pts1] : [pts0] };
-  });
-
-  socketIds.forEach((sid, idx) => {
-    const player = room.players.get(sid);
-    if (!player) return;
-    player.score += breakdown.reduce((sum, b) => sum + (b.points[idx] || 0), 0);
-  });
-
-  io.to(`blitz:${code}`).emit('blitz:round:result', {
-    letter: room.currentLetter,
-    breakdown,
-    players: blitzRoomPlayers(room),
-  });
-
-  room.currentCategories = null;
-  setTimeout(() => startBlitzRound(code), 5500);
-}
-
-// --- Emoji Decode helpers ----------------------------------------------------
-// Same buzzer-race engine as Trivia Showdown, just fed emoji puzzles instead
-// of text questions.
-
-function emojiRoomPlayers(room) {
-  return Array.from(room.players.values()).map((p) => ({ name: p.name, score: p.score }));
-}
-
-function pickEmojiPuzzle(usedIds) {
-  const pool = EMOJI_PUZZLES.filter((q) => !usedIds.has(q.id));
-  const source = pool.length ? pool : EMOJI_PUZZLES;
-  const puzzle = source[Math.floor(Math.random() * source.length)];
-  // The bank's own option order clusters the correct answer at index 0 far
-  // more than chance would — shuffle per-deal so the answer position isn't
-  // predictable round to round.
-  return { ...puzzle, ...shuffleOptions(puzzle.options, puzzle.correctIndex) };
-}
-
-function shuffleOptions(options, correctIndex) {
-  const order = options.map((_, i) => i);
-  for (let i = order.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [order[i], order[j]] = [order[j], order[i]];
-  }
-  return { options: order.map((i) => options[i]), correctIndex: order.indexOf(correctIndex) };
-}
-
-function startEmojiRound(code) {
-  const room = emojiRooms.get(code);
-  if (!room) return;
-
-  if (room.roundNumber >= room.totalRounds) {
-    room.started = false;
-    io.to(`emoji:${code}`).emit('emoji:game:over', { players: emojiRoomPlayers(room) });
-    return;
-  }
-
-  room.roundNumber += 1;
-  const puzzle = pickEmojiPuzzle(room.usedPuzzleIds);
-  room.usedPuzzleIds.add(puzzle.id);
-  room.currentPuzzle = puzzle;
-  room.roundActive = true;
-  room.wrongAnswerers = new Set();
-
-  io.to(`emoji:${code}`).emit('emoji:round:start', {
-    roundNumber: room.roundNumber,
-    totalRounds: room.totalRounds,
-    category: puzzle.category,
-    emoji: puzzle.emoji,
-    options: puzzle.options,
-    players: emojiRoomPlayers(room),
-  });
-
-  clearTimeout(room.roundTimer);
-  room.roundTimer = setTimeout(() => resolveEmojiRound(code, { timedOut: true }), EMOJI_ROUND_MS);
-}
-
-function resolveEmojiRound(code, { timedOut = false, winnerSocketId = null } = {}) {
-  const room = emojiRooms.get(code);
-  if (!room || !room.roundActive) return;
-  clearTimeout(room.roundTimer);
-  room.roundActive = false;
-
-  let winner = null;
-  if (winnerSocketId) {
-    winner = room.players.get(winnerSocketId);
-    if (winner) winner.score += 1;
-  }
-
-  io.to(`emoji:${code}`).emit('emoji:round:result', {
-    timedOut,
-    winnerName: winner ? winner.name : null,
-    correctIndex: room.currentPuzzle.correctIndex,
-    correctText: room.currentPuzzle.options[room.currentPuzzle.correctIndex],
-    players: emojiRoomPlayers(room),
-  });
-
-  room.currentPuzzle = null;
-  setTimeout(() => startEmojiRound(code), 2800);
 }
 
 // --- Tic-Tac-Toe Showdown helpers --------------------------------------------
@@ -2009,275 +1739,6 @@ io.on('connection', (socket) => {
     if (correct) resolveScrambleRound(code, { timedOut: false, winnerSocketId: socket.id });
   });
 
-  // --- Compatibility Quiz (simultaneous "are we in sync" quiz) --------------
-
-  socket.on('compat:quickplay:join', (payload, ack) => {
-    const name = String((payload && payload.name) || '').trim().slice(0, 20) || 'Player';
-    const code = 'OURS';
-    let room = compatRooms.get(code);
-    if (room) {
-      for (const pid of room.players.keys()) {
-        if (!io.sockets.sockets.has(pid)) room.players.delete(pid);
-      }
-    }
-    let isHost = false;
-    let hostToken = null;
-    if (!room || room.players.size === 0 || !io.sockets.sockets.has(room.hostSocketId)) {
-      isHost = true;
-      hostToken = crypto.randomUUID();
-      if (!room) {
-        room = {
-          code,
-          players: new Map(),
-          started: false,
-          totalRounds: 10,
-          roundNumber: 0,
-          roundActive: false,
-          currentQuestion: null,
-          answers: new Map(),
-          usedQuestionIds: new Set(),
-          inSync: 0,
-          roundTimer: null,
-          createdAt: Date.now(),
-        };
-        compatRooms.set(code, room);
-      } else {
-        clearTimeout(room.roundTimer);
-        room.started = false;
-        room.roundNumber = 0;
-        room.roundActive = false;
-        room.currentQuestion = null;
-        room.usedQuestionIds = new Set();
-        room.inSync = 0;
-      }
-      room.hostToken = hostToken;
-      room.hostSocketId = socket.id;
-    }
-    room.players.set(socket.id, { name, score: 0 });
-    socket.join(`compat:${code}`);
-    socket.data.compatRole = isHost ? 'host' : 'player';
-    socket.data.compatCode = code;
-    if (typeof ack === 'function') {
-      ack({ ok: true, code, name, isHost, hostToken, started: room.started });
-    }
-    io.to(`compat:${code}`).emit('compat:players:update', compatRoomPlayers(room));
-  });
-
-  socket.on('compat:host:cancel', (payload) => {
-    const code = String((payload && payload.code) || '').toUpperCase();
-    const room = compatRooms.get(code);
-    if (!room || room.hostSocketId !== socket.id) return;
-    clearTimeout(room.roundTimer);
-    io.to(`compat:${code}`).emit('compat:room:cancelled');
-    compatRooms.delete(code);
-  });
-
-  socket.on('compat:host:start', (payload) => {
-    const code = String((payload && payload.code) || '').toUpperCase();
-    const room = compatRooms.get(code);
-    if (!room || room.hostSocketId !== socket.id || room.players.size < 2) return;
-    room.totalRounds = Math.max(3, Math.min(25, Number(payload && payload.rounds) || 10));
-    room.roundNumber = 0;
-    room.usedQuestionIds = new Set();
-    room.inSync = 0;
-    room.started = true;
-    for (const p of room.players.values()) p.score = 0;
-    startCompatRound(code);
-  });
-
-  socket.on('compat:answer', (payload) => {
-    const code = String((payload && payload.code) || '').toUpperCase();
-    const choice = Number(payload && payload.choice);
-    const room = compatRooms.get(code);
-    if (!room || !room.roundActive || Number.isNaN(choice)) return;
-    if (!room.players.has(socket.id) || room.answers.has(socket.id)) return;
-    room.answers.set(socket.id, choice);
-    socket.to(`compat:${code}`).emit('compat:opponent:locked');
-    if (room.answers.size >= room.players.size) {
-      resolveCompatRound(code, { timedOut: false });
-    }
-  });
-
-  // --- Category Blitz ---------------------------------------------------------
-
-  socket.on('blitz:quickplay:join', (payload, ack) => {
-    const name = String((payload && payload.name) || '').trim().slice(0, 20) || 'Player';
-    const code = 'OURS';
-    let room = blitzRooms.get(code);
-    if (room) {
-      for (const pid of room.players.keys()) {
-        if (!io.sockets.sockets.has(pid)) room.players.delete(pid);
-      }
-    }
-    let isHost = false;
-    let hostToken = null;
-    if (!room || room.players.size === 0 || !io.sockets.sockets.has(room.hostSocketId)) {
-      isHost = true;
-      hostToken = crypto.randomUUID();
-      if (!room) {
-        room = {
-          code,
-          players: new Map(),
-          started: false,
-          totalRounds: 5,
-          roundNumber: 0,
-          roundActive: false,
-          currentLetter: null,
-          currentCategories: null,
-          submissions: new Map(),
-          roundDeadline: null,
-          roundTimer: null,
-          createdAt: Date.now(),
-        };
-        blitzRooms.set(code, room);
-      } else {
-        clearTimeout(room.roundTimer);
-        room.started = false;
-        room.roundNumber = 0;
-        room.roundActive = false;
-        room.currentCategories = null;
-      }
-      room.hostToken = hostToken;
-      room.hostSocketId = socket.id;
-    }
-    room.players.set(socket.id, { name, score: 0 });
-    socket.join(`blitz:${code}`);
-    socket.data.blitzRole = isHost ? 'host' : 'player';
-    socket.data.blitzCode = code;
-    if (typeof ack === 'function') {
-      ack({ ok: true, code, name, isHost, hostToken, started: room.started });
-    }
-    io.to(`blitz:${code}`).emit('blitz:players:update', blitzRoomPlayers(room));
-  });
-
-  socket.on('blitz:host:cancel', (payload) => {
-    const code = String((payload && payload.code) || '').toUpperCase();
-    const room = blitzRooms.get(code);
-    if (!room || room.hostSocketId !== socket.id) return;
-    clearTimeout(room.roundTimer);
-    io.to(`blitz:${code}`).emit('blitz:room:cancelled');
-    blitzRooms.delete(code);
-  });
-
-  socket.on('blitz:host:start', (payload) => {
-    const code = String((payload && payload.code) || '').toUpperCase();
-    const room = blitzRooms.get(code);
-    if (!room || room.hostSocketId !== socket.id || room.players.size < 2) return;
-    room.totalRounds = Math.max(1, Math.min(10, Number(payload && payload.rounds) || 5));
-    room.roundNumber = 0;
-    room.started = true;
-    for (const p of room.players.values()) p.score = 0;
-    startBlitzRound(code);
-  });
-
-  socket.on('blitz:submit', (payload) => {
-    const code = String((payload && payload.code) || '').toUpperCase();
-    const answers = Array.isArray(payload && payload.answers)
-      ? payload.answers.map((a) => String(a || '').slice(0, 40))
-      : [];
-    const room = blitzRooms.get(code);
-    if (!room || !room.roundActive || !room.players.has(socket.id)) return;
-    if (room.submissions.has(socket.id)) return;
-    room.submissions.set(socket.id, answers);
-    socket.to(`blitz:${code}`).emit('blitz:opponent:locked');
-    if (room.submissions.size >= room.players.size) {
-      resolveBlitzRound(code);
-    }
-  });
-
-  // --- Emoji Decode (networked buzzer race) -----------------------------------
-
-  socket.on('emoji:quickplay:join', (payload, ack) => {
-    const name = String((payload && payload.name) || '').trim().slice(0, 20) || 'Player';
-    const code = 'OURS';
-    let room = emojiRooms.get(code);
-    if (room) {
-      for (const pid of room.players.keys()) {
-        if (!io.sockets.sockets.has(pid)) room.players.delete(pid);
-      }
-    }
-    let isHost = false;
-    let hostToken = null;
-    if (!room || room.players.size === 0 || !io.sockets.sockets.has(room.hostSocketId)) {
-      isHost = true;
-      hostToken = crypto.randomUUID();
-      if (!room) {
-        room = {
-          code,
-          players: new Map(),
-          started: false,
-          totalRounds: 8,
-          roundNumber: 0,
-          roundActive: false,
-          currentPuzzle: null,
-          wrongAnswerers: new Set(),
-          usedPuzzleIds: new Set(),
-          roundTimer: null,
-          createdAt: Date.now(),
-        };
-        emojiRooms.set(code, room);
-      } else {
-        clearTimeout(room.roundTimer);
-        room.started = false;
-        room.roundNumber = 0;
-        room.roundActive = false;
-        room.currentPuzzle = null;
-        room.usedPuzzleIds = new Set();
-      }
-      room.hostToken = hostToken;
-      room.hostSocketId = socket.id;
-    }
-    room.players.set(socket.id, { name, score: 0 });
-    socket.join(`emoji:${code}`);
-    socket.data.emojiRole = isHost ? 'host' : 'player';
-    socket.data.emojiCode = code;
-    if (typeof ack === 'function') {
-      ack({ ok: true, code, name, isHost, hostToken, started: room.started });
-    }
-    io.to(`emoji:${code}`).emit('emoji:players:update', emojiRoomPlayers(room));
-  });
-
-  socket.on('emoji:host:cancel', (payload) => {
-    const code = String((payload && payload.code) || '').toUpperCase();
-    const room = emojiRooms.get(code);
-    if (!room || room.hostSocketId !== socket.id) return;
-    clearTimeout(room.roundTimer);
-    io.to(`emoji:${code}`).emit('emoji:room:cancelled');
-    emojiRooms.delete(code);
-  });
-
-  socket.on('emoji:host:start', (payload) => {
-    const code = String((payload && payload.code) || '').toUpperCase();
-    const room = emojiRooms.get(code);
-    if (!room || room.hostSocketId !== socket.id || room.players.size < 2) return;
-    room.totalRounds = Math.max(1, Math.min(25, Number(payload && payload.rounds) || 8));
-    room.roundNumber = 0;
-    room.usedPuzzleIds = new Set();
-    room.started = true;
-    for (const p of room.players.values()) p.score = 0;
-    startEmojiRound(code);
-  });
-
-  socket.on('emoji:answer', (payload) => {
-    const code = String((payload && payload.code) || '').toUpperCase();
-    const index = Number(payload && payload.index);
-    const room = emojiRooms.get(code);
-    if (!room || !room.roundActive) return;
-    if (!room.players.has(socket.id) || room.wrongAnswerers.has(socket.id)) return;
-
-    if (index === room.currentPuzzle.correctIndex) {
-      resolveEmojiRound(code, { timedOut: false, winnerSocketId: socket.id });
-      return;
-    }
-
-    room.wrongAnswerers.add(socket.id);
-    const player = room.players.get(socket.id);
-    io.to(`emoji:${code}`).emit('emoji:wrong', { name: player.name, index });
-    if (room.wrongAnswerers.size >= room.players.size) {
-      resolveEmojiRound(code, { timedOut: false, winnerSocketId: null });
-    }
-  });
-
   // --- Tic-Tac-Toe Showdown -----------------------------------------------------
 
   socket.on('ttt:quickplay:join', (payload, ack) => {
@@ -2654,27 +2115,6 @@ io.on('connection', (socket) => {
         io.to(`scramble:${scrambleCode}`).emit('scramble:players:update', scrambleRoomPlayers(room));
       }
     }
-    const compatCode = socket.data.compatCode;
-    if (compatCode) {
-      const room = compatRooms.get(compatCode);
-      if (room && socket.data.compatRole === 'player' && room.players.delete(socket.id)) {
-        io.to(`compat:${compatCode}`).emit('compat:players:update', compatRoomPlayers(room));
-      }
-    }
-    const blitzCode = socket.data.blitzCode;
-    if (blitzCode) {
-      const room = blitzRooms.get(blitzCode);
-      if (room && socket.data.blitzRole === 'player' && room.players.delete(socket.id)) {
-        io.to(`blitz:${blitzCode}`).emit('blitz:players:update', blitzRoomPlayers(room));
-      }
-    }
-    const emojiCode = socket.data.emojiCode;
-    if (emojiCode) {
-      const room = emojiRooms.get(emojiCode);
-      if (room && socket.data.emojiRole === 'player' && room.players.delete(socket.id)) {
-        io.to(`emoji:${emojiCode}`).emit('emoji:players:update', emojiRoomPlayers(room));
-      }
-    }
     const tttCode = socket.data.tttCode;
     if (tttCode) {
       const room = tttRooms.get(tttCode);
@@ -2928,24 +2368,6 @@ setInterval(() => {
       scrambleRooms.delete(code);
     }
   }
-  for (const [code, room] of compatRooms) {
-    if (now - room.createdAt > ROOM_TTL_MS) {
-      clearTimeout(room.roundTimer);
-      compatRooms.delete(code);
-    }
-  }
-  for (const [code, room] of blitzRooms) {
-    if (now - room.createdAt > ROOM_TTL_MS) {
-      clearTimeout(room.roundTimer);
-      blitzRooms.delete(code);
-    }
-  }
-  for (const [code, room] of emojiRooms) {
-    if (now - room.createdAt > ROOM_TTL_MS) {
-      clearTimeout(room.roundTimer);
-      emojiRooms.delete(code);
-    }
-  }
   for (const [code, room] of tttRooms) {
     if (now - room.createdAt > ROOM_TTL_MS) tttRooms.delete(code);
   }
@@ -3007,16 +2429,6 @@ app.get('/api/scramble-words', (req, res) => {
   res.json({ words: SCRAMBLE_WORDS });
 });
 
-// Powers solo/practice modes for Emoji Decode and Category Blitz — same
-// fetch-once-play-locally reasoning as /api/trivia and /api/scramble-words.
-app.get('/api/emoji-puzzles', (req, res) => {
-  res.json({ puzzles: EMOJI_PUZZLES });
-});
-
-app.get('/api/categories', (req, res) => {
-  res.json({ categories: BLITZ_CATEGORIES, letters: BLITZ_LETTERS });
-});
-
 app.get('/api/qr', async (req, res) => {
   const code = String(req.query.code || '').toUpperCase();
   const type = req.query.type === 'predict' ? 'predict' : 'play';
@@ -3073,18 +2485,6 @@ app.get('/trivia', (req, res) => {
 
 app.get('/scramble', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'scramble.html'));
-});
-
-app.get('/compat', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'compat.html'));
-});
-
-app.get('/blitz', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'blitz.html'));
-});
-
-app.get('/emoji', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'emoji.html'));
 });
 
 app.get('/ttt', (req, res) => {
