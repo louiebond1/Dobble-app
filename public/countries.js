@@ -133,6 +133,21 @@ function project(lat, lng) {
   return { x: ((lng + 180) / 360) * 100, y: ((90 - lat) / 180) * 100 };
 }
 
+// Best-effort: some browsers (mostly Android Chrome, especially as an
+// installed PWA) will actually rotate the screen for us. Where that's not
+// supported (notably iOS Safari, which never lets a page do this) it just
+// silently fails — the CSS layout below still reflows nicely for landscape
+// once the player rotates the phone themselves.
+function tryLockLandscape() {
+  try {
+    if (screen.orientation && screen.orientation.lock) {
+      screen.orientation.lock('landscape').catch(() => {});
+    }
+  } catch (e) {
+    /* orientation lock unsupported — ignore */
+  }
+}
+
 function buildMarkers() {
   const container = el('countryMarkers');
   container.innerHTML = '';
@@ -155,16 +170,15 @@ function revealMarker(id, ownerName) {
   dot.classList.add('found');
   dot.classList.toggle('mine', mode === 'duo' && ownerName === myName);
 
-  // The label outlives the dot (which pops and vanishes almost immediately),
-  // so it's appended as its own sibling positioned at the same spot rather
-  // than nested inside the dot.
+  // The label is a permanent record on the map (like Sporcle) — it outlives
+  // the dot, which pops and vanishes almost immediately, so it's appended as
+  // its own sibling positioned at the same spot rather than nested inside it.
   const label = document.createElement('div');
   label.className = 'country-marker-label';
   label.style.left = dot.style.left;
   label.style.top = dot.style.top;
   label.textContent = country.name;
   el('countryMarkers').appendChild(label);
-  setTimeout(() => label.remove(), 1450);
 
   setTimeout(() => {
     dot.remove();
@@ -347,6 +361,7 @@ socket.on('countries:game:start', (data) => {
   el('countryFeed').innerHTML = '';
   el('guessInput').value = '';
 
+  tryLockLandscape();
   buildMarkers();
   updateTeamHud();
   startCountdown(data.deadline);
@@ -416,6 +431,7 @@ function startSoloGame() {
   el('countryFeed').innerHTML = '';
   el('guessInput').value = '';
 
+  tryLockLandscape();
   buildMarkers();
   startElapsedClock(soloStartedAt);
   el('guessInput').focus();

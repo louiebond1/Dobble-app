@@ -9,12 +9,48 @@
   background: rgba(255, 107, 107, 0.28);
 }
 
+/* Grid (not flex) so the same three pieces — map, input, feed — can be
+   rearranged for landscape below without any extra wrapper markup. */
 .country-middle {
-  padding: 0 16px 14px;
+  display: grid;
+  grid-template-areas: "map" "input" "feed";
+  grid-template-rows: auto auto minmax(0, 1fr);
   gap: 10px;
+  padding: 0 16px 14px;
+  min-height: 0;
+}
+
+.country-rotate-hint {
+  display: none;
+  text-align: center;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.65);
+  margin: -6px 0 0;
+}
+
+@media (orientation: portrait) {
+  .country-rotate-hint {
+    display: block;
+  }
+}
+
+@media (orientation: landscape) {
+  .country-middle {
+    grid-template-areas: "map input" "map feed";
+    grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr);
+    gap: 8px 14px;
+    padding: 0 14px 10px;
+  }
+
+  .country-map-wrap {
+    align-self: center;
+  }
 }
 
 .country-map-wrap {
+  grid-area: map;
   border-radius: 16px;
   overflow: hidden;
   background: rgba(0, 0, 0, 0.18);
@@ -73,30 +109,31 @@
   100% { transform: scale(0); opacity: 0; }
 }
 
+/* Stays on the map for the rest of the game once it appears — like Sporcle,
+   a found country's name is a permanent record of progress, not a toast. */
 .country-marker-label {
   position: absolute;
   transform: translate(-50%, -100%);
   margin-top: -6px;
   white-space: nowrap;
-  font-size: 0.62rem;
+  font-size: 0.56rem;
   font-weight: 800;
   color: #1a1030;
   background: rgba(255, 255, 255, 0.95);
-  padding: 2px 6px;
+  padding: 1px 5px;
   border-radius: 6px;
   pointer-events: none;
-  animation: countryLabelFade 1.4s ease forwards;
+  animation: countryLabelIn 0.3s ease forwards;
   z-index: 2;
 }
 
-@keyframes countryLabelFade {
-  0% { opacity: 0; }
-  15% { opacity: 1; }
-  78% { opacity: 1; }
-  100% { opacity: 0; }
+@keyframes countryLabelIn {
+  0% { opacity: 0; transform: translate(-50%, -100%) scale(0.85); }
+  100% { opacity: 1; transform: translate(-50%, -100%) scale(1); }
 }
 
 .country-input {
+  grid-area: input;
   margin: 0;
   border-radius: 14px;
   text-align: center;
@@ -105,7 +142,7 @@
 }
 
 .country-feed {
-  flex: 1;
+  grid-area: feed;
   min-height: 0;
   overflow-y: auto;
   display: flex;
