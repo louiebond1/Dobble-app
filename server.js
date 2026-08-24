@@ -12,6 +12,7 @@ const { DATES, CATEGORIES: DATE_CATEGORIES } = require('./lib/dates');
 const { DECK: DRAW_WORDS } = require('./lib/drawWords');
 const { TRIVIA_QUESTIONS } = require('./lib/triviaQuestions');
 const { SCRAMBLE_WORDS } = require('./lib/scrambleWords');
+const { COUNTRIES } = require('./lib/countries');
 
 const app = express();
 const server = http.createServer(app);
@@ -56,6 +57,18 @@ const TTT_LINES = [
 const puzzleRooms = new Map();
 const PUZZLE_ROUND_MS = 90000;
 const PUZZLE_SIZE = 3; // 3x3, 8 tiles + 1 blank
+
+// Countries of the World — one long shared match instead of discrete rounds:
+// both players guess against the same 197-marker map, first to claim a
+// country keeps it, first to the target score (or most claimed when the
+// 15-minute clock runs out) wins. Fuzzy-matching a typed guess against a
+// country's name/aliases happens client-side (the client already needs the
+// full list to render the map); the server only needs to arbitrate which
+// player claimed a given country id first.
+/** @type {Map<string, any>} */
+const countryRooms = new Map();
+const COUNTRY_ROUND_MS = 15 * 60 * 1000;
+const COUNTRY_IDS = new Set(COUNTRIES.map((c) => c.id));
 
 // Party Mashup — a decathlon-style match where each "leg" is a single round
 // (rounds: 1) of a different existing duel game, played on that game's own
@@ -871,6 +884,24 @@ function resolvePuzzleRound(code, { timedOut = false, winnerSocketId = null } = 
 
   room.currentPhoto = null;
   setTimeout(() => startPuzzleRound(code), 2800);
+}
+
+// --- Countries of the World helpers ----------------------------------------
+
+function countryRoomPlayers(room) {
+  return Array.from(room.players.values()).map((p) => ({ name: p.name, score: p.score }));
+}
+
+function endCountriesGame(code, reason) {
+  const room = countryRooms.get(code);
+  if (!room || !room.started) return;
+  room.started = false;
+  clearTimeout(room.gameTimer);
+  io.to(`countries:${code}`).emit('countries:game:over', {
+    reason,
+    players: countryRoomPlayers(room),
+    claimedIds: Array.from(room.claimed.keys()),
+  });
 }
 
 // --- Party Mashup helpers ----------------------------------------------------
@@ -1915,6 +1946,108 @@ io.on('connection', (socket) => {
     resolvePuzzleRound(code, { timedOut: false, winnerSocketId: socket.id });
   });
 
+  // --- Countries of the World (shared-map head-to-head quiz) ---------------
+
+  socket.on('countries:quickplay:join', (payload, ack) => {
+    const name = String((payload && payload.name) || '').trim().slice(0, 20) || 'Player';
+    const code = 'OURS';
+    let room = countryRooms.get(code);
+    if (room) {
+      for (const pid of room.players.keys()) {
+        if (!io.sockets.sockets.has(pid)) room.players.delete(pid);
+      }
+    }
+    let isHost = false;
+    let hostToken = null;
+    if (!room || room.players.size === 0 || !io.sockets.sockets.has(room.hostSocketId)) {
+      isHost = true;
+      hostToken = crypto.randomUUID();
+      if (!room) {
+        room = {
+          code,
+          players: new Map(),
+          started: false,
+          target: 100,
+          claimed: new Map(),
+          deadline: null,
+          gameTimer: null,
+          createdAt: Date.now(),
+        };
+        countryRooms.set(code, room);
+      } else {
+        clearTimeout(room.gameTimer);
+        room.started = false;
+        room.claimed = new Map();
+        room.deadline = null;
+      }
+      room.hostToken = hostToken;
+      room.hostSocketId = socket.id;
+    }
+    room.players.set(socket.id, { name, score: 0 });
+    socket.join(`countries:${code}`);
+    socket.data.countriesRole = isHost ? 'host' : 'player';
+    socket.data.countriesCode = code;
+    if (typeof ack === 'function') {
+      ack({ ok: true, code, name, isHost, hostToken, started: room.started });
+    }
+    io.to(`countries:${code}`).emit('countries:players:update', countryRoomPlayers(room));
+  });
+
+  socket.on('countries:host:cancel', (payload) => {
+    const code = String((payload && payload.code) || '').toUpperCase();
+    const room = countryRooms.get(code);
+    if (!room || room.hostSocketId !== socket.id) return;
+    clearTimeout(room.gameTimer);
+    io.to(`countries:${code}`).emit('countries:room:cancelled');
+    countryRooms.delete(code);
+  });
+
+  socket.on('countries:host:start', (payload) => {
+    const code = String((payload && payload.code) || '').toUpperCase();
+    const room = countryRooms.get(code);
+    if (!room || room.hostSocketId !== socket.id || room.players.size < 2) return;
+    room.target = Math.max(1, Math.min(197, Number(payload && payload.target) || 100));
+    room.claimed = new Map();
+    room.deadline = Date.now() + COUNTRY_ROUND_MS;
+    room.started = true;
+    for (const p of room.players.values()) p.score = 0;
+    clearTimeout(room.gameTimer);
+    room.gameTimer = setTimeout(() => endCountriesGame(code, 'timeout'), COUNTRY_ROUND_MS);
+    io.to(`countries:${code}`).emit('countries:game:start', {
+      target: room.target,
+      deadline: room.deadline,
+      players: countryRoomPlayers(room),
+    });
+  });
+
+  socket.on('countries:guess', (payload, ack) => {
+    const code = String((payload && payload.code) || '').toUpperCase();
+    const countryId = String((payload && payload.countryId) || '');
+    const room = countryRooms.get(code);
+    const respond = typeof ack === 'function' ? ack : () => {};
+    if (!room || !room.started || !COUNTRY_IDS.has(countryId)) return respond({ ok: false });
+    const player = room.players.get(socket.id);
+    if (!player) return respond({ ok: false });
+    if (room.claimed.has(countryId)) return respond({ ok: false, reason: 'claimed' });
+
+    room.claimed.set(countryId, socket.id);
+    player.score += 1;
+    io.to(`countries:${code}`).emit('countries:reveal', {
+      countryId,
+      byName: player.name,
+      players: countryRoomPlayers(room),
+    });
+    respond({ ok: true });
+    if (player.score >= room.target) endCountriesGame(code, 'target');
+  });
+
+  socket.on('countries:host:end', (payload) => {
+    const code = String((payload && payload.code) || '').toUpperCase();
+    const room = countryRooms.get(code);
+    if (!room || room.hostSocketId !== socket.id) return;
+    endCountriesGame(code, 'ended');
+  });
+
   // --- Party Mashup ------------------------------------------------------
   // Unlike every other game's quickplay:join, this one has to survive full
   // page navigations *mid-match* — each leg is played on a different game's
@@ -2127,6 +2260,13 @@ io.on('connection', (socket) => {
       const room = puzzleRooms.get(puzzleCode);
       if (room && socket.data.puzzleRole === 'player' && room.players.delete(socket.id)) {
         io.to(`puzzle:${puzzleCode}`).emit('puzzle:players:update', puzzleRoomPlayers(room));
+      }
+    }
+    const countriesCode = socket.data.countriesCode;
+    if (countriesCode) {
+      const room = countryRooms.get(countriesCode);
+      if (room && socket.data.countriesRole === 'player' && room.players.delete(socket.id)) {
+        io.to(`countries:${countriesCode}`).emit('countries:players:update', countryRoomPlayers(room));
       }
     }
     // Deliberately no cleanup here — a mashup player's socket disconnects on
@@ -2377,6 +2517,12 @@ setInterval(() => {
       puzzleRooms.delete(code);
     }
   }
+  for (const [code, room] of countryRooms) {
+    if (now - room.createdAt > ROOM_TTL_MS) {
+      clearTimeout(room.gameTimer);
+      countryRooms.delete(code);
+    }
+  }
   for (const [code, room] of mashupRooms) {
     if (now - room.createdAt > ROOM_TTL_MS) mashupRooms.delete(code);
   }
@@ -2493,6 +2639,14 @@ app.get('/ttt', (req, res) => {
 
 app.get('/puzzle', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'puzzle.html'));
+});
+
+app.get('/countries', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'countries.html'));
+});
+
+app.get('/api/countries', (req, res) => {
+  res.json(COUNTRIES);
 });
 
 app.get('/mashup', (req, res) => {

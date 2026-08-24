@@ -1,12 +1,13 @@
 // Bump this on any release that changes cached files, so old clients pick
 // up the new versions instead of serving stale ones forever.
-const CACHE_VERSION = 'v7';
+const CACHE_VERSION = 'v8';
 const CACHE_NAME = `favethings-${CACHE_VERSION}`;
 
 // Precached at install: the app shell for pages that work without a live
 // two-person connection — home shell, Memory Match, Trial Mode, and the
 // Solo/practice modes of Reaction Duel, Trivia Showdown, Word Scramble
-// Sprint, Tic-Tac-Toe Showdown (vs CPU), and Sliding Puzzle Race.
+// Sprint, Tic-Tac-Toe Showdown (vs CPU), Sliding Puzzle Race, and
+// Countries of the World.
 // Two-person-only modes (Quick Play, What Would You Say, Date Roulette,
 // Doodle Duel, and the Head-to-Head side of the other duel games) sync two
 // separate phones through the live server by design and aren't included —
@@ -18,6 +19,7 @@ const SHELL_URLS = [
   '/offline.html',
   '/style.css',
   '/duel.css',
+  '/countries.css',
   '/layout.js',
   '/manifest.webmanifest',
   '/favicon.ico',
@@ -40,11 +42,15 @@ const SHELL_URLS = [
   '/ttt.js',
   '/puzzle',
   '/puzzle.js',
+  '/countries',
+  '/countries.js',
+  '/images/world-map.svg',
   '/api/symbols',
   '/api/photos',
   '/api/deck',
   '/api/trivia',
   '/api/scramble-words',
+  '/api/countries',
 ];
 
 self.addEventListener('install', (event) => {
