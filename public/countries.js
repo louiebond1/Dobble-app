@@ -7,13 +7,12 @@ const gameOver = el('gameOver');
 
 const socket = io();
 
-let mode = 'duo'; // 'solo' | 'duo'
+let mode = 'duo'; // 'solo' | 'duo' (duo = co-op team, not competitive)
 let roomCode = null;
 let hostToken = null;
 let isHost = false;
 let myName = null;
 let players = [];
-let target = 100;
 
 let allCountries = [];
 const countryById = new Map();
@@ -229,35 +228,10 @@ document.querySelectorAll('#modeToggle .mode-btn').forEach((btn) => {
     document.querySelectorAll('#modeToggle .mode-btn').forEach((b) => b.classList.toggle('active', b === btn));
     el('soloFields').classList.toggle('hidden', mode !== 'solo');
     el('duoFields').classList.toggle('hidden', mode !== 'duo');
-    el('targetField').classList.toggle('hidden', mode !== 'duo');
   });
 });
 
-// --- Target picker (duo win condition) --------------------------------------
-
-const TARGET_PRESETS = [
-  { v: 50, label: '50' },
-  { v: 100, label: '100' },
-  { v: 150, label: '150' },
-  { v: 197, label: 'All 197' },
-];
-(function renderTargetChips() {
-  const container = el('targetChips');
-  TARGET_PRESETS.forEach(({ v, label }) => {
-    const btn = document.createElement('button');
-    btn.type = 'button';
-    btn.className = 'chip';
-    btn.textContent = label;
-    if (v === target) btn.classList.add('active');
-    btn.addEventListener('click', () => {
-      container.querySelectorAll('.chip').forEach((c) => c.classList.toggle('active', c === btn));
-      target = v;
-    });
-    container.appendChild(btn);
-  });
-})();
-
-// --- Quick Play (Head-to-Head) --------------------------------------------
+// --- Quick Play (Team Up) --------------------------------------------------
 
 el('joinLouieBtn').addEventListener('click', () => quickPlayJoin('Louie'));
 el('joinArielBtn').addEventListener('click', () => quickPlayJoin('Ariel'));
@@ -311,7 +285,7 @@ function updateLobby() {
 
 el('startBtn').addEventListener('click', () => {
   if (!amHost() || !roomCode) return;
-  socket.emit('countries:host:start', { code: roomCode, target });
+  socket.emit('countries:host:start', { code: roomCode });
 });
 
 socket.on('countries:room:cancelled', () => {
@@ -322,14 +296,12 @@ socket.on('countries:room:cancelled', () => {
   setup.classList.remove('hidden');
 });
 
-function updateDuelHud() {
-  if (!players[0]) return;
-  el('hudP1Name').textContent = players[0].name;
-  el('hudP1Score').textContent = players[0].score;
-  if (players[1]) {
-    el('hudP2Name').textContent = players[1].name;
-    el('hudP2Score').textContent = players[1].score;
-  }
+// Team mode has no "vs" score board — both players contribute to one
+// shared total, shown in the same HUD slot solo mode uses for its own count.
+function updateTeamHud() {
+  const total = players.reduce((sum, p) => sum + (p.score || 0), 0);
+  el('hudP1Name').textContent = 'Team';
+  el('hudP1Score').textContent = total;
 }
 
 // --- Timer display -----------------------------------------------------------
@@ -359,11 +331,10 @@ function startElapsedClock(startedAt) {
   timerHandle = setInterval(tick, 500);
 }
 
-// --- Head-to-Head lifecycle (server-driven) --------------------------------
+// --- Team Up lifecycle (server-driven, co-op) -------------------------------
 
 socket.on('countries:game:start', (data) => {
   mode = 'duo';
-  target = data.target;
   players = data.players;
   revealedIds = new Set();
 
@@ -371,20 +342,20 @@ socket.on('countries:game:start', (data) => {
   lobby.classList.add('hidden');
   gameOver.classList.add('hidden');
   gameArea.classList.remove('hidden');
-  el('hudP2').classList.remove('hidden');
+  el('hudP2').classList.add('hidden');
   el('giveUpBtn').classList.toggle('hidden', !amHost());
   el('countryFeed').innerHTML = '';
   el('guessInput').value = '';
 
   buildMarkers();
-  updateDuelHud();
+  updateTeamHud();
   startCountdown(data.deadline);
   el('guessInput').focus();
 });
 
 socket.on('countries:reveal', (data) => {
   players = data.players;
-  updateDuelHud();
+  updateTeamHud();
   revealedIds.add(data.countryId);
   revealMarker(data.countryId, data.byName);
   const country = countryById.get(data.countryId);
@@ -417,7 +388,7 @@ el('playAgainBtn').addEventListener('click', () => {
   }
   if (!amHost() || !roomCode) return;
   gameOver.classList.add('hidden');
-  socket.emit('countries:host:start', { code: roomCode, target });
+  socket.emit('countries:host:start', { code: roomCode });
 });
 
 // --- Solo (local, untimed practice) mode -----------------------------------
@@ -481,16 +452,15 @@ function showGameOver(foundOrClaimedIds, reason) {
     el('overTitle').textContent = complete ? '🗺️ All 197 found!' : '🗺️ Practice Complete!';
     el('soloSummary').textContent = `${foundOrClaimedIds.size} / ${allCountries.length} found in ${formatClock(elapsed).replace('⏱ ', '')}`;
   } else {
-    const [p1, p2] = players;
-    let title;
-    if (!p2 || p1.score === p2.score) title = "It's a tie! 🤝";
-    else title = `${p1.score > p2.score ? p1.name : p2.name} wins! 🏆`;
-    el('overTitle').textContent = title;
+    const total = players.reduce((sum, p) => sum + (p.score || 0), 0);
+    const complete = total >= allCountries.length;
+    el('overTitle').textContent = complete
+      ? '🌍 Found all 197 as a team!'
+      : `🌍 Team found ${total} / ${allCountries.length}!`;
     const reasonText =
-      reason === 'target' ? `First to ${target}!` : reason === 'timeout' ? "Time's up!" : 'Ended early.';
-    el('soloSummary').textContent = reasonText;
-    el('finalBoard').classList.remove('hidden');
-    renderLeaderboard('finalBoard', [...players].sort((a, b) => b.score - a.score));
+      reason === 'complete' ? 'Every country found!' : reason === 'timeout' ? "Time's up!" : 'Ended early.';
+    const breakdown = players.map((p) => `${p.name}: ${p.score}`).join(' · ');
+    el('soloSummary').textContent = `${reasonText} ${breakdown}`;
   }
 
   const missed = allCountries.filter((c) => !foundOrClaimedIds.has(c.id)).map((c) => c.name).sort();

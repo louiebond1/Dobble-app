@@ -1967,7 +1967,6 @@ io.on('connection', (socket) => {
           code,
           players: new Map(),
           started: false,
-          target: 100,
           claimed: new Map(),
           deadline: null,
           gameTimer: null,
@@ -2006,7 +2005,6 @@ io.on('connection', (socket) => {
     const code = String((payload && payload.code) || '').toUpperCase();
     const room = countryRooms.get(code);
     if (!room || room.hostSocketId !== socket.id || room.players.size < 2) return;
-    room.target = Math.max(1, Math.min(197, Number(payload && payload.target) || 100));
     room.claimed = new Map();
     room.deadline = Date.now() + COUNTRY_ROUND_MS;
     room.started = true;
@@ -2014,12 +2012,15 @@ io.on('connection', (socket) => {
     clearTimeout(room.gameTimer);
     room.gameTimer = setTimeout(() => endCountriesGame(code, 'timeout'), COUNTRY_ROUND_MS);
     io.to(`countries:${code}`).emit('countries:game:start', {
-      target: room.target,
       deadline: room.deadline,
       players: countryRoomPlayers(room),
     });
   });
 
+  // Co-op, not competitive: whoever guesses a country first claims it (so it
+  // isn't double-counted), but both players' finds add up into one shared
+  // team total — there's no individual win condition, only the shared
+  // 15-minute clock and the shared "did we get all 197" finish line.
   socket.on('countries:guess', (payload, ack) => {
     const code = String((payload && payload.code) || '').toUpperCase();
     const countryId = String((payload && payload.countryId) || '');
@@ -2038,7 +2039,7 @@ io.on('connection', (socket) => {
       players: countryRoomPlayers(room),
     });
     respond({ ok: true });
-    if (player.score >= room.target) endCountriesGame(code, 'target');
+    if (room.claimed.size >= COUNTRY_IDS.size) endCountriesGame(code, 'complete');
   });
 
   socket.on('countries:host:end', (payload) => {
