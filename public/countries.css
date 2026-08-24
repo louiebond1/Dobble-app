@@ -40,33 +40,43 @@
   inset: 0;
 }
 
+/* Unfound markers stay visible the whole game — like Sporcle's blank map,
+   they're the "here's roughly what you're still missing" reference. Each
+   one pops and vanishes for good the instant it's correctly guessed,
+   rather than just changing color, so the map visibly empties out as you
+   go instead of staying permanently cluttered with 197 dots. */
+
 .country-marker {
   position: absolute;
-  width: 6px;
-  height: 6px;
-  margin: -3px 0 0 -3px;
+  width: 8px;
+  height: 8px;
+  margin: -4px 0 0 -4px;
   border-radius: 50%;
-  background: rgba(255, 255, 255, 0.35);
-  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.15);
-  transition: background 0.25s ease, box-shadow 0.25s ease, transform 0.25s ease;
+  background: rgba(255, 255, 255, 0.85);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.4), 0 0 3px rgba(0, 0, 0, 0.3);
 }
 
 .country-marker.found {
   background: #ffd166;
-  box-shadow: 0 0 0 2px rgba(255, 209, 102, 0.35), 0 0 6px rgba(255, 209, 102, 0.6);
-  transform: scale(1.6);
+  box-shadow: 0 0 10px rgba(255, 209, 102, 0.85);
+  animation: countryMarkerFound 0.55s ease forwards;
 }
 
 .country-marker.found.mine {
   background: #4cd964;
-  box-shadow: 0 0 0 2px rgba(76, 217, 100, 0.35), 0 0 6px rgba(76, 217, 100, 0.6);
+  box-shadow: 0 0 10px rgba(76, 217, 100, 0.85);
+}
+
+@keyframes countryMarkerFound {
+  0% { transform: scale(1); opacity: 1; }
+  35% { transform: scale(2.4); opacity: 1; }
+  100% { transform: scale(0); opacity: 0; }
 }
 
 .country-marker-label {
   position: absolute;
-  left: 50%;
-  bottom: calc(100% + 4px);
-  transform: translateX(-50%);
+  transform: translate(-50%, -100%);
+  margin-top: -6px;
   white-space: nowrap;
   font-size: 0.62rem;
   font-weight: 800;
@@ -75,15 +85,15 @@
   padding: 2px 6px;
   border-radius: 6px;
   pointer-events: none;
-  animation: countryLabelPop 1.4s ease forwards;
+  animation: countryLabelFade 1.4s ease forwards;
   z-index: 2;
 }
 
-@keyframes countryLabelPop {
-  0% { opacity: 0; transform: translateX(-50%) translateY(4px); }
-  12% { opacity: 1; transform: translateX(-50%) translateY(0); }
-  75% { opacity: 1; }
-  100% { opacity: 0; transform: translateX(-50%) translateY(-4px); }
+@keyframes countryLabelFade {
+  0% { opacity: 0; }
+  15% { opacity: 1; }
+  78% { opacity: 1; }
+  100% { opacity: 0; }
 }
 
 .country-input {

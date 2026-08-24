@@ -155,11 +155,22 @@ function revealMarker(id, ownerName) {
   if (!dot || !country) return;
   dot.classList.add('found');
   dot.classList.toggle('mine', mode === 'duo' && ownerName === myName);
+
+  // The label outlives the dot (which pops and vanishes almost immediately),
+  // so it's appended as its own sibling positioned at the same spot rather
+  // than nested inside the dot.
   const label = document.createElement('div');
   label.className = 'country-marker-label';
+  label.style.left = dot.style.left;
+  label.style.top = dot.style.top;
   label.textContent = country.name;
-  dot.appendChild(label);
+  el('countryMarkers').appendChild(label);
   setTimeout(() => label.remove(), 1450);
+
+  setTimeout(() => {
+    dot.remove();
+    markerEls.delete(id);
+  }, 550);
 }
 
 function addFeedItem(name, byName) {
