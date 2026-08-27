@@ -30,8 +30,8 @@ function refreshCountryLabelDensity(count) {
   if (!game) return;
   game.dataset.progressTier = progressTier(count);
 
-  const insetKeep = count < 60 ? 1 : count < 90 ? .90 : count < 120 ? .74 : count < 150 ? .58 : count < 197 ? .44 : .50;
-  const mainKeep = count < 90 ? 1 : count < 120 ? .93 : count < 150 ? .84 : count < 197 ? .72 : .78;
+  const insetKeep = count < 60 ? 1 : count < 90 ? .90 : count < 120 ? .70 : count < 150 ? .50 : count < 197 ? .36 : .40;
+  const mainKeep = count < 90 ? 1 : count < 120 ? .90 : count < 150 ? .75 : count < 197 ? .60 : .62;
 
   game.querySelectorAll('.country-marker-label').forEach((label) => {
     const rank = Number(label.dataset.labelRank || 0);
@@ -134,7 +134,6 @@ buildMarkers = function buildMarkersPolished() {
     let mainDot = null;
     let insetDot = null;
 
-    /* Exactly one unanswered marker per country. */
     if (entry.inset && insetContainers[entry.inset]) {
       insetDot = document.createElement('div');
       insetDot.className = 'country-marker';
@@ -209,8 +208,6 @@ updateProgress = function updateProgressPolished(count) {
   refreshCountryLabelDensity(count);
 };
 
-/* Opt-in stress helper for checking the six requested completion states.
-   Never runs during normal play. */
 window.countryVisualStressTest = function countryVisualStressTest(count) {
   const target = Math.max(0, Math.min(allCountries.length, Number(count) || 0));
   if (!allCountries.length || !el('countryMarkers')) return { ok: false, reason: 'countries not loaded' };
