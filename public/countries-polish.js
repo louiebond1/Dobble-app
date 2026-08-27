@@ -3,6 +3,17 @@
    countries.js. Keeping it separate makes the visual pass easy to iterate or
    remove without disturbing game/network logic. */
 
+/* The polished map keeps the SVG's native 2:1 proportions inside a slightly
+   taller frame. Because object-fit: contain adds a small vertical gutter,
+   project into the actual painted map area rather than the whole frame. */
+project = function projectPolished(lat, lng) {
+  const x = ((lng + 180) / 360) * 100;
+  const rawY = ((90 - lat) / 180) * 100;
+  const paintedHeight = 82;
+  const topInset = (100 - paintedHeight) / 2;
+  return { x, y: topInset + rawY * (paintedHeight / 100) };
+};
+
 function insetGeoPosition(region, lat, lng) {
   const pad = 8;
   const x = pad + ((lng - region.lngMin) / (region.lngMax - region.lngMin)) * (100 - pad * 2);
