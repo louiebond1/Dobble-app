@@ -158,57 +158,35 @@ function tryLockLandscape() {
 // Regions where 197 evenly-spread dots collapse into an unreadable clump on
 // any flat world map at phone size — Sporcle solves this with zoomed inset
 // panels, so we do too. Each country whose centroid falls in a box also gets
-// a second, larger marker rendered inside that inset, positioned via the
-// same linear projection rescaled to the box's own lat/lng range, then
-// nudged apart from its neighbors (see relaxPositions) so genuinely
-// close-together countries (the Balkans, Benelux) don't render as one solid
-// blob even at this zoomed-in scale.
+// a second, larger marker rendered inside that inset. Unlike the main map
+// (true lat/lng position), inset markers are laid out in a plain packed
+// grid, not geographic scatter — a physics-style repulsion pass still left
+// residual overlap in the densest region (Europe, 47 countries); a grid
+// guarantees even spacing by construction, matching how Sporcle's own inset
+// panels read (a tidy lattice, not a scatter plot).
 const INSETS = [
-  { key: 'europe', latMin: 34, latMax: 71, lngMin: -11, lngMax: 42 },
-  { key: 'caribbean', latMin: 7, latMax: 27, lngMin: -85, lngMax: -59 },
-  { key: 'gulf', latMin: 20, latMax: 31, lngMin: 44, lngMax: 58 },
+  { key: 'europe', latMin: 34, latMax: 71, lngMin: -11, lngMax: 42, aspect: 46 / 56 },
+  { key: 'caribbean', latMin: 7, latMax: 27, lngMin: -85, lngMax: -59, aspect: 32 / 38 },
+  { key: 'gulf', latMin: 20, latMax: 31, lngMin: 44, lngMax: 58, aspect: 25 / 28 },
 ];
 
 function findInset(lat, lng) {
   return INSETS.find((r) => lat >= r.latMin && lat <= r.latMax && lng >= r.lngMin && lng <= r.lngMax) || null;
 }
 
-function projectInInset(lat, lng, inset) {
+// Even grid packing: pick a column count that roughly matches the panel's
+// own aspect ratio, then place item i at the center of its cell. Guarantees
+// uniform spacing regardless of count — no overlap is possible by
+// construction, unlike a physics-relaxation approach.
+function gridPosition(index, count, aspect) {
+  const cols = Math.max(1, Math.round(Math.sqrt(count * aspect)));
+  const rows = Math.ceil(count / cols);
+  const col = index % cols;
+  const row = Math.floor(index / cols);
   return {
-    x: ((lng - inset.lngMin) / (inset.lngMax - inset.lngMin)) * 100,
-    y: ((inset.latMax - lat) / (inset.latMax - inset.latMin)) * 100,
+    x: ((col + 0.5) / cols) * 100,
+    y: ((row + 0.5) / rows) * 100,
   };
-}
-
-// Simple pairwise repulsion pass (same idea as layoutSymbols' collision
-// relaxation in layout.js) — pushes any two points closer than minDist apart
-// from each other, clamped back inside the box each pass. Points move away
-// from their true projected position only as much as crowding demands.
-function relaxPositions(points, minDist, iterations = 40) {
-  for (let pass = 0; pass < iterations; pass++) {
-    for (let i = 0; i < points.length; i++) {
-      for (let j = i + 1; j < points.length; j++) {
-        const a = points[i];
-        const b = points[j];
-        const dx = b.x - a.x;
-        const dy = b.y - a.y;
-        const dist = Math.sqrt(dx * dx + dy * dy) || 0.001;
-        if (dist < minDist) {
-          const push = (minDist - dist) / 2;
-          const nx = dx / dist;
-          const ny = dy / dist;
-          a.x -= nx * push;
-          a.y -= ny * push;
-          b.x += nx * push;
-          b.y += ny * push;
-        }
-      }
-    }
-    for (const p of points) {
-      p.x = Math.max(3, Math.min(97, p.x));
-      p.y = Math.max(5, Math.min(95, p.y));
-    }
-  }
 }
 
 function buildMarkers() {
@@ -217,12 +195,12 @@ function buildMarkers() {
   markerEls.clear();
 
   const insetContainers = {};
-  const insetPoints = {};
+  const insetLists = {};
   INSETS.forEach((r) => {
     const c = document.querySelector(`[data-inset-markers="${r.key}"]`);
     if (c) c.innerHTML = '';
     insetContainers[r.key] = c;
-    insetPoints[r.key] = [];
+    insetLists[r.key] = [];
   });
 
   const placements = [];
@@ -230,20 +208,15 @@ function buildMarkers() {
     const { x, y } = project(c.lat, c.lng);
     const inset = findInset(c.lat, c.lng);
     const entry = { country: c, mainPos: { x, y }, inset: inset && inset.key };
-    if (inset) {
-      const p = projectInInset(c.lat, c.lng, inset);
-      entry.insetPos = p;
-      insetPoints[inset.key].push(p);
-    }
+    if (inset) insetLists[inset.key].push(entry);
     placements.push(entry);
   }
 
-  // Spacing scales down as a region gets more crowded, so 6 Gulf countries
-  // get plenty of room while 47 European ones still fit without spilling
-  // out of the panel.
   INSETS.forEach((r) => {
-    const pts = insetPoints[r.key];
-    if (pts.length > 1) relaxPositions(pts, Math.min(24, 105 / Math.sqrt(pts.length)));
+    const list = insetLists[r.key].sort((a, b) => a.country.name.localeCompare(b.country.name));
+    list.forEach((entry, i) => {
+      entry.insetPos = gridPosition(i, list.length, r.aspect);
+    });
   });
 
   for (const entry of placements) {
