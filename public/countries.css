@@ -10,15 +10,15 @@
 }
 
 /* Grid (not flex) so the same pieces — map, input, feed — can be rearranged
-   for landscape below without any extra wrapper markup. The map row is
-   `1fr`, not `auto`: combined with height-driven sizing on .country-map-wrap
-   below, that lets the map claim whatever vertical space is actually
-   available instead of shrinking to its width-derived intrinsic size and
-   leaving a dead gap underneath. */
+   for landscape below without any extra wrapper markup. All rows are
+   content-sized (the map is width-driven, see .country-map-wrap below), so
+   they pack together at the top instead of a `1fr` row stretching the map
+   away from its neighbors and leaving dead space around it. */
 .country-middle {
   display: grid;
+  align-content: start;
   grid-template-areas: "map" "input" "feed";
-  grid-template-rows: minmax(0, 1fr) auto minmax(56px, 130px);
+  grid-template-rows: auto auto minmax(56px, 130px);
   gap: 8px;
   padding: 0 14px 12px;
   min-height: 0;
@@ -49,38 +49,31 @@
   }
 }
 
-/* The wrap simply fills its grid area (a plain, unambiguous 100%/100% grid
-   item — no aspect-ratio on it, so no circular sizing). It's a flex
-   container that centers .country-map, which is the piece that's actually
-   height-driven: height:100% of the wrap (a definite size) with width:auto
-   and aspect-ratio:2/1 lets the browser derive its width from that height,
-   clamped by max-width so it never overflows a narrow wrap. Grid's own
-   stretch/aspect-ratio interaction turned out to be unreliable for this —
-   flex handles a height-driven aspect-ratio child correctly. */
+/* Width-driven sizing via the classic "padding-top is a % of width" trick —
+   NOT the `aspect-ratio` CSS property. Two different real-device bugs
+   (aspect-ratio + max-width clamping producing a squashed box; a JS
+   height-driven sizing pass whose own real-device behavior couldn't be
+   verified) both traced back to this box, so it's deliberately built from
+   the oldest, most universally-reliable technique available — decades of
+   browser support, zero timing dependency, nothing left to get wrong.
+   1.5:1 (not the SVG's native 2:1) is a deliberate, harmless UI choice —
+   this isn't a cartographic product and markers are positioned purely by
+   percentage — closer to Sporcle's own on-screen proportions. */
 .country-map-wrap {
   grid-area: map;
+  position: relative;
   width: 100%;
-  height: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  height: 0;
+  padding-top: 66.67%;
   border-radius: 16px;
   overflow: hidden;
   background: #2f5f8a;
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12);
 }
 
-/* Sized precisely in JS (sizeVisibleMap in countries.js) — this aspect-ratio
-   is just a fallback so there's no flash of a wrongly-shaped box before that
-   runs. See the comment there for why: a browser aspect-ratio + max-width
-   clamping bug made pure-CSS sizing unreliable, and 1.5:1 (not the SVG's
-   native 2:1) reads noticeably bigger on a narrow portrait screen. */
 .country-map {
-  position: relative;
-  height: 100%;
-  width: auto;
-  max-width: 100%;
-  aspect-ratio: 1.5 / 1;
+  position: absolute;
+  inset: 0;
 }
 
 .country-map-bg {
@@ -104,24 +97,13 @@
 
 .country-marker {
   position: absolute;
-  width: 11px;
-  height: 11px;
-  margin: -5.5px 0 0 -5.5px;
+  width: 8px;
+  height: 8px;
+  margin: -4px 0 0 -4px;
   border-radius: 50%;
   background: #ff8c42;
-  box-shadow: 0 0 0 1.5px rgba(0, 0, 0, 0.45), 0 1px 3px rgba(0, 0, 0, 0.5);
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.45), 0 1px 2px rgba(0, 0, 0, 0.5);
   z-index: 1;
-}
-
-.country-marker::after {
-  content: "?";
-  font-size: 7px;
-  font-weight: 900;
-  color: white;
-  line-height: 1;
 }
 
 .country-marker.found {
@@ -182,24 +164,24 @@
 }
 
 .country-inset[data-inset="europe"] {
-  top: 3%;
+  top: 2%;
   right: 2%;
-  width: 40%;
-  height: 48%;
+  width: 46%;
+  height: 56%;
 }
 
 .country-inset[data-inset="caribbean"] {
-  bottom: 3%;
+  bottom: 2%;
   left: 2%;
-  width: 27%;
-  height: 32%;
+  width: 32%;
+  height: 38%;
 }
 
 .country-inset[data-inset="gulf"] {
-  bottom: 3%;
+  bottom: 2%;
   right: 2%;
-  width: 21%;
-  height: 24%;
+  width: 25%;
+  height: 28%;
 }
 
 .country-inset-label {
@@ -220,9 +202,9 @@
 }
 
 .country-inset .country-marker {
-  width: 9px;
-  height: 9px;
-  margin: -4.5px 0 0 -4.5px;
+  width: 5px;
+  height: 5px;
+  margin: -2.5px 0 0 -2.5px;
 }
 
 .country-inset .country-marker-label {
@@ -278,7 +260,7 @@
 
 .country-learn-middle {
   grid-template-areas: "map" "card" "controls";
-  grid-template-rows: minmax(0, 1fr) auto auto;
+  grid-template-rows: auto auto auto;
 }
 
 @media (orientation: landscape) {

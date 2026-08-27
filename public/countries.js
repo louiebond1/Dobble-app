@@ -155,47 +155,14 @@ function tryLockLandscape() {
   }
 }
 
-// CSS's `aspect-ratio` + `max-width` clamping doesn't reliably re-derive the
-// other dimension in every browser once the height-derived width gets
-// clamped down — it can end up applying the clamped width with the original,
-// un-re-derived height instead, producing a squashed box. Sizing the map's
-// pixel box directly sidesteps that, and also lets us pick a friendlier
-// on-screen ratio: the SVG itself is a true 2:1 equirectangular projection,
-// but rendering it at that ratio caps a portrait phone's map at a cramped
-// ~180px tall (width is the hard constraint there, not height). Stretching
-// it to MAP_ASPECT instead — closer to Sporcle's own on-screen proportions —
-// is a deliberate, harmless UI choice: this isn't a cartographic product,
-// markers are positioned purely by percentage, so they (and the landmass
-// image, via width/height:100%) scale consistently with whatever box this
-// picks, geographic distortion or not.
-const MAP_ASPECT = 1.5; // width:height
-function sizeVisibleMap() {
-  const stage = mode === 'learn' ? learnArea : gameArea;
-  if (!stage || stage.classList.contains('hidden')) return;
-  const wrap = stage.querySelector('.country-map-wrap');
-  const map = stage.querySelector('.country-map');
-  if (!wrap || !map) return;
-  const availW = wrap.clientWidth;
-  const availH = wrap.clientHeight;
-  if (!availW || !availH) return;
-  let w = availH * MAP_ASPECT;
-  let h = availH;
-  if (w > availW) {
-    w = availW;
-    h = availW / MAP_ASPECT;
-  }
-  map.style.width = w + 'px';
-  map.style.height = h + 'px';
-}
-
-window.addEventListener('resize', sizeVisibleMap);
-window.addEventListener('orientationchange', () => setTimeout(sizeVisibleMap, 60));
-
 // Regions where 197 evenly-spread dots collapse into an unreadable clump on
 // any flat world map at phone size — Sporcle solves this with zoomed inset
 // panels, so we do too. Each country whose centroid falls in a box also gets
 // a second, larger marker rendered inside that inset, positioned via the
-// same linear projection rescaled to the box's own lat/lng range.
+// same linear projection rescaled to the box's own lat/lng range, then
+// nudged apart from its neighbors (see relaxPositions) so genuinely
+// close-together countries (the Balkans, Benelux) don't render as one solid
+// blob even at this zoomed-in scale.
 const INSETS = [
   { key: 'europe', latMin: 34, latMax: 71, lngMin: -11, lngMax: 42 },
   { key: 'caribbean', latMin: 7, latMax: 27, lngMin: -85, lngMax: -59 },
@@ -213,39 +180,90 @@ function projectInInset(lat, lng, inset) {
   };
 }
 
+// Simple pairwise repulsion pass (same idea as layoutSymbols' collision
+// relaxation in layout.js) — pushes any two points closer than minDist apart
+// from each other, clamped back inside the box each pass. Points move away
+// from their true projected position only as much as crowding demands.
+function relaxPositions(points, minDist, iterations = 40) {
+  for (let pass = 0; pass < iterations; pass++) {
+    for (let i = 0; i < points.length; i++) {
+      for (let j = i + 1; j < points.length; j++) {
+        const a = points[i];
+        const b = points[j];
+        const dx = b.x - a.x;
+        const dy = b.y - a.y;
+        const dist = Math.sqrt(dx * dx + dy * dy) || 0.001;
+        if (dist < minDist) {
+          const push = (minDist - dist) / 2;
+          const nx = dx / dist;
+          const ny = dy / dist;
+          a.x -= nx * push;
+          a.y -= ny * push;
+          b.x += nx * push;
+          b.y += ny * push;
+        }
+      }
+    }
+    for (const p of points) {
+      p.x = Math.max(3, Math.min(97, p.x));
+      p.y = Math.max(5, Math.min(95, p.y));
+    }
+  }
+}
+
 function buildMarkers() {
   const container = el('countryMarkers');
   container.innerHTML = '';
   markerEls.clear();
 
   const insetContainers = {};
+  const insetPoints = {};
   INSETS.forEach((r) => {
     const c = document.querySelector(`[data-inset-markers="${r.key}"]`);
     if (c) c.innerHTML = '';
     insetContainers[r.key] = c;
+    insetPoints[r.key] = [];
   });
 
+  const placements = [];
   for (const c of allCountries) {
     const { x, y } = project(c.lat, c.lng);
+    const inset = findInset(c.lat, c.lng);
+    const entry = { country: c, mainPos: { x, y }, inset: inset && inset.key };
+    if (inset) {
+      const p = projectInInset(c.lat, c.lng, inset);
+      entry.insetPos = p;
+      insetPoints[inset.key].push(p);
+    }
+    placements.push(entry);
+  }
+
+  // Spacing scales down as a region gets more crowded, so 6 Gulf countries
+  // get plenty of room while 47 European ones still fit without spilling
+  // out of the panel.
+  INSETS.forEach((r) => {
+    const pts = insetPoints[r.key];
+    if (pts.length > 1) relaxPositions(pts, Math.min(24, 105 / Math.sqrt(pts.length)));
+  });
+
+  for (const entry of placements) {
     const dot = document.createElement('div');
     dot.className = 'country-marker';
-    dot.style.left = x + '%';
-    dot.style.top = y + '%';
+    dot.style.left = entry.mainPos.x + '%';
+    dot.style.top = entry.mainPos.y + '%';
     container.appendChild(dot);
 
-    const entry = { main: dot, insetEl: null, insetKey: null };
-    const inset = findInset(c.lat, c.lng);
-    if (inset && insetContainers[inset.key]) {
-      const p = projectInInset(c.lat, c.lng, inset);
+    const markerEntry = { main: dot, insetEl: null, insetKey: null };
+    if (entry.inset && insetContainers[entry.inset]) {
       const insetDot = document.createElement('div');
       insetDot.className = 'country-marker';
-      insetDot.style.left = p.x + '%';
-      insetDot.style.top = p.y + '%';
-      insetContainers[inset.key].appendChild(insetDot);
-      entry.insetEl = insetDot;
-      entry.insetKey = inset.key;
+      insetDot.style.left = entry.insetPos.x + '%';
+      insetDot.style.top = entry.insetPos.y + '%';
+      insetContainers[entry.inset].appendChild(insetDot);
+      markerEntry.insetEl = insetDot;
+      markerEntry.insetKey = entry.inset;
     }
-    markerEls.set(c.id, entry);
+    markerEls.set(entry.country.id, markerEntry);
   }
 }
 
@@ -380,7 +398,6 @@ function startLearnMode() {
   learnArea.classList.remove('hidden');
 
   tryLockLandscape();
-  sizeVisibleMap();
   buildLearnMarkers();
   showLearnCard();
 }
@@ -558,7 +575,6 @@ socket.on('countries:game:start', (data) => {
   el('guessInput').value = '';
 
   tryLockLandscape();
-  sizeVisibleMap();
   buildMarkers();
   updateTeamHud();
   startCountdown(data.deadline);
@@ -629,7 +645,6 @@ function startSoloGame() {
   el('guessInput').value = '';
 
   tryLockLandscape();
-  sizeVisibleMap();
   buildMarkers();
   startElapsedClock(soloStartedAt);
   el('guessInput').focus();
