@@ -17,6 +17,7 @@
   <link rel="stylesheet" href="/countries.css" />
   <link rel="stylesheet" href="/countries-polish.css" />
   <link rel="stylesheet" href="/countries-investor-fix.css" />
+  <link rel="stylesheet" href="/countries-learn-v2.css" />
 </head>
 <body>
   <div class="wrap" id="setupWrap">
@@ -36,7 +37,7 @@
       <div id="learnFields" class="hidden">
         <p class="field-label">Continent</p>
         <div class="country-continent-chips" id="continentChips"></div>
-        <p class="quickplay-hint">No timer, no pressure — flip through each country's name and location at your own pace.</p>
+        <p class="quickplay-hint">Choose a region, explore the countries, study A–Z if you want, then test yourself.</p>
         <button class="btn" id="learnStartBtn">📖 Start Learning</button>
       </div>
 
@@ -78,112 +79,33 @@
       </div>
       <button class="btn-back country-give-up" id="giveUpBtn">Give Up</button>
     </div>
-    <div class="country-progress-track">
-      <div class="country-progress-fill" id="countryProgressFill"></div>
-    </div>
-
-    <div class="duel-hud hidden" id="duelHud">
-      <div class="duel-player" id="hudP1">
-        <span class="duel-player-name" id="hudP1Name"></span>
-        <span class="duel-player-score" id="hudP1Score">0</span>
-      </div>
-      <div class="duel-player" id="hudP2">
-        <span class="duel-player-name" id="hudP2Name"></span>
-        <span class="duel-player-score" id="hudP2Score">0</span>
-      </div>
-    </div>
-
-    <div class="country-rotate-lock">
-      <div class="country-rotate-lock-icon">🔄</div>
-      <p class="country-rotate-lock-title">Turn your phone upright</p>
-      <p class="country-rotate-lock-sub">Countries of the World is a portrait game</p>
-    </div>
-
+    <div class="country-progress-track"><div class="country-progress-fill" id="countryProgressFill"></div></div>
+    <div class="duel-hud hidden" id="duelHud"><div class="duel-player" id="hudP1"><span class="duel-player-name" id="hudP1Name"></span><span class="duel-player-score" id="hudP1Score">0</span></div><div class="duel-player" id="hudP2"><span class="duel-player-name" id="hudP2Name"></span><span class="duel-player-score" id="hudP2Score">0</span></div></div>
+    <div class="country-rotate-lock"><div class="country-rotate-lock-icon">🔄</div><p class="country-rotate-lock-title">Turn your phone upright</p><p class="country-rotate-lock-sub">Countries of the World is a portrait game</p></div>
     <div class="duel-middle country-middle">
-      <div class="country-map-wrap">
-        <div class="country-map" id="countryMap">
-          <img src="/images/world-map.svg" class="country-map-bg" alt="" />
-          <div class="country-markers" id="countryMarkers"></div>
-          <div class="country-inset" data-inset="europe">
-            <img src="/images/world-map.svg" class="country-inset-bg" alt="" />
-            <span class="country-inset-label">Europe</span>
-            <div class="country-inset-markers" data-inset-markers="europe"></div>
-          </div>
-          <div class="country-inset" data-inset="caribbean">
-            <img src="/images/world-map.svg" class="country-inset-bg" alt="" />
-            <span class="country-inset-label">Caribbean</span>
-            <div class="country-inset-markers" data-inset-markers="caribbean"></div>
-          </div>
-          <div class="country-inset" data-inset="gulf">
-            <img src="/images/world-map.svg" class="country-inset-bg" alt="" />
-            <span class="country-inset-label">Gulf</span>
-            <div class="country-inset-markers" data-inset-markers="gulf"></div>
-          </div>
-        </div>
-      </div>
-      <input
-        type="text"
-        id="guessInput"
-        class="country-input"
-        placeholder="Type a country name…"
-        autocomplete="off"
-        autocapitalize="words"
-        spellcheck="false"
-      />
+      <div class="country-map-wrap"><div class="country-map" id="countryMap"><img src="/images/world-map.svg" class="country-map-bg" alt="" /><div class="country-markers" id="countryMarkers"></div><div class="country-inset" data-inset="europe"><img src="/images/world-map.svg" class="country-inset-bg" alt="" /><span class="country-inset-label">Europe</span><div class="country-inset-markers" data-inset-markers="europe"></div></div><div class="country-inset" data-inset="caribbean"><img src="/images/world-map.svg" class="country-inset-bg" alt="" /><span class="country-inset-label">Caribbean</span><div class="country-inset-markers" data-inset-markers="caribbean"></div></div><div class="country-inset" data-inset="gulf"><img src="/images/world-map.svg" class="country-inset-bg" alt="" /><span class="country-inset-label">Gulf</span><div class="country-inset-markers" data-inset-markers="gulf"></div></div></div></div>
+      <input type="text" id="guessInput" class="country-input" placeholder="Type a country name…" autocomplete="off" autocapitalize="words" spellcheck="false" />
       <div class="country-feed" id="countryFeed"></div>
     </div>
   </div>
 
   <div class="duel-stage hidden" id="learnArea">
-    <div class="duel-topbar">
-      <a href="/countries" class="btn-back duel-quit">← Quit</a>
-      <div class="duel-round-info" id="learnProgress"></div>
-    </div>
-
-    <div class="country-rotate-lock">
-      <div class="country-rotate-lock-icon">🔄</div>
-      <p class="country-rotate-lock-title">Turn your phone upright</p>
-      <p class="country-rotate-lock-sub">Countries of the World is a portrait game</p>
-    </div>
-
+    <div class="duel-topbar"><a href="/countries" class="btn-back duel-quit">← Quit</a><div class="duel-round-info" id="learnProgress"></div></div>
+    <div class="country-rotate-lock"><div class="country-rotate-lock-icon">🔄</div><p class="country-rotate-lock-title">Turn your phone upright</p><p class="country-rotate-lock-sub">Countries of the World is a portrait game</p></div>
     <div class="duel-middle country-middle country-learn-middle">
-      <div class="country-map-wrap">
-        <div class="country-map" id="learnMap">
-          <img src="/images/world-map.svg" class="country-map-bg" alt="" />
-          <div class="country-markers" id="learnMarkers"></div>
-        </div>
-      </div>
-      <div class="country-learn-card">
-        <div class="country-learn-name" id="learnCountryName"></div>
-        <div class="country-learn-region" id="learnCountryRegion"></div>
-      </div>
-      <div class="country-learn-controls">
-        <button class="btn-back" id="learnPrevBtn">‹ Prev</button>
-        <button class="btn-back" id="learnShuffleBtn">🔀 Shuffle</button>
-        <button class="btn-back" id="learnNextBtn">Next ›</button>
-      </div>
+      <div class="country-map-wrap"><div class="country-map" id="learnMap"><img src="/images/world-map.svg" class="country-map-bg" alt="" /><div class="country-markers" id="learnMarkers"></div></div></div>
+      <div class="country-learn-card"><div class="country-learn-name" id="learnCountryName"></div><div class="country-learn-region" id="learnCountryRegion"></div></div>
+      <div class="country-learn-controls"><button class="btn-back" id="learnPrevBtn">‹ Prev</button><button class="btn-back" id="learnShuffleBtn">🔀 Shuffle</button><button class="btn-back" id="learnNextBtn">Next ›</button></div>
     </div>
   </div>
 
-  <div class="duel-stage duel-stage-over hidden" id="gameOver">
-    <div class="duel-over-content">
-      <div class="duel-over-emoji">🎉</div>
-      <h2 id="overTitle">Game Complete!</h2>
-      <p class="duel-solo-summary" id="soloSummary"></p>
-      <div class="leaderboard" id="finalBoard"></div>
-      <div class="country-missed" id="missedWrap">
-        <p class="field-label">Missed (<span id="missedCount">0</span>)</p>
-        <p class="country-missed-list" id="missedList"></p>
-      </div>
-      <button class="btn hidden" id="playAgainBtn">🔁 Play Again</button>
-      <a href="/" class="btn btn-outline">← Back to Home</a>
-    </div>
-  </div>
+  <div class="duel-stage duel-stage-over hidden" id="gameOver"><div class="duel-over-content"><div class="duel-over-emoji">🎉</div><h2 id="overTitle">Game Complete!</h2><p class="duel-solo-summary" id="soloSummary"></p><div class="leaderboard" id="finalBoard"></div><div class="country-missed" id="missedWrap"><p class="field-label">Missed (<span id="missedCount">0</span>)</p><p class="country-missed-list" id="missedList"></p></div><button class="btn hidden" id="playAgainBtn">🔁 Play Again</button><a href="/" class="btn btn-outline">← Back to Home</a></div></div>
 
   <script src="/socket.io/socket.io.js"></script>
   <script src="/layout.js"></script>
   <script src="/countries.js"></script>
   <script src="/countries-polish.js"></script>
   <script src="/countries-investor-fix.js"></script>
+  <script src="/countries-learn-v2.js"></script>
 </body>
 </html>
