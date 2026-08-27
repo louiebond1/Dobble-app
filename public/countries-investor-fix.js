@@ -21,6 +21,30 @@
     'Democratic Republic of the Congo': 'DR Congo'
   };
 
+  /* Raw geographic centroids are mathematically valid but often look wrong as
+     cartographic label positions (Canada is the obvious example). These are
+     visual label anchors: points chosen to make the word sit naturally over
+     the recognisable body of the country. Unlisted countries keep their normal
+     answer point. */
+  const LABEL_ANCHORS = {
+    can: [55.5, -106], usa: [38.5, -98], mex: [23.5, -102],
+    bra: [-10, -52], arg: [-38, -64], chl: [-34, -71], col: [4, -73],
+    per: [-9.5, -75], bol: [-17, -64.5], ven: [7, -66],
+    rus: [57, 86], chn: [35, 103], ind: [22.5, 79], kaz: [48, 67],
+    mng: [46, 104], irn: [32, 54], sau: [24, 45], tur: [39, 35],
+    idn: [-2, 117], phl: [12.5, 122], jpn: [37, 138],
+    aus: [-25, 134], nzl: [-42, 173], png: [-6.5, 145],
+    dza: [28, 2.5], cod: [-3, 23], ago: [-12, 18], zaf: [-29, 24],
+    nam: [-22, 17], bwa: [-22, 24], tza: [-6, 35], moz: [-18, 35],
+    mdg: [-20, 47], sdn: [15, 30], ssd: [7, 30], eth: [9, 40],
+    egy: [27, 30], lib: [27, 17], ner: [17, 9], tcd: [15, 19],
+    mli: [17, -4], mrt: [20, -10], nga: [9, 8],
+    grl: [72, -40],
+    esp: [40, -4], fra: [46.5, 2], deu: [51, 10], ita: [42.5, 12.5],
+    swe: [62, 16], nor: [64, 12], fin: [64, 26], ukr: [49, 32],
+    pol: [52, 19], rou: [46, 25], gbr: [54.5, -2.5]
+  };
+
   function configureInsetGeography() {
     for (const region of INSETS) {
       const inset = document.querySelector(`#gameArea .country-inset[data-inset="${region.key}"]`);
@@ -60,8 +84,34 @@
     }];
   }
 
-  /* Same placement engine, but inset titles become real blockers and compact
-     names are measured before collision resolution. */
+  /* Once an answer marker vanishes, the cleanest label position is directly on
+     the geographic/visual anchor. Only move it when that would collide. */
+  candidateLabelRects = function candidateLabelRectsInvestor(anchorX, anchorY, w, h, gap) {
+    return [
+      { x: anchorX - w / 2, y: anchorY - h / 2, w, h },
+      { x: anchorX - w / 2, y: anchorY - h - gap, w, h },
+      { x: anchorX + gap, y: anchorY - h / 2, w, h },
+      { x: anchorX - w / 2, y: anchorY + gap, w, h },
+      { x: anchorX - w - gap, y: anchorY - h / 2, w, h },
+      { x: anchorX + gap, y: anchorY - h - gap, w, h },
+      { x: anchorX - w - gap, y: anchorY - h - gap, w, h },
+      { x: anchorX + gap, y: anchorY + gap, w, h },
+      { x: anchorX - w - gap, y: anchorY + gap, w, h },
+    ];
+  };
+
+  function applyVisualAnchor(record) {
+    if (record.insetKey) return;
+    const id = record.label && record.label.dataset.countryId;
+    const anchor = LABEL_ANCHORS[id];
+    if (!anchor) return;
+    const projected = projectMainBoard(anchor[0], anchor[1]);
+    record.xPct = projected.x;
+    record.yPct = projected.y;
+  }
+
+  /* Same placement engine, but inset titles become real blockers, compact names
+     are measured first, and main labels use their cartographic visual anchors. */
   layoutAllCountryLabels = function layoutAllCountryLabelsInvestor() {
     compactInsetLabels();
     const count = currentProgressCount();
@@ -69,6 +119,7 @@
 
     for (const record of polishedLabelRecords) {
       if (!record.label.isConnected) continue;
+      applyVisualAnchor(record);
       const hiddenByDensity = Number(record.label.dataset.labelRank || 0) > labelKeepThreshold(count, !!record.insetKey);
       record.label.classList.toggle('country-label-hidden', hiddenByDensity);
       if (hiddenByDensity) continue;
@@ -92,6 +143,8 @@
     baseReveal(id, ownerName);
     requestAnimationFrame(() => {
       compactInsetLabels();
+      const record = polishedLabelRecords.find((r) => r.label && r.label.dataset.countryId === id);
+      if (record) applyVisualAnchor(record);
       const label = document.querySelector(`#gameArea .country-marker-label[data-country-id="${id}"]`);
       if (label) {
         label.classList.add('country-label-new');
