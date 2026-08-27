@@ -587,6 +587,8 @@ function startElapsedClock(startedAt) {
 
 function updateProgress(count) {
   el('countryProgress').textContent = `${count} / ${allCountries.length}`;
+  const pct = allCountries.length ? (count / allCountries.length) * 100 : 0;
+  el('countryProgressFill').style.width = pct + '%';
 }
 
 // --- Team Up lifecycle (server-driven, co-op) -------------------------------
