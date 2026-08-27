@@ -23,11 +23,19 @@
 
     <div class="panel" id="setup">
       <div class="field-group">
-        <p class="field-label">Players</p>
+        <p class="field-label">Mode</p>
         <div class="mode-toggle" id="modeToggle">
+          <button type="button" class="mode-btn" id="modeLearnBtn" data-mode="learn">📖 Learn</button>
           <button type="button" class="mode-btn" id="modeSoloBtn" data-mode="solo">🧍 Solo Practice</button>
           <button type="button" class="mode-btn active" id="modeDuoBtn" data-mode="duo">🤝 Team Up</button>
         </div>
+      </div>
+
+      <div id="learnFields" class="hidden">
+        <p class="field-label">Continent</p>
+        <div class="country-continent-chips" id="continentChips"></div>
+        <p class="quickplay-hint">No timer, no pressure — flip through each country's name and location at your own pace.</p>
+        <button class="btn" id="learnStartBtn">📖 Start Learning</button>
       </div>
 
       <div id="soloFields" class="hidden">
@@ -84,6 +92,18 @@
         <div class="country-map" id="countryMap">
           <img src="/images/world-map.svg" class="country-map-bg" alt="" />
           <div class="country-markers" id="countryMarkers"></div>
+          <div class="country-inset" data-inset="europe">
+            <span class="country-inset-label">Europe</span>
+            <div class="country-inset-markers" data-inset-markers="europe"></div>
+          </div>
+          <div class="country-inset" data-inset="caribbean">
+            <span class="country-inset-label">Caribbean</span>
+            <div class="country-inset-markers" data-inset-markers="caribbean"></div>
+          </div>
+          <div class="country-inset" data-inset="gulf">
+            <span class="country-inset-label">Gulf</span>
+            <div class="country-inset-markers" data-inset-markers="gulf"></div>
+          </div>
         </div>
       </div>
       <input
@@ -96,6 +116,31 @@
         spellcheck="false"
       />
       <div class="country-feed" id="countryFeed"></div>
+    </div>
+  </div>
+
+  <div class="duel-stage hidden" id="learnArea">
+    <div class="duel-topbar">
+      <a href="/countries" class="btn-back duel-quit">← Quit</a>
+      <div class="duel-round-info" id="learnProgress"></div>
+    </div>
+
+    <div class="duel-middle country-middle country-learn-middle">
+      <div class="country-map-wrap">
+        <div class="country-map" id="learnMap">
+          <img src="/images/world-map.svg" class="country-map-bg" alt="" />
+          <div class="country-markers" id="learnMarkers"></div>
+        </div>
+      </div>
+      <div class="country-learn-card">
+        <div class="country-learn-name" id="learnCountryName"></div>
+        <div class="country-learn-region" id="learnCountryRegion"></div>
+      </div>
+      <div class="country-learn-controls">
+        <button class="btn-back" id="learnPrevBtn">‹ Prev</button>
+        <button class="btn-back" id="learnShuffleBtn">🔀 Shuffle</button>
+        <button class="btn-back" id="learnNextBtn">Next ›</button>
+      </div>
     </div>
   </div>
 

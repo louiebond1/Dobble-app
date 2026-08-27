@@ -4,10 +4,11 @@ const setup = el('setup');
 const lobby = el('lobby');
 const gameArea = el('gameArea');
 const gameOver = el('gameOver');
+const learnArea = el('learnArea');
 
 const socket = io();
 
-let mode = 'duo'; // 'solo' | 'duo' (duo = co-op team, not competitive)
+let mode = 'duo'; // 'solo' | 'duo' | 'learn' (duo = co-op team, not competitive)
 let roomCode = null;
 let hostToken = null;
 let isHost = false;
@@ -16,6 +17,7 @@ let players = [];
 
 let allCountries = [];
 const countryById = new Map();
+// id -> { main: dotEl, insetEl: dotEl|null, insetKey: string|null }
 const markerEls = new Map();
 
 // solo-only state
@@ -25,6 +27,11 @@ let soloStartedAt = null;
 // duo-only state
 let revealedIds = new Set();
 let timerHandle = null;
+
+// learn-only state
+let learnList = [];
+let learnIndex = 0;
+let learnActiveMarker = null;
 
 fetch('/api/countries')
   .then((r) => r.json())
@@ -148,10 +155,76 @@ function tryLockLandscape() {
   }
 }
 
+// CSS's `aspect-ratio` + `max-width` clamping doesn't reliably re-derive the
+// other dimension in every browser once the height-derived width gets
+// clamped down — it can end up applying the clamped width with the original,
+// un-re-derived height instead, producing a squashed box. Sizing the map's
+// pixel box directly sidesteps that, and also lets us pick a friendlier
+// on-screen ratio: the SVG itself is a true 2:1 equirectangular projection,
+// but rendering it at that ratio caps a portrait phone's map at a cramped
+// ~180px tall (width is the hard constraint there, not height). Stretching
+// it to MAP_ASPECT instead — closer to Sporcle's own on-screen proportions —
+// is a deliberate, harmless UI choice: this isn't a cartographic product,
+// markers are positioned purely by percentage, so they (and the landmass
+// image, via width/height:100%) scale consistently with whatever box this
+// picks, geographic distortion or not.
+const MAP_ASPECT = 1.5; // width:height
+function sizeVisibleMap() {
+  const stage = mode === 'learn' ? learnArea : gameArea;
+  if (!stage || stage.classList.contains('hidden')) return;
+  const wrap = stage.querySelector('.country-map-wrap');
+  const map = stage.querySelector('.country-map');
+  if (!wrap || !map) return;
+  const availW = wrap.clientWidth;
+  const availH = wrap.clientHeight;
+  if (!availW || !availH) return;
+  let w = availH * MAP_ASPECT;
+  let h = availH;
+  if (w > availW) {
+    w = availW;
+    h = availW / MAP_ASPECT;
+  }
+  map.style.width = w + 'px';
+  map.style.height = h + 'px';
+}
+
+window.addEventListener('resize', sizeVisibleMap);
+window.addEventListener('orientationchange', () => setTimeout(sizeVisibleMap, 60));
+
+// Regions where 197 evenly-spread dots collapse into an unreadable clump on
+// any flat world map at phone size — Sporcle solves this with zoomed inset
+// panels, so we do too. Each country whose centroid falls in a box also gets
+// a second, larger marker rendered inside that inset, positioned via the
+// same linear projection rescaled to the box's own lat/lng range.
+const INSETS = [
+  { key: 'europe', latMin: 34, latMax: 71, lngMin: -11, lngMax: 42 },
+  { key: 'caribbean', latMin: 7, latMax: 27, lngMin: -85, lngMax: -59 },
+  { key: 'gulf', latMin: 20, latMax: 31, lngMin: 44, lngMax: 58 },
+];
+
+function findInset(lat, lng) {
+  return INSETS.find((r) => lat >= r.latMin && lat <= r.latMax && lng >= r.lngMin && lng <= r.lngMax) || null;
+}
+
+function projectInInset(lat, lng, inset) {
+  return {
+    x: ((lng - inset.lngMin) / (inset.lngMax - inset.lngMin)) * 100,
+    y: ((inset.latMax - lat) / (inset.latMax - inset.latMin)) * 100,
+  };
+}
+
 function buildMarkers() {
   const container = el('countryMarkers');
   container.innerHTML = '';
   markerEls.clear();
+
+  const insetContainers = {};
+  INSETS.forEach((r) => {
+    const c = document.querySelector(`[data-inset-markers="${r.key}"]`);
+    if (c) c.innerHTML = '';
+    insetContainers[r.key] = c;
+  });
+
   for (const c of allCountries) {
     const { x, y } = project(c.lat, c.lng);
     const dot = document.createElement('div');
@@ -159,29 +232,53 @@ function buildMarkers() {
     dot.style.left = x + '%';
     dot.style.top = y + '%';
     container.appendChild(dot);
-    markerEls.set(c.id, dot);
+
+    const entry = { main: dot, insetEl: null, insetKey: null };
+    const inset = findInset(c.lat, c.lng);
+    if (inset && insetContainers[inset.key]) {
+      const p = projectInInset(c.lat, c.lng, inset);
+      const insetDot = document.createElement('div');
+      insetDot.className = 'country-marker';
+      insetDot.style.left = p.x + '%';
+      insetDot.style.top = p.y + '%';
+      insetContainers[inset.key].appendChild(insetDot);
+      entry.insetEl = insetDot;
+      entry.insetKey = inset.key;
+    }
+    markerEls.set(c.id, entry);
   }
 }
 
 function revealMarker(id, ownerName) {
-  const dot = markerEls.get(id);
+  const entry = markerEls.get(id);
   const country = countryById.get(id);
-  if (!dot || !country) return;
-  dot.classList.add('found');
-  dot.classList.toggle('mine', mode === 'duo' && ownerName === myName);
+  if (!entry || !country) return;
+  const mine = mode === 'duo' && ownerName === myName;
+
+  entry.main.classList.add('found');
+  entry.main.classList.toggle('mine', mine);
+  if (entry.insetEl) {
+    entry.insetEl.classList.add('found');
+    entry.insetEl.classList.toggle('mine', mine);
+  }
 
   // The label is a permanent record on the map (like Sporcle) — it outlives
-  // the dot, which pops and vanishes almost immediately, so it's appended as
-  // its own sibling positioned at the same spot rather than nested inside it.
+  // the dot(s), which pop and vanish almost immediately, so it's appended as
+  // its own sibling rather than nested inside one. It goes wherever there's
+  // actually room to read it: the zoomed inset copy when one exists,
+  // otherwise the main map position.
+  const labelDot = entry.insetEl || entry.main;
+  const labelHost = entry.insetEl ? document.querySelector(`[data-inset-markers="${entry.insetKey}"]`) : el('countryMarkers');
   const label = document.createElement('div');
   label.className = 'country-marker-label';
-  label.style.left = dot.style.left;
-  label.style.top = dot.style.top;
+  label.style.left = labelDot.style.left;
+  label.style.top = labelDot.style.top;
   label.textContent = country.name;
-  el('countryMarkers').appendChild(label);
+  (labelHost || el('countryMarkers')).appendChild(label);
 
   setTimeout(() => {
-    dot.remove();
+    entry.main.remove();
+    if (entry.insetEl) entry.insetEl.remove();
     markerEls.delete(id);
   }, 550);
 }
@@ -240,9 +337,108 @@ document.querySelectorAll('#modeToggle .mode-btn').forEach((btn) => {
   btn.addEventListener('click', () => {
     mode = btn.dataset.mode;
     document.querySelectorAll('#modeToggle .mode-btn').forEach((b) => b.classList.toggle('active', b === btn));
+    el('learnFields').classList.toggle('hidden', mode !== 'learn');
     el('soloFields').classList.toggle('hidden', mode !== 'solo');
     el('duoFields').classList.toggle('hidden', mode !== 'duo');
   });
+});
+
+// --- Learn mode (untimed flashcard-style study) -----------------------------
+
+const CONTINENTS = ['All', 'Africa', 'Americas', 'Asia', 'Europe', 'Oceania'];
+let learnContinent = 'All';
+(function renderContinentChips() {
+  const container = el('continentChips');
+  CONTINENTS.forEach((name) => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'chip';
+    btn.textContent = name;
+    if (name === 'All') btn.classList.add('active');
+    btn.addEventListener('click', () => {
+      container.querySelectorAll('.chip').forEach((c) => c.classList.toggle('active', c === btn));
+      learnContinent = name;
+    });
+    container.appendChild(btn);
+  });
+})();
+
+el('learnStartBtn').addEventListener('click', () => {
+  if (!allCountries.length) return;
+  startLearnMode();
+});
+
+function startLearnMode() {
+  mode = 'learn';
+  const pool = learnContinent === 'All' ? allCountries : allCountries.filter((c) => c.region === learnContinent);
+  learnList = pool.slice();
+  learnIndex = 0;
+
+  setupWrap.classList.add('hidden');
+  lobby.classList.add('hidden');
+  gameOver.classList.add('hidden');
+  learnArea.classList.remove('hidden');
+
+  tryLockLandscape();
+  sizeVisibleMap();
+  buildLearnMarkers();
+  showLearnCard();
+}
+
+// The full 197-country reference stays visible (dim) behind the one active,
+// pulsing marker, so location sinks in relative to neighboring countries
+// rather than in isolation.
+function buildLearnMarkers() {
+  const container = el('learnMarkers');
+  container.innerHTML = '';
+  learnActiveMarker = null;
+  for (const c of allCountries) {
+    const { x, y } = project(c.lat, c.lng);
+    const dot = document.createElement('div');
+    dot.className = 'country-marker';
+    dot.style.left = x + '%';
+    dot.style.top = y + '%';
+    dot.style.opacity = '0.35';
+    container.appendChild(dot);
+  }
+}
+
+function showLearnCard() {
+  if (!learnList.length) return;
+  const country = learnList[learnIndex];
+  el('learnCountryName').textContent = country.name;
+  el('learnCountryRegion').textContent = country.region;
+  el('learnProgress').textContent = `${learnIndex + 1} / ${learnList.length}`;
+
+  if (learnActiveMarker) learnActiveMarker.remove();
+  const { x, y } = project(country.lat, country.lng);
+  const marker = document.createElement('div');
+  marker.className = 'country-learn-marker';
+  marker.style.left = x + '%';
+  marker.style.top = y + '%';
+  el('learnMarkers').appendChild(marker);
+  learnActiveMarker = marker;
+}
+
+el('learnPrevBtn').addEventListener('click', () => {
+  if (!learnList.length) return;
+  learnIndex = (learnIndex - 1 + learnList.length) % learnList.length;
+  showLearnCard();
+});
+
+el('learnNextBtn').addEventListener('click', () => {
+  if (!learnList.length) return;
+  learnIndex = (learnIndex + 1) % learnList.length;
+  showLearnCard();
+});
+
+el('learnShuffleBtn').addEventListener('click', () => {
+  for (let i = learnList.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [learnList[i], learnList[j]] = [learnList[j], learnList[i]];
+  }
+  learnIndex = 0;
+  showLearnCard();
 });
 
 // --- Quick Play (Team Up) --------------------------------------------------
@@ -362,6 +558,7 @@ socket.on('countries:game:start', (data) => {
   el('guessInput').value = '';
 
   tryLockLandscape();
+  sizeVisibleMap();
   buildMarkers();
   updateTeamHud();
   startCountdown(data.deadline);
@@ -432,6 +629,7 @@ function startSoloGame() {
   el('guessInput').value = '';
 
   tryLockLandscape();
+  sizeVisibleMap();
   buildMarkers();
   startElapsedClock(soloStartedAt);
   el('guessInput').focus();
