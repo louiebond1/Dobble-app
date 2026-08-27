@@ -143,12 +143,12 @@ function project(lat, lng) {
 // Best-effort: some browsers (mostly Android Chrome, especially as an
 // installed PWA) will actually rotate the screen for us. Where that's not
 // supported (notably iOS Safari, which never lets a page do this) it just
-// silently fails — the CSS layout below still reflows nicely for landscape
+// silently fails — the CSS rotate-lock overlay still blocks landscape play
 // once the player rotates the phone themselves.
-function tryLockLandscape() {
+function tryLockPortrait() {
   try {
     if (screen.orientation && screen.orientation.lock) {
-      screen.orientation.lock('landscape').catch(() => {});
+      screen.orientation.lock('portrait').catch(() => {});
     }
   } catch (e) {
     /* orientation lock unsupported — ignore */
@@ -370,7 +370,7 @@ function startLearnMode() {
   gameOver.classList.add('hidden');
   learnArea.classList.remove('hidden');
 
-  tryLockLandscape();
+  tryLockPortrait();
   buildLearnMarkers();
   showLearnCard();
 }
@@ -547,7 +547,7 @@ socket.on('countries:game:start', (data) => {
   el('countryFeed').innerHTML = '';
   el('guessInput').value = '';
 
-  tryLockLandscape();
+  tryLockPortrait();
   buildMarkers();
   updateTeamHud();
   startCountdown(data.deadline);
@@ -617,7 +617,7 @@ function startSoloGame() {
   el('countryFeed').innerHTML = '';
   el('guessInput').value = '';
 
-  tryLockLandscape();
+  tryLockPortrait();
   buildMarkers();
   startElapsedClock(soloStartedAt);
   el('guessInput').focus();

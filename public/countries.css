@@ -24,16 +24,15 @@
   min-height: 0;
 }
 
-/* This is a landscape-only game — the map needs the width. Rather than
-   squeeze a cramped, illegible layout into portrait, block play outright
-   with a full-screen "rotate your phone" overlay until the device is
-   actually turned. Pure CSS (no screen.orientation dependency, which iOS
+/* This is a portrait-only game. Block play outright in landscape with a
+   full-screen "rotate your phone" overlay until the device is actually
+   turned upright. Pure CSS (no screen.orientation dependency, which iOS
    Safari doesn't support anyway) so it works identically everywhere. */
 .country-rotate-lock {
   display: none;
 }
 
-@media (orientation: portrait) {
+@media (orientation: landscape) {
   .country-rotate-lock {
     display: flex;
     position: fixed;
@@ -74,16 +73,6 @@
   font-size: 0.82rem;
   font-weight: 600;
   color: rgba(255, 255, 255, 0.6);
-}
-
-@media (orientation: landscape) {
-  .country-middle {
-    grid-template-areas: "map input" "map feed";
-    grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
-    grid-template-rows: auto minmax(0, 1fr);
-    gap: 8px 14px;
-    padding: 0 14px 10px;
-  }
 }
 
 /* Width-driven sizing via the classic "padding-top is a % of width" trick —
@@ -298,14 +287,6 @@
 .country-learn-middle {
   grid-template-areas: "map" "card" "controls";
   grid-template-rows: auto auto auto;
-}
-
-@media (orientation: landscape) {
-  .country-learn-middle {
-    grid-template-areas: "map card" "map controls";
-    grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
-    grid-template-rows: 1fr auto;
-  }
 }
 
 .country-learn-card {
