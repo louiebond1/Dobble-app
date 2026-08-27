@@ -531,6 +531,10 @@ function startElapsedClock(startedAt) {
   timerHandle = setInterval(tick, 500);
 }
 
+function updateProgress(count) {
+  el('countryProgress').textContent = `${count} / ${allCountries.length}`;
+}
+
 // --- Team Up lifecycle (server-driven, co-op) -------------------------------
 
 socket.on('countries:game:start', (data) => {
@@ -550,6 +554,7 @@ socket.on('countries:game:start', (data) => {
   tryLockPortrait();
   buildMarkers();
   updateTeamHud();
+  updateProgress(revealedIds.size);
   startCountdown(data.deadline);
   el('guessInput').focus();
 });
@@ -558,6 +563,7 @@ socket.on('countries:reveal', (data) => {
   players = data.players;
   updateTeamHud();
   revealedIds.add(data.countryId);
+  updateProgress(revealedIds.size);
   revealMarker(data.countryId, data.byName);
   const country = countryById.get(data.countryId);
   addFeedItem(country ? country.name : data.countryId, data.byName);
@@ -619,12 +625,14 @@ function startSoloGame() {
 
   tryLockPortrait();
   buildMarkers();
+  updateProgress(0);
   startElapsedClock(soloStartedAt);
   el('guessInput').focus();
 }
 
 function handleSoloFound(country) {
   foundIds.add(country.id);
+  updateProgress(foundIds.size);
   revealMarker(country.id, myName);
   addFeedItem(country.name, null);
   el('hudP1Score').textContent = foundIds.size;
