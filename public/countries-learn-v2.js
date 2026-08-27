@@ -59,15 +59,46 @@
     if(activeMode==='browse')renderBrowse();
     if(activeMode==='find')renderFind();
     if(activeMode==='recall')renderRecall();
+    requestAnimationFrame(initZoomableMaps);
   }
 
-  function mapHTML(id){return `<div class="learn-v4-map"><img src="/images/world-map.svg" alt="World map"><div id="${id}"></div></div>`;}
+  function mapHTML(id){return `<div class="learn-v4-map"><div class="learn-v4-map-stage"><img src="/images/world-map.svg" alt="World map"><div id="${id}"></div></div><div class="learn-v4-zoom"><button type="button" data-zoom="out" aria-label="Zoom out">−</button><button type="button" data-zoom="reset">Reset</button><button type="button" data-zoom="in" aria-label="Zoom in">+</button></div></div>`;}
+
+  function initZoomableMaps(){
+    document.querySelectorAll('.learn-v4-map').forEach(map=>{
+      if(map.dataset.zoomReady==='1')return;
+      map.dataset.zoomReady='1';
+      const stage=map.querySelector('.learn-v4-map-stage');
+      if(!stage)return;
+      let scale=1,tx=0,ty=0,startX=0,startY=0,startTx=0,startTy=0,pointers=new Map(),pinchStart=0,pinchScale=1,pinchMid=null;
+      const clamp=()=>{
+        const r=map.getBoundingClientRect();
+        const maxX=Math.max(0,(r.width*(scale-1))/2),maxY=Math.max(0,(r.height*(scale-1))/2);
+        tx=Math.max(-maxX,Math.min(maxX,tx));ty=Math.max(-maxY,Math.min(maxY,ty));
+      };
+      const apply=()=>{clamp();stage.style.transform=`translate(${tx}px,${ty}px) scale(${scale})`;};
+      const zoomAt=(next,cx,cy)=>{
+        next=Math.max(1,Math.min(5,next));
+        const r=map.getBoundingClientRect(),ox=(cx??(r.left+r.width/2))-r.left-r.width/2,oy=(cy??(r.top+r.height/2))-r.top-r.height/2;
+        const ratio=next/scale;tx=ox-(ox-tx)*ratio;ty=oy-(oy-ty)*ratio;scale=next;apply();
+      };
+      map.querySelector('[data-zoom="in"]')?.addEventListener('click',()=>zoomAt(scale*1.45));
+      map.querySelector('[data-zoom="out"]')?.addEventListener('click',()=>zoomAt(scale/1.45));
+      map.querySelector('[data-zoom="reset"]')?.addEventListener('click',()=>{scale=1;tx=0;ty=0;apply();});
+      stage.addEventListener('pointerdown',e=>{stage.setPointerCapture?.(e.pointerId);pointers.set(e.pointerId,{x:e.clientX,y:e.clientY});if(pointers.size===1){startX=e.clientX;startY=e.clientY;startTx=tx;startTy=ty;}if(pointers.size===2){const a=[...pointers.values()];pinchStart=Math.hypot(a[1].x-a[0].x,a[1].y-a[0].y);pinchScale=scale;pinchMid={x:(a[0].x+a[1].x)/2,y:(a[0].y+a[1].y)/2};}});
+      stage.addEventListener('pointermove',e=>{if(!pointers.has(e.pointerId))return;pointers.set(e.pointerId,{x:e.clientX,y:e.clientY});if(pointers.size===1&&scale>1){tx=startTx+(e.clientX-startX);ty=startTy+(e.clientY-startY);apply();}else if(pointers.size===2){const a=[...pointers.values()],dist=Math.hypot(a[1].x-a[0].x,a[1].y-a[0].y);if(pinchStart>0)zoomAt(pinchScale*(dist/pinchStart),pinchMid.x,pinchMid.y);}});
+      const end=e=>{pointers.delete(e.pointerId);if(pointers.size===1){const p=[...pointers.values()][0];startX=p.x;startY=p.y;startTx=tx;startTy=ty;}};
+      stage.addEventListener('pointerup',end);stage.addEventListener('pointercancel',end);
+      stage.addEventListener('wheel',e=>{if(!(e.ctrlKey||e.metaKey))return;e.preventDefault();zoomAt(scale*(e.deltaY<0?1.15:.87),e.clientX,e.clientY);},{passive:false});
+      apply();
+    });
+  }
+
   function renderRegionPicker(hostId,onChange){
     const host=document.getElementById(hostId);if(!host)return;
     REGIONS.forEach(r=>{const b=document.createElement('button');b.type='button';b.textContent=r;b.className=r===region?'active':'';b.addEventListener('click',()=>{region=r;onChange();});host.appendChild(b);});
   }
 
-  // A–Z ---------------------------------------------------------------
   function renderAZ(){
     const countries=byLetter(letter),done=found.size+revealed.size;
     const c=document.getElementById('lv4Content');
@@ -78,38 +109,37 @@
       ${mapHTML('lv4AzDots')}
       <div class="learn-v4-actions"><button id="lv4Hint">💡 Hint</button><button id="lv4Reveal">👀 Reveal one</button><button id="lv4Reset">↻ Restart letter</button></div>
       <div class="learn-v4-chips"><strong>${countries.length?`Revealed ${done} of ${countries.length}`:'No countries begin with this letter.'}</strong><div id="lv4AzFound"></div></div>`;
-    const letters=document.getElementById('lv4Letters');ALPHABET.forEach(l=>{const b=document.createElement('button');b.type='button';b.textContent=l;b.className=l===letter?'active':'';b.addEventListener('click',()=>{letter=l;found.clear();revealed.clear();message='';renderAZ();});letters.appendChild(b);});
+    const letters=document.getElementById('lv4Letters');ALPHABET.forEach(l=>{const b=document.createElement('button');b.type='button';b.textContent=l;b.className=l===letter?'active':'';b.addEventListener('click',()=>{letter=l;found.clear();revealed.clear();message='';renderAZ();requestAnimationFrame(initZoomableMaps);});letters.appendChild(b);});
     const dots=document.getElementById('lv4AzDots');countries.forEach(country=>{const p=project(country.lat,country.lng),d=document.createElement('div');d.className='learn-v4-dot'+(found.has(country.id)?' found':'')+(revealed.has(country.id)?' revealed':'');d.style.left=p.x+'%';d.style.top=p.y+'%';if(found.has(country.id)||revealed.has(country.id)){const s=document.createElement('span');s.textContent=country.name;d.appendChild(s);}dots.appendChild(d);});
     const foundHost=document.getElementById('lv4AzFound');countries.filter(x=>found.has(x.id)||revealed.has(x.id)).forEach(x=>{const s=document.createElement('span');s.className=revealed.has(x.id)?'revealed':'';s.textContent=x.name;foundHost.appendChild(s);});
-    document.getElementById('lv4AzForm').addEventListener('submit',e=>{e.preventDefault();const inp=document.getElementById('lv4AzInput'),v=norm(inp.value);const match=countries.find(x=>aliases(x).includes(v));if(!v)return;if(!match){message=`“${inp.value.trim()}” isn’t a ${letter} country.`;renderAZ();return;}if(found.has(match.id)||revealed.has(match.id)){message=`${match.name} is already revealed.`;renderAZ();return;}found.add(match.id);message=`✓ ${match.name}`;if(found.size+revealed.size===countries.length&&countries.length){message=`🎉 Letter ${letter} complete!`;const i=ALPHABET.indexOf(letter);if(i<25)setTimeout(()=>{letter=ALPHABET[i+1];found.clear();revealed.clear();message='';renderAZ();},1000);}renderAZ();});
-    document.getElementById('lv4Hint').onclick=()=>{const left=countries.filter(x=>!found.has(x.id)&&!revealed.has(x.id));if(left.length){const x=random(left);message=`Hint: one is ${x.name.length} letters and starts “${x.name.slice(0,2)}…”`;renderAZ();}};
-    document.getElementById('lv4Reveal').onclick=()=>{const x=countries.find(x=>!found.has(x.id)&&!revealed.has(x.id));if(x){revealed.add(x.id);message=`Revealed: ${x.name}`;renderAZ();}};
-    document.getElementById('lv4Reset').onclick=()=>{found.clear();revealed.clear();message='';renderAZ();};
+    document.getElementById('lv4AzForm').addEventListener('submit',e=>{e.preventDefault();const inp=document.getElementById('lv4AzInput'),v=norm(inp.value);const match=countries.find(x=>aliases(x).includes(v));if(!v)return;if(!match){message=`“${inp.value.trim()}” isn’t a ${letter} country.`;renderAZ();requestAnimationFrame(initZoomableMaps);return;}if(found.has(match.id)||revealed.has(match.id)){message=`${match.name} is already revealed.`;renderAZ();requestAnimationFrame(initZoomableMaps);return;}found.add(match.id);message=`✓ ${match.name}`;if(found.size+revealed.size===countries.length&&countries.length){message=`🎉 Letter ${letter} complete!`;const i=ALPHABET.indexOf(letter);if(i<25)setTimeout(()=>{letter=ALPHABET[i+1];found.clear();revealed.clear();message='';renderAZ();requestAnimationFrame(initZoomableMaps);},1000);}renderAZ();requestAnimationFrame(initZoomableMaps);});
+    document.getElementById('lv4Hint').onclick=()=>{const left=countries.filter(x=>!found.has(x.id)&&!revealed.has(x.id));if(left.length){const x=random(left);message=`Hint: one is ${x.name.length} letters and starts “${x.name.slice(0,2)}…”`;renderAZ();requestAnimationFrame(initZoomableMaps);}};
+    document.getElementById('lv4Reveal').onclick=()=>{const x=countries.find(x=>!found.has(x.id)&&!revealed.has(x.id));if(x){revealed.add(x.id);message=`Revealed: ${x.name}`;renderAZ();requestAnimationFrame(initZoomableMaps);}};
+    document.getElementById('lv4Reset').onclick=()=>{found.clear();revealed.clear();message='';renderAZ();requestAnimationFrame(initZoomableMaps);};
     setTimeout(()=>document.getElementById('lv4AzInput')?.focus(),0);
   }
 
-  // Browse ------------------------------------------------------------
   function renderBrowse(){
     const pool=byRegion(region),c=document.getElementById('lv4Content');
     c.innerHTML=`<div class="learn-v4-head"><div><span>BROWSE & LEARN</span><h2>${region==='All'?'Every country':region}</h2><p>Scroll the full list. Tap a country to see exactly where it is.</p></div><strong>${pool.length}</strong></div><div class="learn-v4-regions" id="lv4BrowseRegions"></div>${mapHTML('lv4BrowseDots')}<div class="learn-v4-list" id="lv4BrowseList"></div>`;
     renderRegionPicker('lv4BrowseRegions',renderBrowse);
     const dots=document.getElementById('lv4BrowseDots');pool.forEach(x=>{const p=project(x.lat,x.lng),d=document.createElement('div');d.className='learn-v4-dot soft';d.style.left=p.x+'%';d.style.top=p.y+'%';dots.appendChild(d);});
     const list=document.getElementById('lv4BrowseList');pool.forEach(x=>{const b=document.createElement('button');b.type='button';b.innerHTML=`<strong>${x.name}</strong><span>${x.region}</span>`;b.addEventListener('click',()=>highlightBrowse(x,b));list.appendChild(b);});
+    requestAnimationFrame(initZoomableMaps);
   }
   function highlightBrowse(country,button){document.querySelectorAll('#lv4BrowseList button').forEach(b=>b.classList.toggle('active',b===button));const dots=document.getElementById('lv4BrowseDots');dots.innerHTML='';byRegion(region).forEach(x=>{const p=project(x.lat,x.lng),d=document.createElement('div');d.className='learn-v4-dot soft'+(x.id===country.id?' target':'');d.style.left=p.x+'%';d.style.top=p.y+'%';if(x.id===country.id){const s=document.createElement('span');s.textContent=x.name;d.appendChild(s);}dots.appendChild(d);});document.querySelector('.learn-v4-map')?.scrollIntoView({behavior:'smooth',block:'nearest'});}
 
-  // Find It -----------------------------------------------------------
   function nextFind(){const pool=byRegion(region);findTarget=random(pool);renderFind();}
   function renderFind(){
     const pool=byRegion(region);if(!findTarget||!pool.some(x=>x.id===findTarget.id))findTarget=random(pool);
-    const c=document.getElementById('lv4Content');c.innerHTML=`<div class="learn-v4-head"><div><span>FIND IT</span><h2>${findTarget?`Find: ${findTarget.name}`:'Choose a region'}</h2><p>Tap the correct orange location on the map.</p></div><strong>${findScore} ✓</strong></div><div class="learn-v4-regions" id="lv4FindRegions"></div><div class="learn-v4-message">${message||`Attempts: ${findAttempts}`}</div>${mapHTML('lv4FindDots')}<div class="learn-v4-actions two"><button id="lv4FindSkip">Skip</button><button id="lv4FindReset">Reset score</button></div>`;
+    const c=document.getElementById('lv4Content');c.innerHTML=`<div class="learn-v4-head"><div><span>FIND IT</span><h2>${findTarget?`Find: ${findTarget.name}`:'Choose a region'}</h2><p>Pinch to zoom, drag to pan, then tap the correct orange location.</p></div><strong>${findScore} ✓</strong></div><div class="learn-v4-regions" id="lv4FindRegions"></div><div class="learn-v4-message">${message||`Attempts: ${findAttempts}`}</div>${mapHTML('lv4FindDots')}<div class="learn-v4-actions two"><button id="lv4FindSkip">Skip</button><button id="lv4FindReset">Reset score</button></div>`;
     renderRegionPicker('lv4FindRegions',()=>{findTarget=null;message='';renderFind();});
     const dots=document.getElementById('lv4FindDots');pool.forEach(x=>{const p=project(x.lat,x.lng),b=document.createElement('button');b.type='button';b.className='learn-v4-dot tappable';b.style.left=p.x+'%';b.style.top=p.y+'%';b.setAttribute('aria-label','Country location');b.addEventListener('click',()=>{findAttempts++;if(x.id===findTarget.id){findScore++;message=`✓ ${x.name}`;findTarget=random(pool.filter(y=>y.id!==x.id));}else message='Not quite — try another highlighted location.';renderFind();});dots.appendChild(b);});
     document.getElementById('lv4FindSkip').onclick=()=>{message=`That was ${findTarget.name}.`;findTarget=random(pool.filter(y=>y.id!==findTarget.id));renderFind();};
     document.getElementById('lv4FindReset').onclick=()=>{findScore=0;findAttempts=0;message='';findTarget=null;renderFind();};
+    requestAnimationFrame(initZoomableMaps);
   }
 
-  // 60s Recall -------------------------------------------------------
   function startRecall(){clearInterval(recallTimer);recallFound.clear();recallRemaining=60;message='Go!';renderRecall();recallTimer=setInterval(()=>{recallRemaining--;if(recallRemaining<=0){clearInterval(recallTimer);recallTimer=null;message=`Time! You recalled ${recallFound.size}.`;recallRemaining=0;}renderRecall(false);},1000);}
   function renderRecall(focus=true){
     const pool=byRegion(region),running=!!recallTimer,c=document.getElementById('lv4Content');c.innerHTML=`<div class="learn-v4-head"><div><span>60s RECALL</span><h2>${recallRemaining}s</h2><p>Type as many ${region==='All'?'countries':region+' countries'} as you can before time runs out.</p></div><strong>${recallFound.size}</strong></div><div class="learn-v4-regions" id="lv4RecallRegions"></div><form class="learn-v4-form" id="lv4RecallForm"><input id="lv4RecallInput" ${running?'':'disabled'} autocomplete="off" autocapitalize="words" spellcheck="false" placeholder="Type a country…"><button ${running?'':'disabled'}>Enter</button></form><div class="learn-v4-message">${message||'Press Start when you’re ready.'}</div><button class="learn-v4-bigstart" id="lv4RecallStart">${running?'Restart':'Start 60 seconds'}</button><div class="learn-v4-chips"><strong>Recalled</strong><div id="lv4RecallFound"></div></div>`;
