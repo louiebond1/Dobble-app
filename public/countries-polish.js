@@ -41,18 +41,15 @@ function refreshCountryLabelDensity(count) {
   });
 }
 
-/* The world artwork occupies the upper board at its true 2:1 shape. Convert
-   lat/lng into that painted band; the lower board is reserved for inset maps. */
+/* The polished board is intentionally a little taller than a strict 2:1 map,
+   matching the dense phone-friendly proportions of good map quizzes. Markers
+   therefore project directly into the rendered board so they always stay
+   aligned when the keyboard layout switches. */
 function projectMainBoard(lat, lng) {
-  const rawX = ((lng + 180) / 360) * 100;
-  const rawY = ((90 - lat) / 180) * 100;
-  const map = el('countryMap');
-  const rect = map ? map.getBoundingClientRect() : { width: 0, height: 0 };
-  const topPct = 2;
-  const artHeightPct = rect.width && rect.height
-    ? Math.min(50, (rect.width / 2 / rect.height) * 100)
-    : 45;
-  return { x: rawX, y: topPct + rawY * (artHeightPct / 100) };
+  return {
+    x: ((lng + 180) / 360) * 100,
+    y: ((90 - lat) / 180) * 100,
+  };
 }
 
 function insetGeoPosition(region, lat, lng) {
@@ -134,6 +131,8 @@ buildMarkers = function buildMarkersPolished() {
     let mainDot = null;
     let insetDot = null;
 
+    /* Exactly one unanswered marker per country. Dense micro-regions live only
+       in their inset; they are not duplicated on the main world. */
     if (entry.inset && insetContainers[entry.inset]) {
       insetDot = document.createElement('div');
       insetDot.className = 'country-marker';
@@ -208,6 +207,72 @@ updateProgress = function updateProgressPolished(count) {
   refreshCountryLabelDensity(count);
 };
 
+/* -------------------------------------------------------------------------
+   iOS keyboard / VisualViewport handling
+
+   Safari focuses inputs by scrolling them into view. Because our input used to
+   live below the map, that pushed the header and most of the world off-screen.
+   We now switch layout as soon as the input receives focus: input moves above
+   the map, and the fixed stage is pinned to the *visible* viewport as the
+   keyboard animates. The input stays focused after every answer, so play is
+   continuous with the full map visible. */
+
+(function installCountryKeyboardLayout() {
+  const game = el('gameArea');
+  const input = el('guessInput');
+  if (!game || !input) return;
+
+  const vv = window.visualViewport;
+  let raf = 0;
+
+  function applyViewportState() {
+    raf = 0;
+    const viewportHeight = vv ? vv.height : window.innerHeight;
+    const viewportTop = vv ? vv.offsetTop : 0;
+    const layoutHeight = window.innerHeight;
+    const focused = document.activeElement === input;
+    const keyboardLikelyOpen = focused && (layoutHeight - viewportHeight > 90);
+
+    game.style.setProperty('--country-vvh', Math.max(320, viewportHeight) + 'px');
+    game.style.setProperty('--country-vvtop', Math.max(0, viewportTop) + 'px');
+    game.classList.toggle('country-input-active', focused);
+    game.classList.toggle('country-keyboard-open', keyboardLikelyOpen);
+
+    if (focused) {
+      /* Keep the document itself at the origin; the game stage follows the
+         visual viewport, so Safari has no reason to leave the header above it. */
+      if (window.scrollY !== 0) window.scrollTo(0, 0);
+    }
+  }
+
+  function scheduleViewportState() {
+    if (raf) cancelAnimationFrame(raf);
+    raf = requestAnimationFrame(applyViewportState);
+  }
+
+  input.addEventListener('focus', () => {
+    game.classList.add('country-input-active');
+    scheduleViewportState();
+    setTimeout(scheduleViewportState, 60);
+    setTimeout(scheduleViewportState, 250);
+  });
+
+  input.addEventListener('blur', () => {
+    scheduleViewportState();
+    setTimeout(scheduleViewportState, 80);
+  });
+
+  if (vv) {
+    vv.addEventListener('resize', scheduleViewportState);
+    vv.addEventListener('scroll', scheduleViewportState);
+  }
+  window.addEventListener('resize', scheduleViewportState);
+  window.addEventListener('orientationchange', () => setTimeout(scheduleViewportState, 150));
+
+  applyViewportState();
+})();
+
+/* Visual regression helper used for 30/60/90/120/150/197 stress states. */
 window.countryVisualStressTest = function countryVisualStressTest(count) {
   const target = Math.max(0, Math.min(allCountries.length, Number(count) || 0));
   if (!allCountries.length || !el('countryMarkers')) return { ok: false, reason: 'countries not loaded' };
@@ -224,4 +289,14 @@ window.countryVisualStressTest = function countryVisualStressTest(count) {
     tier: progressTier(target),
     visibleLabels: [...el('gameArea').querySelectorAll('.country-marker-label:not(.country-label-hidden)')].length,
   };
+};
+
+/* Manual device-test hook: useful from Safari devtools without changing game
+   state. true forces the compressed typing layout; false restores live state. */
+window.countryKeyboardLayoutTest = function countryKeyboardLayoutTest(open) {
+  const game = el('gameArea');
+  if (!game) return false;
+  game.classList.toggle('country-input-active', !!open);
+  game.classList.toggle('country-keyboard-open', !!open);
+  return true;
 };
