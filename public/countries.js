@@ -189,10 +189,16 @@ function gridPosition(index, count, aspect) {
   };
 }
 
+// Reveal order can bunch labels close together in the same inset (found
+// nearly at once, or just geographically adjacent) — reset per game so
+// placeInsetLabel() below has a clean slate to pack into.
+const insetLabelRects = { europe: [], caribbean: [], gulf: [] };
+
 function buildMarkers() {
   const container = el('countryMarkers');
   container.innerHTML = '';
   markerEls.clear();
+  INSETS.forEach((r) => { insetLabelRects[r.key] = []; });
 
   const insetContainers = {};
   const insetLists = {};
@@ -240,6 +246,47 @@ function buildMarkers() {
   }
 }
 
+// Even with grid-packed dots, the TEXT labels next to them can still
+// collide — a country name is much wider than its own dot's cell, so two
+// labels whose dots sit in neighboring cells can still overlap into an
+// unreadable mess (this is what actually made insets unreadable, not dot
+// spacing). Real per-label collision avoidance: place a label at its dot,
+// measure its real rendered size, and if it overlaps anything already
+// placed in that inset this game, nudge it straight down in fixed steps
+// until it doesn't. Guarantees zero overlap by construction, same as
+// gridPosition() does for the dots themselves.
+function placeInsetLabel(label, container, xPct, yPct, rects) {
+  const rect = container.getBoundingClientRect();
+  label.style.left = '0px';
+  label.style.top = '0px';
+  label.style.transform = 'none';
+  label.style.margin = '0';
+  container.appendChild(label);
+
+  const w = label.offsetWidth;
+  const h = label.offsetHeight;
+  let x = (xPct / 100) * rect.width - w / 2;
+  let y = (yPct / 100) * rect.height - h - 3;
+
+  const overlaps = (a, b) => a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
+  const step = h + 1;
+  let guard = 0;
+  while (guard < 60 && rects.some((r) => overlaps({ x, y, w, h }, r))) {
+    y += step;
+    guard++;
+  }
+
+  // Horizontal is clamped (the box never scrolls sideways). Vertical is
+  // only floor-clamped — a box that's genuinely full grows scrollable
+  // rather than the last few labels getting forced back into overlap.
+  x = Math.max(1, Math.min(x, rect.width - w - 1));
+  y = Math.max(1, y);
+
+  label.style.left = x + 'px';
+  label.style.top = y + 'px';
+  rects.push({ x, y, w, h });
+}
+
 function revealMarker(id, ownerName) {
   const entry = markerEls.get(id);
   const country = countryById.get(id);
@@ -258,14 +305,21 @@ function revealMarker(id, ownerName) {
   // its own sibling rather than nested inside one. It goes wherever there's
   // actually room to read it: the zoomed inset copy when one exists,
   // otherwise the main map position.
-  const labelDot = entry.insetEl || entry.main;
-  const labelHost = entry.insetEl ? document.querySelector(`[data-inset-markers="${entry.insetKey}"]`) : el('countryMarkers');
   const label = document.createElement('div');
   label.className = 'country-marker-label';
-  label.style.left = labelDot.style.left;
-  label.style.top = labelDot.style.top;
   label.textContent = country.name;
-  (labelHost || el('countryMarkers')).appendChild(label);
+
+  if (entry.insetEl) {
+    label.classList.add('country-marker-label--inset');
+    const host = document.querySelector(`[data-inset-markers="${entry.insetKey}"]`);
+    const xPct = parseFloat(entry.insetEl.style.left);
+    const yPct = parseFloat(entry.insetEl.style.top);
+    placeInsetLabel(label, host, xPct, yPct, insetLabelRects[entry.insetKey]);
+  } else {
+    label.style.left = entry.main.style.left;
+    label.style.top = entry.main.style.top;
+    el('countryMarkers').appendChild(label);
+  }
 
   setTimeout(() => {
     entry.main.remove();

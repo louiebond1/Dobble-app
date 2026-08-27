@@ -202,6 +202,19 @@
   100% { opacity: 1; transform: translate(-50%, -100%) scale(1); }
 }
 
+/* Inset labels are placed at explicit pixel coordinates by JS (real
+   collision-avoidance against every other label already in that inset —
+   see placeInsetLabel in countries.js), not the dot-centering transform
+   above, so their entrance animation must not reintroduce one. */
+.country-marker-label--inset {
+  animation-name: countryLabelInPlain;
+}
+
+@keyframes countryLabelInPlain {
+  0% { opacity: 0; transform: scale(0.85); }
+  100% { opacity: 1; transform: scale(1); }
+}
+
 /* --- Inset zoom boxes ------------------------------------------------------
    The three regions where 197 evenly-spread dots collapse into an unreadable
    clump on any flat world map (Sporcle solves this the same way): a zoomed-in
@@ -216,7 +229,13 @@
   border: 1px solid rgba(255, 255, 255, 0.3);
   border-radius: 8px;
   box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4);
-  overflow: hidden;
+  overflow-x: hidden;
+  /* A fully-completed dense region (Europe's 47 countries) can outgrow
+     even a generous box height once every label is a permanent, readable
+     row — scroll rather than let placeInsetLabel's collision avoidance
+     get forced back into an overlap by a hard clamp. */
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 .country-inset[data-inset="europe"] {
@@ -268,7 +287,9 @@
 }
 
 .country-inset .country-marker-label {
-  font-size: 0.52rem;
+  font-size: 0.48rem;
+  padding: 0 3px;
+  border-radius: 4px;
 }
 
 .country-input {
