@@ -1,21 +1,62 @@
 /* Countries map polish layer.
-   This intentionally replaces only the marker-building/reveal functions from
-   countries.js. Keeping it separate makes the visual pass easy to iterate or
-   remove without disturbing game/network logic. */
+   Keeps presentation changes isolated from game/network logic. */
 
-/* The polished map keeps the SVG's native 2:1 proportions inside a slightly
-   taller frame. Because object-fit: contain adds a small vertical gutter,
-   project into the actual painted map area rather than the whole frame. */
-project = function projectPolished(lat, lng) {
-  const x = ((lng + 180) / 360) * 100;
+function countryLabelRank(id) {
+  let h = 2166136261;
+  const s = String(id || '');
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return (h >>> 0) / 4294967295;
+}
+
+function currentProgressCount() {
+  return mode === 'solo' ? foundIds.size : revealedIds.size;
+}
+
+function progressTier(count) {
+  if (count >= 197) return '197';
+  if (count >= 150) return '150';
+  if (count >= 120) return '120';
+  if (count >= 90) return '90';
+  if (count >= 60) return '60';
+  if (count >= 30) return '30';
+  return '0';
+}
+
+function refreshCountryLabelDensity(count) {
+  const game = el('gameArea');
+  if (!game) return;
+  game.dataset.progressTier = progressTier(count);
+
+  const insetKeep = count < 60 ? 1 : count < 90 ? .90 : count < 120 ? .74 : count < 150 ? .58 : count < 197 ? .44 : .50;
+  const mainKeep = count < 90 ? 1 : count < 120 ? .93 : count < 150 ? .84 : count < 197 ? .72 : .78;
+
+  game.querySelectorAll('.country-marker-label').forEach((label) => {
+    const rank = Number(label.dataset.labelRank || 0);
+    const isInset = !!label.dataset.insetKey;
+    const keep = isInset ? insetKeep : mainKeep;
+    label.classList.toggle('country-label-hidden', rank > keep);
+  });
+}
+
+/* The world artwork occupies the upper board at its true 2:1 shape. Convert
+   lat/lng into that painted band; the lower board is reserved for inset maps. */
+function projectMainBoard(lat, lng) {
+  const rawX = ((lng + 180) / 360) * 100;
   const rawY = ((90 - lat) / 180) * 100;
-  const paintedHeight = 82;
-  const topInset = (100 - paintedHeight) / 2;
-  return { x, y: topInset + rawY * (paintedHeight / 100) };
-};
+  const map = el('countryMap');
+  const rect = map ? map.getBoundingClientRect() : { width: 0, height: 0 };
+  const topPct = 2;
+  const artHeightPct = rect.width && rect.height
+    ? Math.min(50, (rect.width / 2 / rect.height) * 100)
+    : 45;
+  return { x: rawX, y: topPct + rawY * (artHeightPct / 100) };
+}
 
 function insetGeoPosition(region, lat, lng) {
-  const pad = 8;
+  const pad = region.key === 'europe' ? 7 : 9;
   const x = pad + ((lng - region.lngMin) / (region.lngMax - region.lngMin)) * (100 - pad * 2);
   const y = pad + ((region.latMax - lat) / (region.latMax - region.latMin)) * (100 - pad * 2);
   return {
@@ -24,19 +65,12 @@ function insetGeoPosition(region, lat, lng) {
   };
 }
 
-/* Gently separate very close centroids while preserving the geographic
-   pattern. This is deliberately mild: the inset should still look like a map,
-   not the alphabetical marker grid used by the previous version. */
 function spreadInsetPositions(entries, region) {
-  const points = entries.map((entry) => ({
-    entry,
-    ...insetGeoPosition(region, entry.country.lat, entry.country.lng),
-  }));
+  const points = entries.map((entry) => ({ entry, ...insetGeoPosition(region, entry.country.lat, entry.country.lng) }));
+  const minDist = region.key === 'europe' ? 5.1 : 7.4;
+  const pad = region.key === 'europe' ? 6 : 8;
 
-  const minDist = region.key === 'europe' ? 6.1 : 8;
-  const pad = 7;
-
-  for (let pass = 0; pass < 90; pass++) {
+  for (let pass = 0; pass < 100; pass++) {
     let moved = false;
     for (let i = 0; i < points.length; i++) {
       for (let j = i + 1; j < points.length; j++) {
@@ -46,15 +80,13 @@ function spreadInsetPositions(entries, region) {
         let dy = b.y - a.y;
         let d = Math.hypot(dx, dy);
         if (d >= minDist) continue;
-
-        if (d < 0.01) {
+        if (d < .01) {
           const angle = ((i * 37 + j * 19) % 360) * Math.PI / 180;
           dx = Math.cos(angle);
           dy = Math.sin(angle);
           d = 1;
         }
-
-        const push = (minDist - d) * 0.22;
+        const push = (minDist - d) * .20;
         const ux = dx / d;
         const uy = dy / d;
         a.x -= ux * push;
@@ -64,17 +96,13 @@ function spreadInsetPositions(entries, region) {
         moved = true;
       }
     }
-
     for (const p of points) {
       p.x = Math.max(pad, Math.min(100 - pad, p.x));
       p.y = Math.max(pad, Math.min(100 - pad, p.y));
     }
     if (!moved) break;
   }
-
-  points.forEach((p) => {
-    p.entry.insetPos = { x: p.x, y: p.y };
-  });
+  points.forEach((p) => { p.entry.insetPos = { x: p.x, y: p.y }; });
 }
 
 buildMarkers = function buildMarkersPolished() {
@@ -93,7 +121,7 @@ buildMarkers = function buildMarkersPolished() {
   });
 
   const placements = allCountries.map((country) => {
-    const mainPos = project(country.lat, country.lng);
+    const mainPos = projectMainBoard(country.lat, country.lng);
     const inset = findInset(country.lat, country.lng);
     const entry = { country, mainPos, inset: inset ? inset.key : null };
     if (inset) insetLists[inset.key].push(entry);
@@ -103,12 +131,10 @@ buildMarkers = function buildMarkersPolished() {
   INSETS.forEach((region) => spreadInsetPositions(insetLists[region.key], region));
 
   for (const entry of placements) {
-    /* Critical rule: exactly one unanswered marker per country. Countries
-       represented in an inset are omitted from the main map, eliminating the
-       duplicate-Turkey style problem and reducing clutter substantially. */
     let mainDot = null;
     let insetDot = null;
 
+    /* Exactly one unanswered marker per country. */
     if (entry.inset && insetContainers[entry.inset]) {
       insetDot = document.createElement('div');
       insetDot.className = 'country-marker';
@@ -130,6 +156,8 @@ buildMarkers = function buildMarkersPolished() {
       mainPos: entry.mainPos,
     });
   }
+
+  refreshCountryLabelDensity(currentProgressCount());
 };
 
 revealMarker = function revealMarkerPolished(id, ownerName) {
@@ -150,26 +178,53 @@ revealMarker = function revealMarkerPolished(id, ownerName) {
   const label = document.createElement('div');
   label.className = 'country-marker-label';
   label.textContent = country.name;
+  label.dataset.countryId = country.id;
+  label.dataset.labelRank = String(countryLabelRank(country.id));
 
   if (entry.insetEl) {
     label.classList.add('country-marker-label--inset');
+    label.dataset.insetKey = entry.insetKey;
     const host = document.querySelector(`[data-inset-markers="${entry.insetKey}"]`);
     const xPct = parseFloat(entry.insetEl.style.left);
     const yPct = parseFloat(entry.insetEl.style.top);
     placeInsetLabel(label, host, xPct, yPct, insetLabelRects[entry.insetKey]);
-  } else if (entry.main) {
-    label.style.left = entry.main.style.left;
-    label.style.top = entry.main.style.top;
-    el('countryMarkers').appendChild(label);
-  } else if (entry.mainPos) {
-    label.style.left = entry.mainPos.x + '%';
-    label.style.top = entry.mainPos.y + '%';
+  } else {
+    label.style.left = entry.main ? entry.main.style.left : entry.mainPos.x + '%';
+    label.style.top = entry.main ? entry.main.style.top : entry.mainPos.y + '%';
     el('countryMarkers').appendChild(label);
   }
+
+  refreshCountryLabelDensity(currentProgressCount());
 
   setTimeout(() => {
     if (entry.main && entry.main.isConnected) entry.main.remove();
     if (entry.insetEl && entry.insetEl.isConnected) entry.insetEl.remove();
     markerEls.delete(id);
   }, 550);
+};
+
+const updateProgressBase = updateProgress;
+updateProgress = function updateProgressPolished(count) {
+  updateProgressBase(count);
+  refreshCountryLabelDensity(count);
+};
+
+/* Opt-in stress helper for checking the six requested completion states.
+   Never runs during normal play. */
+window.countryVisualStressTest = function countryVisualStressTest(count) {
+  const target = Math.max(0, Math.min(allCountries.length, Number(count) || 0));
+  if (!allCountries.length || !el('countryMarkers')) return { ok: false, reason: 'countries not loaded' };
+  buildMarkers();
+  const sample = allCountries
+    .slice()
+    .sort((a, b) => countryLabelRank(a.id) - countryLabelRank(b.id))
+    .slice(0, target);
+  sample.forEach((country) => revealMarker(country.id, null));
+  updateProgress(target);
+  return {
+    ok: true,
+    count: target,
+    tier: progressTier(target),
+    visibleLabels: [...el('gameArea').querySelectorAll('.country-marker-label:not(.country-label-hidden)')].length,
+  };
 };
