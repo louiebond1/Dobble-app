@@ -24,19 +24,56 @@
   min-height: 0;
 }
 
-.country-rotate-hint {
+/* This is a landscape-only game — the map needs the width. Rather than
+   squeeze a cramped, illegible layout into portrait, block play outright
+   with a full-screen "rotate your phone" overlay until the device is
+   actually turned. Pure CSS (no screen.orientation dependency, which iOS
+   Safari doesn't support anyway) so it works identically everywhere. */
+.country-rotate-lock {
   display: none;
-  text-align: center;
-  font-size: 0.72rem;
-  font-weight: 600;
-  color: rgba(255, 255, 255, 0.65);
-  margin: -6px 0 0;
 }
 
 @media (orientation: portrait) {
-  .country-rotate-hint {
-    display: block;
+  .country-rotate-lock {
+    display: flex;
+    position: fixed;
+    inset: 0;
+    z-index: 50;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    padding: 24px;
+    text-align: center;
+    background: #1a1030;
   }
+
+  .country-middle,
+  .country-learn-middle {
+    display: none;
+  }
+}
+
+.country-rotate-lock-icon {
+  font-size: 2.6rem;
+  animation: countryRotateSpin 1.6s ease-in-out infinite;
+}
+
+@keyframes countryRotateSpin {
+  0%, 100% { transform: rotate(0deg); }
+  50% { transform: rotate(-90deg); }
+}
+
+.country-rotate-lock-title {
+  font-size: 1.1rem;
+  font-weight: 800;
+  color: white;
+}
+
+.country-rotate-lock-sub {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.6);
 }
 
 @media (orientation: landscape) {
