@@ -1,87 +1,93 @@
-/* Countries of the World — mobile polish/stress-tested presentation layer.
-   Loaded after countries.css; rules here intentionally override only this game. */
+/* Countries of the World — final mobile gameplay polish.
+   The typing state is the primary layout: input first, full map still visible,
+   compact atlas-style insets over the map, no Safari-driven page jump. */
+
+#gameArea {
+  --country-vvh: 100vh;
+  --country-vvtop: 0px;
+}
 
 #gameArea .duel-topbar {
-  padding: 8px 14px 5px;
+  padding: 7px 12px 4px;
   gap: 7px;
 }
 
 #gameArea .duel-quit,
 #gameArea .country-give-up {
-  min-height: 34px;
-  padding: 6px 9px;
-  border-radius: 8px;
-  font-size: .84rem;
+  min-height: 33px;
+  padding: 5px 8px;
+  border-radius: 7px;
+  font-size: .82rem;
   font-weight: 750;
 }
 
 #gameArea .duel-quit { background: rgba(255,255,255,.10); }
-#gameArea .country-give-up { background: rgba(255,107,107,.20); }
+#gameArea .country-give-up { background: rgba(255,107,107,.19); }
 
 #gameArea .country-status { gap: 8px; }
 #gameArea .country-status-count {
-  font-size: 1.02rem;
+  font-size: 1rem;
   letter-spacing: -.025em;
 }
 #gameArea .country-status-timer {
-  font-size: .98rem;
+  font-size: .95rem;
   color: rgba(255,255,255,.94);
 }
 
 #gameArea .country-progress-track {
   height: 3px;
-  margin: 1px 14px 7px;
-  background: rgba(255,255,255,.20);
+  margin: 1px 12px 6px;
+  background: rgba(255,255,255,.21);
 }
 #gameArea .country-progress-fill { background: #ff8a43; }
 
 #gameArea .country-middle {
-  gap: 9px;
-  padding: 0 8px 12px;
-  grid-template-rows: auto auto minmax(0, auto);
+  flex: 0 1 auto;
+  gap: 7px;
+  padding: 0 7px 10px;
+  grid-template-columns: minmax(0,1fr);
+  grid-template-areas: "map" "input" "feed";
+  grid-template-rows: auto auto auto;
+  align-content: start;
 }
 
-/* The board now owns roughly half of the usable phone height. The actual world
-   artwork remains 2:1 inside the upper half; the lower half is deliberately
-   used for inset maps instead of stretching the geography or leaving dead UI. */
+/* Main board: intentionally closer to Sporcle's dense mobile proportions, but
+   cleaner. The actual world SVG fills the board; this mild vertical expansion
+   gives countries usable phone-size area instead of wasting half the screen. */
 #gameArea .country-map-wrap {
-  height: clamp(390px, 52vh, 500px);
+  width: 100%;
+  height: clamp(250px, 62vw, 310px);
   padding-top: 0;
-  border-radius: 7px;
+  border-radius: 6px;
+  overflow: hidden;
   background: #8fc5ef;
   box-shadow: 0 0 0 1px rgba(255,255,255,.17);
 }
 
 #gameArea .country-map-bg {
-  inset: auto;
-  top: 2%;
-  left: 0;
+  inset: 0;
   width: 100%;
-  height: auto;
-  aspect-ratio: 2 / 1;
+  height: 100%;
+  aspect-ratio: auto;
   object-fit: fill;
-  object-position: center;
 }
 
-/* Markers are annotations, not the visual subject. */
+/* Tiny orange reference pins: geography remains the visual subject. */
 #gameArea .country-marker {
-  width: 5.4px;
-  height: 5.4px;
-  margin: -2.7px 0 0 -2.7px;
-  background: #ff7438;
-  box-shadow: 0 .5px 1px rgba(0,0,0,.22);
+  width: 4.8px;
+  height: 4.8px;
+  margin: -2.4px 0 0 -2.4px;
+  background: #f7773f;
+  box-shadow: 0 .5px 1px rgba(0,0,0,.19);
 }
-
-/* Keep a tiny ? at early game, but make it deliberately subordinate. */
 #gameArea .country-marker::after {
-  font-size: 3.45px;
-  color: rgba(35,31,40,.67);
+  font-size: 3px;
+  color: rgba(35,31,40,.61);
 }
 
-/* Permanent guessed names read as atlas text rather than badges. */
 #gameArea .country-marker-label {
   margin-top: -3px;
-  font-size: .44rem;
+  font-size: .43rem;
   line-height: 1.02;
   font-weight: 760;
   color: #1f2930;
@@ -89,97 +95,94 @@
   padding: 1px 2px;
   border-radius: 1px;
   text-shadow: 0 1px 0 rgba(255,255,255,.66);
-  transition: opacity .16s ease, transform .16s ease;
+  transition: opacity .14s ease;
 }
-
 #gameArea .country-marker-label.country-label-hidden {
   opacity: 0;
   pointer-events: none;
 }
 
-/* Insets sit in the dedicated lower board band, so none cover Russia/Asia or
-   other main-map geography. They use the real world SVG as their background. */
+/* Real geographic magnifiers, integrated into the map rather than consuming a
+   second lower gallery. Exactly one quiz marker exists per country in JS. */
 #gameArea .country-inset {
   overflow: hidden;
-  border: 1px solid rgba(37,57,69,.25);
+  border: 1px solid rgba(37,57,69,.27);
   border-radius: 2px;
   background-color: #8fc5ef;
   background-image: url('/images/world-map.svg');
   background-repeat: no-repeat;
-  box-shadow: 0 1px 2px rgba(27,45,58,.05);
+  box-shadow: 0 1px 2px rgba(27,45,58,.06);
 }
 
 #gameArea .country-inset[data-inset="europe"] {
-  top: 54%;
-  right: 2%;
-  width: 38%;
-  height: 42%;
-  background-size: 680% auto;
-  background-position: 54% 22%;
+  top: 1.5%;
+  left: 27%;
+  width: 31%;
+  height: 35%;
+  background-size: 660% auto;
+  background-position: 53% 18%;
 }
 
 #gameArea .country-inset[data-inset="caribbean"] {
-  bottom: 4%;
-  left: 2%;
-  width: 26%;
+  bottom: 1.5%;
+  left: 1.5%;
+  width: 20%;
   height: 28%;
-  background-size: 1050% auto;
+  background-size: 1040% auto;
   background-position: 30% 42%;
 }
 
 #gameArea .country-inset[data-inset="gulf"] {
-  bottom: 4%;
-  left: 30%;
-  width: 20%;
+  bottom: 1.5%;
+  left: 58%;
+  width: 17%;
   height: 24%;
-  background-size: 1450% auto;
+  background-size: 1420% auto;
   background-position: 64% 36%;
 }
 
 #gameArea .country-inset-label {
   top: 2px;
-  left: 4px;
-  font-size: .38rem;
+  left: 3px;
+  font-size: .34rem;
   font-weight: 760;
-  letter-spacing: .06em;
-  color: rgba(31,48,58,.56);
+  letter-spacing: .055em;
+  color: rgba(31,48,58,.53);
   text-shadow: 0 1px 0 rgba(255,255,255,.56);
 }
 
 #gameArea .country-inset .country-marker {
-  width: 4.6px;
-  height: 4.6px;
-  margin: -2.3px 0 0 -2.3px;
+  width: 4px;
+  height: 4px;
+  margin: -2px 0 0 -2px;
 }
-#gameArea .country-inset .country-marker::after { font-size: 2.95px; }
+#gameArea .country-inset .country-marker::after { font-size: 2.45px; }
 #gameArea .country-inset .country-marker-label {
-  font-size: .34rem;
+  font-size: .32rem;
   padding: 0 1px;
   background: rgba(248,247,239,.72);
 }
 
-/* Late-game typography compresses gradually rather than suddenly turning the
-   board into a wall of labels. JS also culls lower-priority labels by tier. */
-#gameArea[data-progress-tier="90"] .country-marker-label { font-size: .41rem; }
-#gameArea[data-progress-tier="120"] .country-marker-label { font-size: .39rem; }
+#gameArea[data-progress-tier="90"] .country-marker-label { font-size: .40rem; }
+#gameArea[data-progress-tier="120"] .country-marker-label { font-size: .38rem; }
 #gameArea[data-progress-tier="150"] .country-marker-label,
-#gameArea[data-progress-tier="197"] .country-marker-label { font-size: .37rem; }
+#gameArea[data-progress-tier="197"] .country-marker-label { font-size: .36rem; }
 #gameArea[data-progress-tier="120"] .country-inset .country-marker-label,
 #gameArea[data-progress-tier="150"] .country-inset .country-marker-label,
-#gameArea[data-progress-tier="197"] .country-inset .country-marker-label { font-size: .31rem; }
+#gameArea[data-progress-tier="197"] .country-inset .country-marker-label { font-size: .29rem; }
 
 #gameArea .country-input {
   box-sizing: border-box;
   width: 100%;
-  height: 58px;
-  min-height: 58px;
+  height: 52px;
+  min-height: 52px;
   margin: 0;
-  padding: 0 14px;
+  padding: 0 13px;
   border: 1px solid rgba(36,31,42,.14);
-  border-radius: 11px;
-  background: rgba(255,255,255,.97);
+  border-radius: 10px;
+  background: rgba(255,255,255,.98);
   text-align: left;
-  font-size: 1rem;
+  font-size: 16px;
   font-weight: 560;
   color: #25212c;
   box-shadow: 0 1px 2px rgba(18,12,28,.07);
@@ -189,23 +192,103 @@
   font-weight: 500;
 }
 #gameArea .country-input:focus {
-  outline: 2px solid rgba(255,140,66,.65);
+  outline: 2px solid rgba(255,140,66,.58);
   outline-offset: 0;
 }
 
-/* Keep answer history compact; never let it manufacture a purple void. */
 #gameArea .country-feed {
-  max-height: 70px;
+  max-height: 54px;
   min-height: 0;
 }
 
-@media (max-width: 380px) {
-  #gameArea .country-map-wrap { height: clamp(370px, 51vh, 460px); }
-  #gameArea .country-inset[data-inset="europe"] { width: 39%; height: 41%; }
-  #gameArea .country-input { height: 54px; min-height: 54px; }
+/* iPhone keyboard state. Move the input ABOVE the map (as Sporcle does), so
+   focusing never requires Safari to scroll the map off the top. The stage is
+   also pinned to the real VisualViewport, not the larger layout viewport. */
+#gameArea.country-input-active,
+#gameArea.country-keyboard-open {
+  top: var(--country-vvtop) !important;
+  bottom: auto !important;
+  height: var(--country-vvh) !important;
+  min-height: 0;
+  overflow: hidden;
 }
 
-@media (max-height: 720px) {
-  #gameArea .country-map-wrap { height: 48vh; min-height: 330px; }
-  #gameArea .country-feed { display: none; }
+#gameArea.country-input-active .duel-topbar,
+#gameArea.country-keyboard-open .duel-topbar {
+  padding-top: 4px;
+  padding-bottom: 2px;
+}
+
+#gameArea.country-input-active .duel-quit,
+#gameArea.country-input-active .country-give-up,
+#gameArea.country-keyboard-open .duel-quit,
+#gameArea.country-keyboard-open .country-give-up {
+  min-height: 30px;
+  padding: 4px 7px;
+  font-size: .78rem;
+}
+
+#gameArea.country-input-active .country-progress-track,
+#gameArea.country-keyboard-open .country-progress-track {
+  height: 2px;
+  margin-bottom: 4px;
+}
+
+#gameArea.country-input-active .country-middle,
+#gameArea.country-keyboard-open .country-middle {
+  grid-template-areas: "input" "map";
+  grid-template-rows: 44px auto;
+  gap: 5px;
+  padding: 0 5px 4px;
+}
+
+#gameArea.country-input-active .country-input,
+#gameArea.country-keyboard-open .country-input {
+  height: 44px;
+  min-height: 44px;
+  border-radius: 8px;
+  padding: 0 11px;
+  font-size: 16px;
+}
+
+#gameArea.country-input-active .country-map-wrap,
+#gameArea.country-keyboard-open .country-map-wrap {
+  height: min(72vw, calc(var(--country-vvh) - 94px));
+  min-height: 215px;
+  max-height: 315px;
+  border-radius: 4px;
+}
+
+#gameArea.country-input-active .country-feed,
+#gameArea.country-keyboard-open .country-feed {
+  display: none;
+}
+
+/* In the compressed typing state the magnifiers are smaller still, preserving
+   the entire world while keeping dense micro-regions playable. */
+#gameArea.country-input-active .country-inset[data-inset="europe"],
+#gameArea.country-keyboard-open .country-inset[data-inset="europe"] {
+  width: 29%;
+  height: 34%;
+  left: 27%;
+}
+#gameArea.country-input-active .country-inset[data-inset="caribbean"],
+#gameArea.country-keyboard-open .country-inset[data-inset="caribbean"] {
+  width: 19%;
+  height: 27%;
+}
+#gameArea.country-input-active .country-inset[data-inset="gulf"],
+#gameArea.country-keyboard-open .country-inset[data-inset="gulf"] {
+  width: 16%;
+  height: 23%;
+}
+
+@media (max-width: 380px) {
+  #gameArea .country-map-wrap { height: clamp(230px, 64vw, 275px); }
+  #gameArea .country-inset[data-inset="europe"] { width: 32%; }
+  #gameArea.country-input-active .country-map-wrap,
+  #gameArea.country-keyboard-open .country-map-wrap {
+    height: min(74vw, calc(var(--country-vvh) - 90px));
+    min-height: 205px;
+  }
 }
