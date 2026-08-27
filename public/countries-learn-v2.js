@@ -1,130 +1,33 @@
-/* Interactive Learn v2: region-based Explore/Alphabetical study, then self-test. */
+/* Learn v3 — A–Z map challenge. Highlights every country for the current letter; names stay hidden until recalled. */
 (function(){
   const area=document.getElementById('learnArea');
   if(!area)return;
-
-  const REGION_ORDER=['Africa','Americas','Asia','Europe','Oceania'];
-  let selectedRegion='Oceania';
-  let studyOrder='alphabetical';
-  let studyList=[];
-  let studyIndex=0;
-  let mastered=new Set();
-  let testQueue=[];
-  let testIndex=0;
-  let testScore=0;
-  let testLocked=false;
-
-  function projectPct(lat,lng){return{x:((lng+180)/360)*100,y:((90-lat)/180)*100};}
-  function regionCountries(region){return allCountries.filter(c=>c.region===region);}
-  function orderedRegion(region){const list=regionCountries(region).slice();return studyOrder==='alphabetical'?list.sort((a,b)=>a.name.localeCompare(b.name)):shuffle(list);}
-  function shuffle(a){const x=a.slice();for(let i=x.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[x[i],x[j]]=[x[j],x[i]];}return x;}
-  function sampleOptions(correct,pool){const others=shuffle(pool.filter(c=>c.id!==correct.id)).slice(0,3);return shuffle([correct,...others]);}
-
-  function ensureShell(){
-    let shell=document.getElementById('learnV2Shell');
-    if(shell)return shell;
-    shell=document.createElement('div');
-    shell.id='learnV2Shell';shell.className='learn-v2-shell';
-    shell.innerHTML=`
-      <div class="learn-v2-toolbar">
-        <div class="learn-v2-region" id="learnV2Regions"></div>
-        <div class="learn-v2-region" id="learnV2Order">
-          <button type="button" data-order="alphabetical">A–Z</button>
-          <button type="button" data-order="explore">Explore</button>
-        </div>
-        <button type="button" class="learn-v2-action primary" id="learnV2TestBtn">🎯 Test me</button>
-      </div>
-      <div class="learn-v2-study" id="learnV2Study">
-        <div class="learn-v2-map-card">
-          <div class="learn-v2-map" id="learnV2Map"><img src="/images/world-map.svg" alt="World map"><div class="learn-v2-dots" id="learnV2Dots"></div></div>
-          <div class="learn-v2-card">
-            <div><div class="learn-v2-name" id="learnV2Name"></div><div class="learn-v2-meta" id="learnV2Meta"></div></div>
-            <div class="learn-v2-nav"><button type="button" id="learnV2Prev" aria-label="Previous country">←</button><button type="button" id="learnV2Next" aria-label="Next country">→</button></div>
-          </div>
-        </div>
-        <div class="learn-v2-strip" id="learnV2Strip"></div>
-      </div>
-      <div class="learn-v2-test" id="learnV2Test">
-        <div class="learn-v2-test-head"><strong id="learnV2TestTitle"></strong><span class="learn-v2-test-progress" id="learnV2TestProgress"></span></div>
-        <div class="learn-v2-map" id="learnV2TestMap"><img src="/images/world-map.svg" alt="World map"><div class="learn-v2-dots" id="learnV2TestDots"></div></div>
-        <div class="learn-v2-question" id="learnV2Question"></div>
-        <div class="learn-v2-options" id="learnV2Options"></div>
-        <div id="learnV2Result"></div>
-      </div>`;
-    area.appendChild(shell);area.classList.add('learn-v2-enabled');
-    document.getElementById('learnV2Prev').addEventListener('click',()=>moveStudy(-1));
-    document.getElementById('learnV2Next').addEventListener('click',()=>moveStudy(1));
-    document.getElementById('learnV2TestBtn').addEventListener('click',startTest);
-    document.querySelectorAll('#learnV2Order button').forEach(btn=>btn.addEventListener('click',()=>setOrder(btn.dataset.order)));
-    renderRegions();renderOrder();
-    return shell;
+  let letter='A', found=new Set(), revealed=new Set(), message='';
+  const letters='ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('').filter(l=>allCountries.some(c=>c.name.toUpperCase().startsWith(l)));
+  const norm=s=>(s||'').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]/g,'');
+  const project=(lat,lng)=>({x:((lng+180)/360)*100,y:((90-lat)/180)*100});
+  const list=()=>allCountries.filter(c=>c.name.toUpperCase().startsWith(letter)).sort((a,b)=>a.name.localeCompare(b.name));
+  function aliases(c){const a=[c.name,c.id];if(c.aliases)a.push(...c.aliases);return a.map(norm);}
+  function shell(){let s=document.getElementById('learnV3');if(s)return s;s=document.createElement('div');s.id='learnV3';s.className='learn-v3';s.innerHTML=`
+    <div class="learn-v3-head"><div><div class="learn-v3-kicker">A–Z CHALLENGE</div><h2 id="lv3Title"></h2><p id="lv3Sub"></p></div><div class="learn-v3-score" id="lv3Score"></div></div>
+    <div class="learn-v3-letters" id="lv3Letters"></div>
+    <form class="learn-v3-form" id="lv3Form"><input id="lv3Input" autocomplete="off" autocapitalize="words" spellcheck="false" placeholder="Name a highlighted country…"><button>Enter</button></form>
+    <div class="learn-v3-msg" id="lv3Msg"></div>
+    <div class="learn-v3-map"><img src="/images/world-map.svg" alt="World map"><div id="lv3Dots"></div></div>
+    <div class="learn-v3-actions"><button id="lv3Hint" type="button">💡 Hint</button><button id="lv3Reveal" type="button">👀 Reveal one</button><button id="lv3Reset" type="button">↻ Restart letter</button></div>
+    <div class="learn-v3-found"><strong id="lv3FoundTitle"></strong><div id="lv3Found"></div></div>`;area.appendChild(s);area.classList.add('learn-v3-enabled');
+    s.querySelector('#lv3Form').addEventListener('submit',e=>{e.preventDefault();guess();});
+    s.querySelector('#lv3Hint').onclick=hint;s.querySelector('#lv3Reveal').onclick=revealOne;s.querySelector('#lv3Reset').onclick=()=>{found.clear();revealed.clear();message='';render();};return s;}
+  function setLetter(l){letter=l;found.clear();revealed.clear();message='';render();setTimeout(()=>document.getElementById('lv3Input')?.focus(),50);}
+  function guess(){const inp=document.getElementById('lv3Input'),v=norm(inp.value);if(!v)return;const c=list().find(x=>aliases(x).includes(v));if(!c){message=`“${inp.value.trim()}” isn’t an unfound ${letter} country.`;inp.select();render(false);return;}if(found.has(c.id)||revealed.has(c.id)){message=`${c.name} is already revealed.`;inp.value='';render(false);return;}found.add(c.id);message=`✓ ${c.name}`;inp.value='';if(found.size+revealed.size===list().length){message=`🎉 Letter ${letter} complete — ${list().length}/${list().length}!`;const i=letters.indexOf(letter);if(i<letters.length-1)setTimeout(()=>setLetter(letters[i+1]),1100);}render(false);}
+  function hint(){const left=list().filter(c=>!found.has(c.id)&&!revealed.has(c.id));if(!left.length)return;const c=left[Math.floor(Math.random()*left.length)];message=`Hint: one starts “${c.name.slice(0,Math.min(3,c.name.length))}…”`;render(false);}
+  function revealOne(){const c=list().find(x=>!found.has(x.id)&&!revealed.has(x.id));if(!c)return;revealed.add(c.id);message=`Revealed: ${c.name}`;render(false);}
+  function render(focus=true){shell();const countries=list(),done=found.size+revealed.size;
+    document.getElementById('lv3Title').textContent=`Letter ${letter}`;document.getElementById('lv3Sub').textContent=`Name every country beginning with ${letter}. Every orange ring is one answer.`;document.getElementById('lv3Score').textContent=`${done} / ${countries.length}`;
+    const lh=document.getElementById('lv3Letters');lh.innerHTML='';letters.forEach(l=>{const b=document.createElement('button');b.type='button';b.textContent=l;b.className=l===letter?'active':'';b.onclick=()=>setLetter(l);lh.appendChild(b);});
+    document.getElementById('lv3Msg').textContent=message;
+    const dots=document.getElementById('lv3Dots');dots.innerHTML='';countries.forEach(c=>{const p=project(c.lat,c.lng),d=document.createElement('div');d.className='learn-v3-dot'+(found.has(c.id)?' found':'')+(revealed.has(c.id)?' revealed':'');d.style.left=p.x+'%';d.style.top=p.y+'%';if(found.has(c.id)||revealed.has(c.id)){const n=document.createElement('span');n.textContent=c.name;d.appendChild(n);}dots.appendChild(d);});
+    document.getElementById('lv3FoundTitle').textContent=done?`Revealed ${done} of ${countries.length}`:'Nothing revealed yet';const fh=document.getElementById('lv3Found');fh.innerHTML='';countries.filter(c=>found.has(c.id)||revealed.has(c.id)).forEach(c=>{const x=document.createElement('span');x.className=revealed.has(c.id)?'revealed':'';x.textContent=c.name;fh.appendChild(x);});if(focus)setTimeout(()=>document.getElementById('lv3Input')?.focus(),0);
   }
-
-  function renderRegions(){const host=document.getElementById('learnV2Regions');if(!host)return;host.innerHTML='';REGION_ORDER.forEach(region=>{const b=document.createElement('button');b.type='button';b.textContent=region;b.classList.toggle('active',region===selectedRegion);b.addEventListener('click',()=>selectRegion(region));host.appendChild(b);});}
-  function renderOrder(){document.querySelectorAll('#learnV2Order button').forEach(b=>b.classList.toggle('active',b.dataset.order===studyOrder));}
-  function setOrder(order){if(!['alphabetical','explore'].includes(order))return;studyOrder=order;studyList=orderedRegion(selectedRegion);studyIndex=0;renderOrder();renderStudy();}
-  function selectRegion(region){selectedRegion=region;studyList=orderedRegion(region);studyIndex=0;renderRegions();renderStudy();}
-
-  function renderStudy(){
-    if(!studyList.length)studyList=orderedRegion(selectedRegion);
-    const c=studyList[studyIndex];if(!c)return;
-    document.getElementById('learnV2Study').classList.remove('hidden');
-    document.getElementById('learnV2Test').classList.remove('active');
-    document.getElementById('learnV2Name').textContent=c.name;
-    document.getElementById('learnV2Meta').textContent=`${selectedRegion} · ${studyIndex+1} of ${studyList.length} · ${studyOrder==='alphabetical'?'A–Z study':'Explore mode'}`;
-    renderStudyDots(c.id);renderStrip();
-    const top=area.querySelector('#learnProgress');if(top)top.textContent=`Learn · ${selectedRegion}`;
-  }
-
-  function renderStudyDots(activeId){const host=document.getElementById('learnV2Dots');host.innerHTML='';studyList.forEach(c=>{const p=projectPct(c.lat,c.lng),b=document.createElement('button');b.type='button';b.className='learn-v2-dot'+(c.id===activeId?' current':'')+(mastered.has(c.id)?' mastered':'');b.style.left=p.x+'%';b.style.top=p.y+'%';b.title=c.name;b.setAttribute('aria-label',c.name);b.addEventListener('click',()=>{studyIndex=studyList.findIndex(x=>x.id===c.id);renderStudy();});host.appendChild(b);});}
-  function renderStrip(){const host=document.getElementById('learnV2Strip');host.innerHTML='';studyList.forEach((c,i)=>{const b=document.createElement('button');b.type='button';b.className='learn-v2-country-pill'+(i===studyIndex?' active':'')+(mastered.has(c.id)?' mastered':'');b.textContent=c.name;b.addEventListener('click',()=>{studyIndex=i;renderStudy();});host.appendChild(b);if(i===studyIndex)setTimeout(()=>b.scrollIntoView({behavior:'smooth',block:'nearest',inline:'center'}),0);});}
-  function moveStudy(delta){if(!studyList.length)return;studyIndex=(studyIndex+delta+studyList.length)%studyList.length;renderStudy();}
-
-  function startTest(){
-    studyList=orderedRegion(selectedRegion);if(!studyList.length)return;
-    testQueue=shuffle(studyList);testIndex=0;testScore=0;testLocked=false;
-    document.getElementById('learnV2Study').classList.add('hidden');
-    document.getElementById('learnV2Test').classList.add('active');
-    document.getElementById('learnV2Result').innerHTML='';
-    renderQuestion();
-  }
-
-  function renderQuestion(){
-    if(testIndex>=testQueue.length){finishTest();return;}
-    testLocked=false;
-    const c=testQueue[testIndex],p=projectPct(c.lat,c.lng);
-    document.getElementById('learnV2TestTitle').textContent=`${selectedRegion} test`;
-    document.getElementById('learnV2TestProgress').textContent=`${testIndex+1} / ${testQueue.length}`;
-    const dots=document.getElementById('learnV2TestDots');dots.innerHTML='';
-    testQueue.forEach(country=>{const q=projectPct(country.lat,country.lng),d=document.createElement('div');d.className='learn-v2-dot';d.style.left=q.x+'%';d.style.top=q.y+'%';if(country.id===c.id)d.classList.add('current');dots.appendChild(d);});
-    document.getElementById('learnV2Question').innerHTML=`<strong>Which country is highlighted?</strong><span>Choose the correct name.</span>`;
-    const opts=document.getElementById('learnV2Options');opts.innerHTML='';
-    sampleOptions(c,studyList).forEach(option=>{const b=document.createElement('button');b.type='button';b.textContent=option.name;b.addEventListener('click',()=>answer(option,c,b));opts.appendChild(b);});
-  }
-
-  function answer(choice,correct,button){
-    if(testLocked)return;testLocked=true;
-    const buttons=[...document.querySelectorAll('#learnV2Options button')];
-    buttons.forEach(b=>{if(b.textContent===correct.name)b.classList.add('correct');b.disabled=true;});
-    if(choice.id===correct.id){testScore++;mastered.add(correct.id);}else{button.classList.add('wrong');}
-    setTimeout(()=>{testIndex++;renderQuestion();},650);
-  }
-
-  function finishTest(){
-    const pct=testQueue.length?Math.round((testScore/testQueue.length)*100):0;
-    document.getElementById('learnV2TestDots').innerHTML='';
-    document.getElementById('learnV2Options').innerHTML='';
-    document.getElementById('learnV2Question').innerHTML='';
-    document.getElementById('learnV2TestProgress').textContent='Complete';
-    document.getElementById('learnV2Result').innerHTML=`<div class="learn-v2-result"><h3>${testScore} / ${testQueue.length}</h3><p>${pct}% correct in ${selectedRegion}.</p><button type="button" class="learn-v2-action primary" id="learnV2Again">Test again</button> <button type="button" class="learn-v2-action" id="learnV2Back">Back to learning</button></div>`;
-    document.getElementById('learnV2Again').addEventListener('click',startTest);
-    document.getElementById('learnV2Back').addEventListener('click',renderStudy);
-  }
-
-  const originalStart=window.startLearnMode;
-  window.startLearnMode=function(){
-    mode='learn';
-    setupWrap.classList.add('hidden');lobby.classList.add('hidden');gameOver.classList.add('hidden');learnArea.classList.remove('hidden');
-    tryLockPortrait();ensureShell();studyList=orderedRegion(selectedRegion);studyIndex=0;renderStudy();
-  };
+  const original=window.startLearnMode;window.startLearnMode=function(){mode='learn';setupWrap.classList.add('hidden');lobby.classList.add('hidden');gameOver.classList.add('hidden');learnArea.classList.remove('hidden');tryLockPortrait();shell();render();};
 })();
