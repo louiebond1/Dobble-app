@@ -1,5 +1,5 @@
-/* Countries map polish layer.
-   Keeps presentation changes isolated from game/network logic. */
+/* Countries map investor-polish layer. Keeps presentation isolated from
+   game/network logic while owning label placement, density and iOS viewport. */
 
 function countryLabelRank(id) {
   let h = 2166136261;
@@ -25,26 +25,38 @@ function progressTier(count) {
   return '0';
 }
 
+const polishedLabelRecords = [];
+
+function labelKeepThreshold(count, isInset) {
+  if (isInset) {
+    if (count < 60) return 1;
+    if (count < 90) return .90;
+    if (count < 120) return .70;
+    if (count < 150) return .50;
+    if (count < 197) return .36;
+    return .40;
+  }
+  if (count < 90) return 1;
+  if (count < 120) return .90;
+  if (count < 150) return .75;
+  if (count < 197) return .60;
+  return .62;
+}
+
 function refreshCountryLabelDensity(count) {
   const game = el('gameArea');
   if (!game) return;
   game.dataset.progressTier = progressTier(count);
 
-  const insetKeep = count < 60 ? 1 : count < 90 ? .90 : count < 120 ? .70 : count < 150 ? .50 : count < 197 ? .36 : .40;
-  const mainKeep = count < 90 ? 1 : count < 120 ? .90 : count < 150 ? .75 : count < 197 ? .60 : .62;
-
   game.querySelectorAll('.country-marker-label').forEach((label) => {
     const rank = Number(label.dataset.labelRank || 0);
     const isInset = !!label.dataset.insetKey;
-    const keep = isInset ? insetKeep : mainKeep;
-    label.classList.toggle('country-label-hidden', rank > keep);
+    label.classList.toggle('country-label-hidden', rank > labelKeepThreshold(count, isInset));
   });
+  requestAnimationFrame(layoutAllCountryLabels);
 }
 
-/* The polished board is intentionally a little taller than a strict 2:1 map,
-   matching the dense phone-friendly proportions of good map quizzes. Markers
-   therefore project directly into the rendered board so they always stay
-   aligned when the keyboard layout switches. */
+/* Main markers use percentages within the exact same 2:1 rectangle as the SVG. */
 function projectMainBoard(lat, lng) {
   return {
     x: ((lng + 180) / 360) * 100,
@@ -64,7 +76,7 @@ function insetGeoPosition(region, lat, lng) {
 
 function spreadInsetPositions(entries, region) {
   const points = entries.map((entry) => ({ entry, ...insetGeoPosition(region, entry.country.lat, entry.country.lng) }));
-  const minDist = region.key === 'europe' ? 5.1 : 7.4;
+  const minDist = region.key === 'europe' ? 5.0 : 7.2;
   const pad = region.key === 'europe' ? 6 : 8;
 
   for (let pass = 0; pass < 100; pass++) {
@@ -102,10 +114,15 @@ function spreadInsetPositions(entries, region) {
   points.forEach((p) => { p.entry.insetPos = { x: p.x, y: p.y }; });
 }
 
+function clearPolishedLabels() {
+  polishedLabelRecords.splice(0, polishedLabelRecords.length);
+}
+
 buildMarkers = function buildMarkersPolished() {
   const container = el('countryMarkers');
   container.innerHTML = '';
   markerEls.clear();
+  clearPolishedLabels();
   INSETS.forEach((r) => { insetLabelRects[r.key] = []; });
 
   const insetContainers = {};
@@ -131,8 +148,6 @@ buildMarkers = function buildMarkersPolished() {
     let mainDot = null;
     let insetDot = null;
 
-    /* Exactly one unanswered marker per country. Dense micro-regions live only
-       in their inset; they are not duplicated on the main world. */
     if (entry.inset && insetContainers[entry.inset]) {
       insetDot = document.createElement('div');
       insetDot.className = 'country-marker';
@@ -152,11 +167,127 @@ buildMarkers = function buildMarkersPolished() {
       insetEl: insetDot,
       insetKey: entry.inset || null,
       mainPos: entry.mainPos,
+      insetPos: entry.insetPos || null,
     });
   }
 
   refreshCountryLabelDensity(currentProgressCount());
 };
+
+function rectsOverlap(a, b, pad = 0) {
+  return a.x < b.x + b.w + pad && a.x + a.w + pad > b.x && a.y < b.y + b.h + pad && a.y + a.h + pad > b.y;
+}
+
+function clampLabelRect(rect, width, height, margin) {
+  return {
+    x: Math.max(margin, Math.min(rect.x, width - rect.w - margin)),
+    y: Math.max(margin, Math.min(rect.y, height - rect.h - margin)),
+    w: rect.w,
+    h: rect.h,
+  };
+}
+
+function candidateLabelRects(anchorX, anchorY, w, h, gap) {
+  return [
+    { x: anchorX - w / 2, y: anchorY - h - gap, w, h },
+    { x: anchorX + gap, y: anchorY - h / 2, w, h },
+    { x: anchorX - w / 2, y: anchorY + gap, w, h },
+    { x: anchorX - w - gap, y: anchorY - h / 2, w, h },
+    { x: anchorX + gap, y: anchorY - h - gap, w, h },
+    { x: anchorX - w - gap, y: anchorY - h - gap, w, h },
+    { x: anchorX + gap, y: anchorY + gap, w, h },
+    { x: anchorX - w - gap, y: anchorY + gap, w, h },
+  ];
+}
+
+function placeLabelRecord(record, occupied, blockers) {
+  const host = record.host;
+  const hostRect = host.getBoundingClientRect();
+  if (!hostRect.width || !hostRect.height || !record.label.isConnected) return;
+
+  const label = record.label;
+  label.style.left = '0px';
+  label.style.top = '0px';
+  label.style.visibility = 'hidden';
+
+  const w = Math.max(1, label.offsetWidth);
+  const h = Math.max(1, label.offsetHeight);
+  const anchorX = (record.xPct / 100) * hostRect.width;
+  const anchorY = (record.yPct / 100) * hostRect.height;
+  const margin = record.insetKey ? 2 : 3;
+  const gap = record.insetKey ? 3 : 4;
+
+  const candidates = candidateLabelRects(anchorX, anchorY, w, h, gap)
+    .map((r) => clampLabelRect(r, hostRect.width, hostRect.height, margin));
+
+  let chosen = candidates.find((candidate) =>
+    !occupied.some((r) => rectsOverlap(candidate, r, 1)) &&
+    !blockers.some((r) => rectsOverlap(candidate, r, 2))
+  );
+
+  if (!chosen) {
+    /* Fall back to the candidate with the least overlap area instead of
+       teleporting the label somewhere unrelated to its country. */
+    let bestScore = Infinity;
+    for (const candidate of candidates) {
+      let score = 0;
+      for (const r of occupied.concat(blockers)) {
+        const ix = Math.max(0, Math.min(candidate.x + candidate.w, r.x + r.w) - Math.max(candidate.x, r.x));
+        const iy = Math.max(0, Math.min(candidate.y + candidate.h, r.y + r.h) - Math.max(candidate.y, r.y));
+        score += ix * iy;
+      }
+      if (score < bestScore) {
+        bestScore = score;
+        chosen = candidate;
+      }
+    }
+  }
+
+  label.style.left = chosen.x + 'px';
+  label.style.top = chosen.y + 'px';
+  label.style.visibility = '';
+  occupied.push(chosen);
+}
+
+function mainInsetBlockers() {
+  const host = el('countryMarkers');
+  if (!host) return [];
+  const base = host.getBoundingClientRect();
+  return [...document.querySelectorAll('#gameArea .country-inset')].map((inset) => {
+    const r = inset.getBoundingClientRect();
+    return { x: r.left - base.left, y: r.top - base.top, w: r.width, h: r.height };
+  });
+}
+
+function layoutAllCountryLabels() {
+  const count = currentProgressCount();
+  const groups = new Map();
+
+  for (const record of polishedLabelRecords) {
+    if (!record.label.isConnected) continue;
+    const hiddenByDensity = Number(record.label.dataset.labelRank || 0) > labelKeepThreshold(count, !!record.insetKey);
+    record.label.classList.toggle('country-label-hidden', hiddenByDensity);
+    if (hiddenByDensity) continue;
+    const key = record.insetKey || '__main__';
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(record);
+  }
+
+  for (const [key, records] of groups) {
+    records.sort((a, b) => Number(a.label.dataset.labelRank) - Number(b.label.dataset.labelRank));
+    const occupied = [];
+    const blockers = key === '__main__' ? mainInsetBlockers() : [];
+    for (const record of records) placeLabelRecord(record, occupied, blockers);
+  }
+}
+
+function flashCorrectInput() {
+  const input = el('guessInput');
+  if (!input) return;
+  input.classList.add('country-input-success');
+  clearTimeout(flashCorrectInput._timer);
+  flashCorrectInput._timer = setTimeout(() => input.classList.remove('country-input-success'), 170);
+}
 
 revealMarker = function revealMarkerPolished(id, ownerName) {
   const entry = markerEls.get(id);
@@ -179,20 +310,29 @@ revealMarker = function revealMarkerPolished(id, ownerName) {
   label.dataset.countryId = country.id;
   label.dataset.labelRank = String(countryLabelRank(country.id));
 
+  let host;
+  let xPct;
+  let yPct;
+  let insetKey = null;
+
   if (entry.insetEl) {
+    insetKey = entry.insetKey;
     label.classList.add('country-marker-label--inset');
-    label.dataset.insetKey = entry.insetKey;
-    const host = document.querySelector(`[data-inset-markers="${entry.insetKey}"]`);
-    const xPct = parseFloat(entry.insetEl.style.left);
-    const yPct = parseFloat(entry.insetEl.style.top);
-    placeInsetLabel(label, host, xPct, yPct, insetLabelRects[entry.insetKey]);
+    label.dataset.insetKey = insetKey;
+    host = document.querySelector(`[data-inset-markers="${insetKey}"]`);
+    xPct = parseFloat(entry.insetEl.style.left);
+    yPct = parseFloat(entry.insetEl.style.top);
   } else {
-    label.style.left = entry.main ? entry.main.style.left : entry.mainPos.x + '%';
-    label.style.top = entry.main ? entry.main.style.top : entry.mainPos.y + '%';
-    el('countryMarkers').appendChild(label);
+    host = el('countryMarkers');
+    xPct = entry.main ? parseFloat(entry.main.style.left) : entry.mainPos.x;
+    yPct = entry.main ? parseFloat(entry.main.style.top) : entry.mainPos.y;
   }
 
+  host.appendChild(label);
+  polishedLabelRecords.push({ label, host, xPct, yPct, insetKey });
   refreshCountryLabelDensity(currentProgressCount());
+  requestAnimationFrame(layoutAllCountryLabels);
+  flashCorrectInput();
 
   setTimeout(() => {
     if (entry.main && entry.main.isConnected) entry.main.remove();
@@ -208,15 +348,7 @@ updateProgress = function updateProgressPolished(count) {
 };
 
 /* -------------------------------------------------------------------------
-   iOS keyboard / VisualViewport handling
-
-   Safari focuses inputs by scrolling them into view. Because our input used to
-   live below the map, that pushed the header and most of the world off-screen.
-   We now switch layout as soon as the input receives focus: input moves above
-   the map, and the fixed stage is pinned to the *visible* viewport as the
-   keyboard animates. The input stays focused after every answer, so play is
-   continuous with the full map visible. */
-
+   iOS keyboard / VisualViewport handling */
 (function installCountryKeyboardLayout() {
   const game = el('gameArea');
   const input = el('guessInput');
@@ -238,11 +370,8 @@ updateProgress = function updateProgressPolished(count) {
     game.classList.toggle('country-input-active', focused);
     game.classList.toggle('country-keyboard-open', keyboardLikelyOpen);
 
-    if (focused) {
-      /* Keep the document itself at the origin; the game stage follows the
-         visual viewport, so Safari has no reason to leave the header above it. */
-      if (window.scrollY !== 0) window.scrollTo(0, 0);
-    }
+    if (focused && window.scrollY !== 0) window.scrollTo(0, 0);
+    requestAnimationFrame(layoutAllCountryLabels);
   }
 
   function scheduleViewportState() {
@@ -256,7 +385,6 @@ updateProgress = function updateProgressPolished(count) {
     setTimeout(scheduleViewportState, 60);
     setTimeout(scheduleViewportState, 250);
   });
-
   input.addEventListener('blur', () => {
     scheduleViewportState();
     setTimeout(scheduleViewportState, 80);
@@ -272,17 +400,23 @@ updateProgress = function updateProgressPolished(count) {
   applyViewportState();
 })();
 
-/* Visual regression helper used for 30/60/90/120/150/197 stress states. */
+/* Reflow labels whenever the map/insets resize for any reason. */
+if ('ResizeObserver' in window) {
+  const labelResizeObserver = new ResizeObserver(() => requestAnimationFrame(layoutAllCountryLabels));
+  const map = el('countryMap');
+  if (map) labelResizeObserver.observe(map);
+  document.querySelectorAll('#gameArea .country-inset').forEach((inset) => labelResizeObserver.observe(inset));
+}
+
+/* Visual regression helper for 30/60/90/120/150/197 states. */
 window.countryVisualStressTest = function countryVisualStressTest(count) {
   const target = Math.max(0, Math.min(allCountries.length, Number(count) || 0));
   if (!allCountries.length || !el('countryMarkers')) return { ok: false, reason: 'countries not loaded' };
   buildMarkers();
-  const sample = allCountries
-    .slice()
-    .sort((a, b) => countryLabelRank(a.id) - countryLabelRank(b.id))
-    .slice(0, target);
+  const sample = allCountries.slice().sort((a, b) => countryLabelRank(a.id) - countryLabelRank(b.id)).slice(0, target);
   sample.forEach((country) => revealMarker(country.id, null));
   updateProgress(target);
+  requestAnimationFrame(layoutAllCountryLabels);
   return {
     ok: true,
     count: target,
@@ -291,12 +425,11 @@ window.countryVisualStressTest = function countryVisualStressTest(count) {
   };
 };
 
-/* Manual device-test hook: useful from Safari devtools without changing game
-   state. true forces the compressed typing layout; false restores live state. */
 window.countryKeyboardLayoutTest = function countryKeyboardLayoutTest(open) {
   const game = el('gameArea');
   if (!game) return false;
   game.classList.toggle('country-input-active', !!open);
   game.classList.toggle('country-keyboard-open', !!open);
+  requestAnimationFrame(layoutAllCountryLabels);
   return true;
 };
