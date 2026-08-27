@@ -18,7 +18,6 @@
     esp:[40,-4],fra:[46.5,2],deu:[51,10],ita:[42.5,12.5],swe:[62,16],nor:[64,12],fin:[64,26],ukr:[49,32],pol:[52,19],rou:[46,25],gbr:[54.5,-2.5]
   };
 
-  /* Stable editorial priority beats random hash priority in tiny inset maps. */
   const INSET_PRIORITY={
     europe:['gbr','fra','deu','esp','ita','pol','nld','bel','che','aut','prt','irl','dnk','nor','swe','fin','cze','svk','hun','rou','grc','ukr'],
     caribbean:['cub','jam','hti','dom','bhs','tto','brb','atg','kna','vct','grd','lca'],
@@ -39,7 +38,7 @@
     {x:anchorX-w-gap,y:anchorY-h-gap,w,h},{x:anchorX+gap,y:anchorY+gap,w,h},{x:anchorX-w-gap,y:anchorY+gap,w,h}];};
 
   function applyVisualAnchor(record){if(record.insetKey)return;const id=record.label&&record.label.dataset.countryId,a=LABEL_ANCHORS[id];if(!a)return;const p=projectMainBoard(a[0],a[1]);record.xPct=p.x;record.yPct=p.y;}
-  function editorialInsetVisible(record,count){if(!record.insetKey)return true;const list=INSET_PRIORITY[record.insetKey]||[];const id=record.label.dataset.countryId;const idx=list.indexOf(id);const limit=INSET_LIMIT[Number(progressTier(count))]||14;if(idx>=0)return idx<limit;/* unlisted countries only get labels early if there is room */return count<30&&Number(record.label.dataset.labelRank||0)<.38;}
+  function editorialInsetVisible(record,count){if(!record.insetKey)return true;const list=INSET_PRIORITY[record.insetKey]||[];const id=record.label.dataset.countryId;const idx=list.indexOf(id);const limit=INSET_LIMIT[Number(progressTier(count))]||14;if(idx>=0)return idx<limit;return count<30&&Number(record.label.dataset.labelRank||0)<.38;}
 
   layoutAllCountryLabels=function(){
     compactInsetLabels();const count=currentProgressCount(),groups=new Map();
@@ -52,4 +51,35 @@
 
   configureInsetGeography();
   if('ResizeObserver'in window){const observer=new ResizeObserver(()=>requestAnimationFrame(layoutAllCountryLabels));document.querySelectorAll('#gameArea .country-inset').forEach(inset=>observer.observe(inset));}
+})();
+
+/* Real desktop/laptop option. Deliberately gated to fine-pointer screens so the
+   phone experience is not changed at all. */
+(function installDesktopLayoutOption(){
+  const desktop=window.matchMedia('(min-width: 901px) and (pointer: fine)');
+  if(!desktop.matches)return;
+
+  if(!document.querySelector('link[href="/countries-desktop.css"]')){
+    const link=document.createElement('link');link.rel='stylesheet';link.href='/countries-desktop.css';document.head.appendChild(link);
+  }
+
+  const game=document.getElementById('gameArea');
+  if(!game)return;
+
+  const toolbar=document.createElement('div');
+  toolbar.className='country-desktop-toolbar';
+  toolbar.innerHTML='<label class="country-layout-switch" for="countryDesktopToggle"><span id="countryDesktopToggleText">Desktop layout</span><input type="checkbox" id="countryDesktopToggle"><span class="country-layout-track" aria-hidden="true"></span></label>';
+  game.appendChild(toolbar);
+
+  const help=document.createElement('div');
+  help.className='country-desktop-help';
+  help.innerHTML='<div class="country-desktop-help-item"><strong>🎯 The goal</strong>Name every country in the world.</div><div class="country-desktop-help-item"><strong>🌐 How it works</strong>Type a country name and press Enter.</div><div class="country-desktop-help-item"><strong>🏆 Keep improving</strong>Try to beat your best score and time.</div>';
+  game.appendChild(help);
+
+  const toggle=toolbar.querySelector('#countryDesktopToggle');
+  const text=toolbar.querySelector('#countryDesktopToggleText');
+  const key='countriesDesktopLayout';
+  function apply(enabled){game.classList.toggle('desktop-layout',enabled);toggle.checked=enabled;text.textContent=enabled?'Desktop layout':'Phone layout';localStorage.setItem(key,enabled?'1':'0');requestAnimationFrame(()=>{if(typeof layoutAllCountryLabels==='function')layoutAllCountryLabels();});}
+  toggle.addEventListener('change',()=>apply(toggle.checked));
+  const saved=localStorage.getItem(key);apply(saved===null?true:saved==='1');
 })();
