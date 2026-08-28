@@ -2,6 +2,7 @@
 .country-desktop-toolbar,.country-desktop-help{display:none}
 
 @media (min-width:901px) and (pointer:fine){
+  html,body{min-height:100%;overflow-x:hidden}
   body{min-height:100vh}
 
   /* Phone-layout preview on desktop remains deliberately phone-sized. */
@@ -18,41 +19,106 @@
   .country-layout-switch input:checked + .country-layout-track{background:#5a8cff}
   .country-layout-switch input:checked + .country-layout-track::after{transform:translateX(20px)}
 
-  /* Purpose-built desktop composition. A narrower 2:1 atlas fixes the crop/stretch issue. */
-  #gameArea.desktop-layout{width:min(1280px,calc(100vw - 56px))!important;max-width:1280px!important;min-height:0!important;margin:18px auto 30px!important;border-radius:22px!important;overflow:hidden!important;background:linear-gradient(180deg,rgba(84,48,112,.99),rgba(52,34,88,.99))!important;box-shadow:0 22px 80px rgba(8,4,18,.32)!important}
-  #gameArea.desktop-layout .duel-topbar{padding:11px 18px 8px!important;min-height:56px!important}
-  #gameArea.desktop-layout .duel-quit,#gameArea.desktop-layout .country-give-up{min-height:36px!important;padding:7px 12px!important;border-radius:10px!important;font-size:.88rem!important}
-  #gameArea.desktop-layout .country-status{gap:20px!important}
-  #gameArea.desktop-layout .country-status-count{font-size:1.05rem!important}
-  #gameArea.desktop-layout .country-status-timer{font-size:1rem!important}
-  #gameArea.desktop-layout .country-progress-track{margin:0 18px 8px!important;height:3px!important}
+  /* Real desktop shell: deliberately limited by BOTH viewport width and height. */
+  #gameArea.desktop-layout{
+    width:min(1120px,calc(100vw - 64px))!important;
+    max-width:1120px!important;
+    height:auto!important;
+    min-height:0!important;
+    max-height:none!important;
+    margin:18px auto 26px!important;
+    border-radius:20px!important;
+    overflow:visible!important;
+    background:linear-gradient(180deg,rgba(84,48,112,.99),rgba(52,34,88,.99))!important;
+    box-shadow:0 22px 80px rgba(8,4,18,.32)!important;
+  }
+  #gameArea.desktop-layout .duel-topbar{padding:9px 16px 7px!important;min-height:50px!important}
+  #gameArea.desktop-layout .duel-quit,#gameArea.desktop-layout .country-give-up{min-height:34px!important;padding:6px 11px!important;border-radius:9px!important;font-size:.86rem!important}
+  #gameArea.desktop-layout .country-status{gap:18px!important}
+  #gameArea.desktop-layout .country-status-count{font-size:1rem!important}
+  #gameArea.desktop-layout .country-status-timer{font-size:.96rem!important}
+  #gameArea.desktop-layout .country-progress-track{margin:0 16px 7px!important;height:3px!important}
 
-  #gameArea.desktop-layout .country-middle{display:grid!important;grid-template-columns:1fr!important;grid-template-areas:"input" "map" "feed"!important;grid-template-rows:52px auto 0!important;gap:9px!important;padding:0 18px!important;align-content:start!important}
-  #gameArea.desktop-layout .country-input{height:52px!important;min-height:52px!important;padding:0 17px!important;font-size:1.04rem!important;text-align:left!important;border-radius:11px!important}
+  #gameArea.desktop-layout .country-middle{
+    display:grid!important;
+    grid-template-columns:1fr!important;
+    grid-template-areas:"input" "map"!important;
+    grid-template-rows:48px auto!important;
+    gap:8px!important;
+    padding:0 16px!important;
+    align-content:start!important;
+    min-height:0!important;
+    height:auto!important;
+    max-height:none!important;
+    overflow:visible!important;
+  }
+  #gameArea.desktop-layout .country-input{height:48px!important;min-height:48px!important;padding:0 16px!important;font-size:1rem!important;text-align:left!important;border-radius:10px!important}
   #gameArea.desktop-layout .country-feed{display:none!important}
 
-  /* Exact 2:1 desktop map plane: no vertical crop, no stretched continents. */
-  #gameArea.desktop-layout .country-map-wrap{position:relative!important;width:100%!important;height:0!important;padding-top:50%!important;max-height:none!important;border-radius:12px!important;overflow:hidden!important;background:#84bee6!important}
-  #gameArea.desktop-layout .country-map{position:absolute!important;inset:0!important}
+  /* Critical fix: map is constrained by browser HEIGHT as well as width.
+     It remains an exact 2:1 atlas and never pushes controls below the viewport. */
+  #gameArea.desktop-layout .country-map-wrap{
+    position:relative!important;
+    justify-self:center!important;
+    width:min(100%,calc(54vh * 2))!important;
+    height:auto!important;
+    padding-top:0!important;
+    aspect-ratio:2 / 1!important;
+    max-height:54vh!important;
+    min-height:300px!important;
+    border-radius:11px!important;
+    overflow:hidden!important;
+    background:#84bee6!important;
+  }
+  #gameArea.desktop-layout .country-map{position:absolute!important;inset:0!important;width:100%!important;height:100%!important}
   #gameArea.desktop-layout #countryMap .country-map-bg,#gameArea.desktop-layout #countryMap #countryMarkers{position:absolute!important;inset:0!important;left:0!important;top:0!important;width:100%!important;height:100%!important;aspect-ratio:auto!important;transform:none!important;object-fit:fill!important}
 
-  /* Insets are supporting magnifiers, not the dominant content. */
-  #gameArea.desktop-layout .country-inset{border-radius:8px!important;border:1px solid rgba(39,82,112,.48)!important;box-shadow:0 3px 10px rgba(21,55,78,.14)!important}
-  #gameArea.desktop-layout .country-inset[data-inset="europe"]{top:1.8%!important;left:38.5%!important;right:auto!important;width:23%!important;height:auto!important}
-  #gameArea.desktop-layout .country-inset[data-inset="caribbean"]{left:1.2%!important;bottom:1.6%!important;width:19%!important;height:auto!important}
-  #gameArea.desktop-layout .country-inset[data-inset="gulf"]{right:1.2%!important;bottom:1.6%!important;left:auto!important;width:20%!important;height:auto!important}
-  #gameArea.desktop-layout .country-inset-label{font-size:.38rem!important}
-  #gameArea.desktop-layout .country-marker{width:4.4px!important;height:4.4px!important;margin:-2.2px 0 0 -2.2px!important}
-  #gameArea.desktop-layout .country-inset .country-marker{width:3.4px!important;height:3.4px!important;margin:-1.7px 0 0 -1.7px!important}
-  #gameArea.desktop-layout .country-marker-label{font-size:.58rem!important}
-  #gameArea.desktop-layout .country-inset .country-marker-label{font-size:.43rem!important}
+  /* Insets stay supporting magnifiers, not giant floating windows. */
+  #gameArea.desktop-layout .country-inset{border-radius:7px!important;border:1px solid rgba(39,82,112,.48)!important;box-shadow:0 3px 10px rgba(21,55,78,.14)!important}
+  #gameArea.desktop-layout .country-inset[data-inset="europe"]{top:1.8%!important;left:39%!important;right:auto!important;width:22%!important;height:auto!important}
+  #gameArea.desktop-layout .country-inset[data-inset="caribbean"]{left:1.2%!important;bottom:1.6%!important;width:18%!important;height:auto!important}
+  #gameArea.desktop-layout .country-inset[data-inset="gulf"]{right:1.2%!important;bottom:1.6%!important;left:auto!important;width:19%!important;height:auto!important}
+  #gameArea.desktop-layout .country-inset-label{font-size:.36rem!important}
+  #gameArea.desktop-layout .country-marker{width:4px!important;height:4px!important;margin:-2px 0 0 -2px!important}
+  #gameArea.desktop-layout .country-inset .country-marker{width:3.2px!important;height:3.2px!important;margin:-1.6px 0 0 -1.6px!important}
+  #gameArea.desktop-layout .country-marker-label{font-size:.54rem!important}
+  #gameArea.desktop-layout .country-inset .country-marker-label{font-size:.4rem!important}
 
-  /* Compact controls/info under the board instead of a giant empty purple area. */
-  #gameArea.desktop-layout .country-desktop-toolbar{display:flex!important;padding:12px 18px 10px!important;border-top:1px solid rgba(255,255,255,.06)!important;margin-top:10px!important}
-  #gameArea.desktop-layout .country-desktop-help{display:grid!important;grid-template-columns:repeat(3,1fr)!important;margin:0 18px 16px!important;border:1px solid rgba(255,255,255,.09)!important;border-radius:12px!important;overflow:hidden!important;background:rgba(255,255,255,.04)!important}
-  #gameArea.desktop-layout .country-desktop-help-item{padding:11px 16px!important;color:rgba(255,255,255,.7)!important;font-size:.76rem!important;line-height:1.35!important;border-right:1px solid rgba(255,255,255,.07)!important}
+  /* Controls are normal document flow, never overlaid on the map. */
+  #gameArea.desktop-layout .country-desktop-toolbar{
+    position:static!important;
+    display:flex!important;
+    padding:9px 16px 7px!important;
+    margin:0!important;
+    border-top:0!important;
+    min-height:38px!important;
+    box-sizing:border-box!important;
+  }
+  #gameArea.desktop-layout .country-desktop-help{
+    position:static!important;
+    display:grid!important;
+    grid-template-columns:repeat(3,1fr)!important;
+    margin:0 16px 14px!important;
+    border:1px solid rgba(255,255,255,.09)!important;
+    border-radius:10px!important;
+    overflow:hidden!important;
+    background:rgba(255,255,255,.04)!important;
+  }
+  #gameArea.desktop-layout .country-desktop-help-item{padding:8px 13px!important;color:rgba(255,255,255,.7)!important;font-size:.71rem!important;line-height:1.3!important;border-right:1px solid rgba(255,255,255,.07)!important}
   #gameArea.desktop-layout .country-desktop-help-item:last-child{border-right:0!important}
-  #gameArea.desktop-layout .country-desktop-help-item strong{display:block!important;color:#fff!important;font-size:.82rem!important;margin-bottom:2px!important}
+  #gameArea.desktop-layout .country-desktop-help-item strong{display:block!important;color:#fff!important;font-size:.77rem!important;margin-bottom:1px!important}
+
+  /* Short laptop screens (e.g. 768p browser viewport): compress further. */
+  @media (max-height:760px){
+    #gameArea.desktop-layout{margin:8px auto 14px!important;width:min(1020px,calc(100vw - 48px))!important}
+    #gameArea.desktop-layout .duel-topbar{min-height:44px!important;padding:6px 14px 5px!important}
+    #gameArea.desktop-layout .country-middle{grid-template-rows:44px auto!important;padding:0 14px!important;gap:6px!important}
+    #gameArea.desktop-layout .country-input{height:44px!important;min-height:44px!important}
+    #gameArea.desktop-layout .country-map-wrap{width:min(100%,calc(48vh * 2))!important;max-height:48vh!important;min-height:250px!important}
+    #gameArea.desktop-layout .country-desktop-toolbar{padding:6px 14px 4px!important;min-height:32px!important}
+    #gameArea.desktop-layout .country-desktop-help{margin:0 14px 9px!important}
+    #gameArea.desktop-layout .country-desktop-help-item{padding:6px 10px!important;font-size:.67rem!important}
+  }
 }
 
 @media not all and (min-width:901px){.country-desktop-help,.country-desktop-toolbar{display:none!important}}
