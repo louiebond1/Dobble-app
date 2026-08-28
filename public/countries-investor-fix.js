@@ -83,3 +83,33 @@
   toggle.addEventListener('change',()=>apply(toggle.checked));
   const saved=localStorage.getItem(key);apply(saved===null?true:saved==='1');
 })();
+
+/* Label safety: the base label CSS uses translate(-50%,-100%). The collision
+   engine already calculates absolute pixel coordinates, so leaving that transform
+   active shifts inset labels outside their calculated box (e.g. Slovakia above
+   Europe). Neutralise transforms during placement and hard-clamp every label to
+   its host rectangle. */
+(function installInsetLabelBoundsFix(){
+  const originalPlace=placeLabelRecord;
+  placeLabelRecord=function(record,occupied,blockers){
+    if(!record||!record.label||!record.host)return;
+    const label=record.label;
+    label.style.transform='none';
+    label.style.margin='0';
+    if(record.insetKey){
+      record.host.style.overflow='hidden';
+      const inset=record.host.closest('.country-inset');
+      if(inset)inset.style.overflow='hidden';
+    }
+    originalPlace(record,occupied,blockers);
+    if(!record.insetKey)return;
+    const hostRect=record.host.getBoundingClientRect();
+    const w=label.offsetWidth,h=label.offsetHeight;
+    let x=parseFloat(label.style.left)||0,y=parseFloat(label.style.top)||0;
+    const margin=3;
+    x=Math.max(margin,Math.min(x,Math.max(margin,hostRect.width-w-margin)));
+    y=Math.max(margin,Math.min(y,Math.max(margin,hostRect.height-h-margin)));
+    label.style.left=x+'px';label.style.top=y+'px';label.style.transform='none';
+  };
+  requestAnimationFrame(()=>{if(typeof layoutAllCountryLabels==='function')layoutAllCountryLabels();});
+})();
