@@ -8,8 +8,16 @@
   const EXPANDED={
     europe:{key:'europe',latMin:33,latMax:72,lngMin:-13,lngMax:43},
     caribbean:{key:'caribbean',latMin:6,latMax:28,lngMin:-87,lngMax:-57},
-    gulf:{key:'gulf',latMin:13,latMax:43,lngMin:20,lngMax:60}
+    /* Wide enough to show the recognisable Middle East as a whole: Egypt and
+       the Levant on the west, Turkey at the top, Iran on the east and the full
+       Arabian Peninsula below. */
+    gulf:{key:'gulf',latMin:12,latMax:43,lngMin:19,lngMax:61}
   };
+  const MIDDLE_EAST_COUNTRIES=new Set([
+    'bahrain','cyprus','egypt','iran','iraq','israel','jordan','kuwait','lebanon',
+    'oman','palestine','qatar','saudi arabia','syria','turkey','turkiye',
+    'united arab emirates','yemen'
+  ]);
   const SHORT={
     'United Arab Emirates':'UAE',
     'Bosnia and Herzegovina':'Bosnia & Herz.',
@@ -26,6 +34,18 @@
     return false;
   }
   function regionFor(key){return EXPANDED[key]||INSETS.find(r=>r.key===key)||null;}
+  function normName(country){
+    if(typeof normalizeGuess==='function')return normalizeGuess(country.name);
+    return String(country.name||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+  }
+  function belongsToExpandedRegion(country,key,point,region){
+    if(point.lat<region.latMin||point.lat>region.latMax||point.lng<region.lngMin||point.lng>region.lngMax)return false;
+    /* Do not turn the Middle East detail panel into a rectangular geographic
+       grab-bag. Nearby African/Caucasus/Asian countries remain visible as map
+       context, but they do not get answer dots inside this named region. */
+    if(key==='gulf')return MIDDLE_EAST_COUNTRIES.has(normName(country));
+    return true;
+  }
 
   function ensureOverlay(){
     if(overlay)return;
@@ -111,7 +131,7 @@
     const frag=document.createDocumentFragment(),foundLabels=[];
     for(const c of allCountries){
       const p=pointFor(c);
-      if(p.lat<region.latMin||p.lat>region.latMax||p.lng<region.lngMin||p.lng>region.lngMax)continue;
+      if(!belongsToExpandedRegion(c,activeKey,p,region))continue;
       const pos=pct(region,p.lat,p.lng);
       const dot=document.createElement('div');
       dot.className='country-region-dot'+(isFound(c.id)?' found':'');
