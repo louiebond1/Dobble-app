@@ -88,28 +88,28 @@
     }
   }
 
-  function keepTypingWhenMapTapped() {
+  function makeSingleTapInert() {
     const map = document.getElementById('countryMap');
-    const input = document.getElementById('guessInput');
-    if (!map || !input || map.dataset.tapGuardReady === '1') return;
+    if (!map || map.dataset.tapGuardReady === '1') return;
     map.dataset.tapGuardReady = '1';
 
-    /* Normal taps are inert: they must not switch view, hide the map, select
-       labels, or create a text-only state. Multi-touch remains available to
-       the existing pinch-zoom handler. */
+    /* A normal one-finger tap should literally do nothing. preventDefault on
+       the primary touch keeps Safari from moving focus/closing the keyboard,
+       while the event still propagates to the existing zoom code so a real
+       multi-touch pinch continues to work. */
     map.addEventListener('pointerdown', (e) => {
-      if (e.pointerType === 'touch' && e.isPrimary) {
-        e.preventDefault();
-        requestAnimationFrame(() => {
-          if (document.activeElement !== input) input.focus({ preventScroll: true });
-        });
-      }
+      if (e.pointerType === 'touch' && e.isPrimary) e.preventDefault();
     }, { passive: false, capture: true });
+
+    /* Suppress the synthetic click/tap action entirely. */
     map.addEventListener('click', (e) => {
       e.preventDefault();
-      e.stopPropagation();
+      e.stopImmediatePropagation();
     }, { passive: false, capture: true });
-    map.addEventListener('contextmenu', (e) => e.preventDefault());
+    map.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+      e.stopImmediatePropagation();
+    }, { passive: false, capture: true });
   }
 
   function forceMapVisible() {
@@ -123,7 +123,7 @@
   }
 
   installAccuracyStyle();
-  keepTypingWhenMapTapped();
+  makeSingleTapInert();
 
   const baseBuild = buildMarkers;
   buildMarkers = function buildMarkersAccuracyGuard() {
