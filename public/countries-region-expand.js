@@ -8,7 +8,7 @@
   const EXPANDED={
     europe:{key:'europe',latMin:33,latMax:72,lngMin:-13,lngMax:43},
     caribbean:{key:'caribbean',latMin:6,latMax:28,lngMin:-87,lngMax:-57},
-    gulf:{key:'gulf',latMin:12,latMax:43,lngMin:24,lngMax:61}
+    gulf:{key:'gulf',latMin:13,latMax:43,lngMin:20,lngMax:60}
   };
   const SHORT={
     'United Arab Emirates':'UAE',
@@ -57,8 +57,6 @@
   function placeLabels(items){
     const W=markerHost.clientWidth||700,H=markerHost.clientHeight||350;
     const occupied=[];
-    /* Dense clusters are placed top-to-bottom so the collision solver produces
-       tidy readable stacks rather than depending on guess order. */
     items.sort((a,b)=>a.pos.y-b.pos.y||a.pos.x-b.pos.x);
     for(const item of items){
       const label=document.createElement('div');
@@ -88,8 +86,6 @@
         }
         if(score<bestScore){bestScore=score;best=r;}
       }
-      /* If all natural positions collide, scan a compact ring around the dot.
-         This is mainly for Israel/Palestine/Jordan/Lebanon and micro-Europe. */
       if(bestScore>=10000){
         for(let radius=18;radius<=72;radius+=9){
           for(let deg=0;deg<360;deg+=30){
