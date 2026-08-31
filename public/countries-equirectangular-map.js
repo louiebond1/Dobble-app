@@ -14,4 +14,14 @@
     const y=((region.latMax-lat)/(region.latMax-region.latMin))*100;
     return {x:Math.max(0,Math.min(100,x)),y:Math.max(0,Math.min(100,y))};
   };
+
+  /* Load the final geography-first inset label layer after every earlier map
+     and Europe override. This guarantees it is actually active on the live
+     page and wins the final layout pass. */
+  if(!document.querySelector('script[data-country-inset-label-fix]')){
+    const s=document.createElement('script');
+    s.src='/countries-inset-label-fix.js';
+    s.dataset.countryInsetLabelFix='1';
+    document.body.appendChild(s);
+  }
 })();
