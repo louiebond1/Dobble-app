@@ -1,16 +1,16 @@
 /* Country marker accuracy guard.
-   The quiz should not show a field of orange answer-hint dots at 0/197.
-   Keep every marker geographically positioned internally, but only reveal its
-   orange dot when that country has actually been guessed. Insets remain the
-   authoritative display for countries assigned to Europe/Caribbean/Middle East. */
+   Show every unanswered country as a small geographic point from the start,
+   then let the normal reveal flow replace that point with the found-state label.
+   Insets remain the authoritative display for Europe/Caribbean/Middle East. */
 (function () {
-  function installHiddenUnansweredStyle() {
+  function installAccuracyStyle() {
     if (document.getElementById('countryAccuracyStyle')) return;
     const style = document.createElement('style');
     style.id = 'countryAccuracyStyle';
     style.textContent = `
-      #gameArea .country-marker:not(.found){opacity:0!important;visibility:hidden!important;pointer-events:none!important}
+      #gameArea .country-marker{opacity:1!important;visibility:visible!important;pointer-events:none!important}
       #gameArea .country-marker.found{opacity:1!important;visibility:visible!important}
+      #gameArea #countryMap,#gameArea #countryMap *{-webkit-user-select:none!important;user-select:none!important;-webkit-touch-callout:none!important}
     `;
     document.head.appendChild(style);
   }
@@ -48,7 +48,28 @@
     }
   }
 
-  installHiddenUnansweredStyle();
+  function keepTypingWhenMapTapped() {
+    const map = document.getElementById('countryMap');
+    const input = document.getElementById('guessInput');
+    if (!map || !input || map.dataset.tapGuardReady === '1') return;
+    map.dataset.tapGuardReady = '1';
+
+    /* A normal tap used to blur the input, close the keyboard and trigger a
+       different label layout, which looked like the map had changed into text.
+       Keep the typing state stable on single taps. Multi-touch is left alone
+       so pinch zoom can still work. */
+    map.addEventListener('pointerdown', (e) => {
+      if (e.pointerType === 'touch' && e.isPrimary) {
+        e.preventDefault();
+        if (document.activeElement !== input) input.focus({ preventScroll: true });
+      }
+    }, { passive: false, capture: true });
+    map.addEventListener('click', (e) => e.preventDefault(), { passive: false });
+    map.addEventListener('contextmenu', (e) => e.preventDefault());
+  }
+
+  installAccuracyStyle();
+  keepTypingWhenMapTapped();
 
   const baseBuild = buildMarkers;
   buildMarkers = function buildMarkersAccuracyGuard() {
