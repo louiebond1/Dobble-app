@@ -11,6 +11,46 @@
       #gameArea .country-marker{opacity:1!important;visibility:visible!important;pointer-events:none!important}
       #gameArea .country-marker.found{opacity:1!important;visibility:visible!important}
       #gameArea #countryMap,#gameArea #countryMap *{-webkit-user-select:none!important;user-select:none!important;-webkit-touch-callout:none!important}
+
+      /* Never allow the gameplay map to collapse when the input blurs or the
+         iOS keyboard closes. The previous flex override could reduce the map
+         wrapper to zero height, leaving only the text feed on purple. */
+      #gameArea:not(.hidden) .country-middle{
+        display:flex!important;
+        flex-direction:column!important;
+        align-items:stretch!important;
+        min-height:0!important;
+      }
+      #gameArea:not(.hidden) .country-map-wrap{
+        display:block!important;
+        flex:0 0 auto!important;
+        width:100%!important;
+        height:clamp(246px,61vw,306px)!important;
+        min-height:246px!important;
+        max-height:306px!important;
+        visibility:visible!important;
+        opacity:1!important;
+      }
+      #gameArea:not(.hidden) #countryMap{
+        display:block!important;
+        width:100%!important;
+        height:100%!important;
+        min-height:100%!important;
+        visibility:visible!important;
+        opacity:1!important;
+      }
+      #gameArea.country-input-active .country-map-wrap,
+      #gameArea.country-keyboard-open .country-map-wrap{
+        height:min(71vw,calc(var(--country-vvh) - 88px))!important;
+        min-height:214px!important;
+        max-height:312px!important;
+      }
+
+      /* The feed is supplementary only. Never let it become a text-only
+         replacement for the map on mobile. */
+      @media (max-width:900px){
+        #gameArea:not(.hidden) .country-feed{display:none!important}
+      }
     `;
     document.head.appendChild(style);
   }
@@ -54,18 +94,32 @@
     if (!map || !input || map.dataset.tapGuardReady === '1') return;
     map.dataset.tapGuardReady = '1';
 
-    /* A normal tap used to blur the input, close the keyboard and trigger a
-       different label layout, which looked like the map had changed into text.
-       Keep the typing state stable on single taps. Multi-touch is left alone
-       so pinch zoom can still work. */
+    /* Normal taps are inert: they must not switch view, hide the map, select
+       labels, or create a text-only state. Multi-touch remains available to
+       the existing pinch-zoom handler. */
     map.addEventListener('pointerdown', (e) => {
       if (e.pointerType === 'touch' && e.isPrimary) {
         e.preventDefault();
-        if (document.activeElement !== input) input.focus({ preventScroll: true });
+        requestAnimationFrame(() => {
+          if (document.activeElement !== input) input.focus({ preventScroll: true });
+        });
       }
     }, { passive: false, capture: true });
-    map.addEventListener('click', (e) => e.preventDefault(), { passive: false });
+    map.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+    }, { passive: false, capture: true });
     map.addEventListener('contextmenu', (e) => e.preventDefault());
+  }
+
+  function forceMapVisible() {
+    const wrap = document.querySelector('#gameArea .country-map-wrap');
+    const map = document.getElementById('countryMap');
+    if (!wrap || !map) return;
+    wrap.style.visibility = 'visible';
+    wrap.style.opacity = '1';
+    map.style.visibility = 'visible';
+    map.style.opacity = '1';
   }
 
   installAccuracyStyle();
@@ -75,12 +129,18 @@
   buildMarkers = function buildMarkersAccuracyGuard() {
     baseBuild.apply(this, arguments);
     repinAllMarkers();
+    forceMapVisible();
   };
 
-  /* Earlier polish intentionally spread dense inset dots apart. Re-pin all
-     inset countries after that process so their coordinates mean geography,
-     not visual spacing. */
-  requestAnimationFrame(repinAllMarkers);
-  window.addEventListener('resize', () => requestAnimationFrame(repinAllMarkers));
-  if (window.visualViewport) window.visualViewport.addEventListener('resize', () => requestAnimationFrame(repinAllMarkers));
+  const input = document.getElementById('guessInput');
+  if (input) {
+    input.addEventListener('blur', () => {
+      requestAnimationFrame(forceMapVisible);
+      setTimeout(forceMapVisible, 60);
+    });
+  }
+
+  requestAnimationFrame(() => { repinAllMarkers(); forceMapVisible(); });
+  window.addEventListener('resize', () => requestAnimationFrame(() => { repinAllMarkers(); forceMapVisible(); }));
+  if (window.visualViewport) window.visualViewport.addEventListener('resize', () => requestAnimationFrame(() => { repinAllMarkers(); forceMapVisible(); }));
 })();
