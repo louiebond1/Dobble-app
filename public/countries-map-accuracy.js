@@ -26,13 +26,29 @@
       : { lat: country.lat, lng: country.lng };
   }
 
+  /* IMPORTANT: the inset background is already an exact crop of the same
+     equirectangular world map. Therefore marker coordinates must use the full
+     0-100% inset plane with NO visual padding. The previous 7-9% inset padding
+     compressed every marker toward the centre and made e.g. Portugal appear in
+     Spain. */
+  function exactInsetPosition(region, lat, lng) {
+    if (!region) return null;
+    const x = ((lng - region.lngMin) / (region.lngMax - region.lngMin)) * 100;
+    const y = ((region.latMax - lat) / (region.latMax - region.latMin)) * 100;
+    return {
+      x: Math.max(0, Math.min(100, x)),
+      y: Math.max(0, Math.min(100, y)),
+    };
+  }
+
+  /* Replace the older padded projection globally so Europe label placement and
+     any later layout code use exactly the same geography as the inset image. */
+  insetGeoPosition = exactInsetPosition;
+
   function geographicInsetPosition(region, country) {
     if (!region || !country) return null;
     const point = pointFor(country);
-    const pad = region.key === 'europe' ? 7 : 9;
-    const x = pad + ((point.lng - region.lngMin) / (region.lngMax - region.lngMin)) * (100 - pad * 2);
-    const y = pad + ((region.latMax - point.lat) / (region.latMax - region.latMin)) * (100 - pad * 2);
-    return {x:Math.max(pad,Math.min(100-pad,x)),y:Math.max(pad,Math.min(100-pad,y))};
+    return exactInsetPosition(region, point.lat, point.lng);
   }
 
   function repinAllMarkers() {
