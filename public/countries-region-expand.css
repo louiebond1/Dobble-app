@@ -1,0 +1,23 @@
+/* Tap-to-expand region maps. Loaded after all base country-map styles. */
+#gameArea .country-inset{cursor:zoom-in;touch-action:manipulation}
+#gameArea .country-inset::after{content:'↗';position:absolute;right:4px;top:3px;z-index:8;width:18px;height:18px;border-radius:999px;display:grid;place-items:center;font-size:10px;font-weight:900;color:#244f70;background:rgba(255,255,255,.78);box-shadow:0 1px 2px rgba(20,45,65,.14);pointer-events:none}
+
+#gameArea .country-region-expanded{position:absolute;inset:0;z-index:40;display:none;overflow:hidden;border-radius:9px;background:#82bce4;border:1px solid rgba(37,55,67,.2);box-shadow:0 8px 30px rgba(26,17,41,.28);touch-action:none}
+#gameArea .country-region-expanded.is-open{display:block}
+#gameArea .country-region-expanded-map{position:absolute;inset:0;overflow:hidden;background:#82bce4}
+#gameArea .country-region-expanded-bg{position:absolute;max-width:none;pointer-events:none;user-select:none}
+#gameArea .country-region-expanded-markers{position:absolute;inset:0;overflow:hidden}
+#gameArea .country-region-expanded-title{position:absolute;left:12px;top:10px;z-index:6;padding:5px 9px;border-radius:999px;background:rgba(255,255,255,.88);font-size:.68rem;font-weight:900;letter-spacing:.08em;text-transform:uppercase;color:#245d87;box-shadow:0 1px 3px rgba(21,50,72,.12)}
+#gameArea .country-region-close{position:absolute;right:10px;top:9px;z-index:9;width:38px;height:38px;border:0;border-radius:999px;background:rgba(31,23,43,.92);color:#fff;font-size:25px;line-height:1;display:grid;place-items:center;box-shadow:0 3px 10px rgba(20,13,29,.25)}
+#gameArea .country-region-close:active{transform:scale(.96)}
+#gameArea .country-region-hint{position:absolute;left:10px;bottom:10px;z-index:7;padding:6px 9px;border-radius:9px;background:rgba(37,82,119,.92);color:#fff;font-size:.62rem;font-weight:700;box-shadow:0 2px 7px rgba(18,42,60,.2);pointer-events:none}
+
+#gameArea .country-region-dot{position:absolute;width:5.4px;height:5.4px;margin:-2.7px 0 0 -2.7px;border-radius:50%;background:#f46f35;box-shadow:0 0 0 .6px rgba(176,67,25,.38);z-index:2}
+#gameArea .country-region-dot.found{width:6.5px;height:6.5px;margin:-3.25px 0 0 -3.25px;background:#f46f35;box-shadow:0 0 0 1.4px rgba(255,255,255,.9),0 1px 3px rgba(75,45,25,.28)}
+#gameArea .country-region-label{position:absolute;z-index:4;transform:translate(4px,-50%);font-size:.58rem;line-height:1.05;font-weight:850;color:#152733;white-space:nowrap;text-shadow:0 0 1px #fff,0 0 2px #fff,0 0 4px rgba(255,255,255,.98);pointer-events:none}
+
+@media(max-width:520px){
+  #gameArea .country-region-label{font-size:.54rem}
+  #gameArea .country-region-expanded-title{font-size:.62rem}
+  #gameArea .country-region-hint{font-size:.56rem}
+}
