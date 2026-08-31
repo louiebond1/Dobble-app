@@ -8,7 +8,7 @@
   const EXPANDED={
     europe:{key:'europe',latMin:33,latMax:72,lngMin:-13,lngMax:43},
     caribbean:{key:'caribbean',latMin:6,latMax:28,lngMin:-87,lngMax:-57},
-    gulf:{key:'gulf',latMin:14,latMax:39,lngMin:30,lngMax:60}
+    gulf:{key:'gulf',latMin:12,latMax:43,lngMin:24,lngMax:61}
   };
   const SHORT={
     'United Arab Emirates':'UAE',
