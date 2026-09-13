@@ -17,10 +17,11 @@ let totalRounds = 8;
 let roundNumber = 0;
 let roundActive = false;
 let myWrong = false;
+let myWrongIndices = new Set();
 
 const TRIVIA_ROUND_MS = 20000;
 let allQuestions = [];
-let selectedCategory = 'any';
+let selectedCategories = []; // empty = any genre
 let selectedDifficulty = 'any';
 
 fetch('/api/trivia')
@@ -59,19 +60,37 @@ function formatGenreLabel(cat) {
     .join(' ');
 }
 
+// Genre is multi-select — pick as many as you want ("just these five").
+// "Any" is really "clear the selection": tapping it wipes whatever else
+// is picked, and picking anything else turns "Any" back off. If every
+// specific genre gets deselected, it reverts to "Any" on its own rather
+// than leaving nothing selected (which would mean "no questions match").
 function renderGenreChips(categories) {
   const container = el('genreChips');
   container.innerHTML = '';
-  const options = ['any', ...categories];
-  options.forEach((cat) => {
+  const anyBtn = document.createElement('button');
+  anyBtn.type = 'button';
+  anyBtn.className = 'chip active';
+  anyBtn.textContent = '🌈 Any';
+  anyBtn.addEventListener('click', () => {
+    selectedCategories = [];
+    container.querySelectorAll('.chip').forEach((c) => c.classList.toggle('active', c === anyBtn));
+  });
+  container.appendChild(anyBtn);
+
+  categories.forEach((cat) => {
     const btn = document.createElement('button');
     btn.type = 'button';
     btn.className = 'chip';
-    btn.textContent = cat === 'any' ? '🌈 Any' : formatGenreLabel(cat);
-    if (cat === 'any') btn.classList.add('active');
+    btn.textContent = formatGenreLabel(cat);
     btn.addEventListener('click', () => {
-      selectedCategory = cat;
-      container.querySelectorAll('.chip').forEach((c) => c.classList.toggle('active', c === btn));
+      if (selectedCategories.includes(cat)) {
+        selectedCategories = selectedCategories.filter((c) => c !== cat);
+      } else {
+        selectedCategories = [...selectedCategories, cat];
+      }
+      btn.classList.toggle('active', selectedCategories.includes(cat));
+      anyBtn.classList.toggle('active', selectedCategories.length === 0);
     });
     container.appendChild(btn);
   });
@@ -175,7 +194,7 @@ function updateLobby() {
 el('startBtn').addEventListener('click', () => {
   if (!amHost() || !roomCode) return;
   totalRounds = parseInt(el('roundsInput').value, 10) || 8;
-  socket.emit('trivia:host:start', { code: roomCode, rounds: totalRounds, category: selectedCategory, difficulty: selectedDifficulty });
+  socket.emit('trivia:host:start', { code: roomCode, rounds: totalRounds, categories: selectedCategories, difficulty: selectedDifficulty });
 });
 
 socket.on('trivia:room:cancelled', () => {
@@ -237,6 +256,7 @@ socket.on('trivia:round:start', (data) => {
   players = data.players;
   roundActive = true;
   myWrong = false;
+  myWrongIndices = new Set();
 
   setupWrap.classList.add('hidden');
   lobby.classList.add('hidden');
@@ -257,13 +277,25 @@ socket.on('trivia:wrong', (data) => {
   addFeedItem(`❌ ${data.name} guessed wrong`);
   if (data.name === myName) {
     myWrong = true;
+    myWrongIndices.add(data.index);
     const buttons = el('triviaOptions').querySelectorAll('.trivia-option');
     if (buttons[data.index]) buttons[data.index].classList.add('wrong');
+    // A wrong guess is a 3-second timeout, not permanent for the round —
+    // every button is disabled for those 3 seconds (matching the server,
+    // which rejects any guess from me until then regardless of which
+    // option I'd pick), then trivia:retry re-enables whichever options I
+    // haven't already tried and found wrong.
     buttons.forEach((b) => { b.disabled = true; });
-    // Leave room to re-enable if the opponent also misses and the round
-    // isn't over — but once *I've* answered wrong I'm out for this
-    // question regardless, matching the server's per-round lockout.
+    addFeedItem('⏳ Locked out for 3 seconds…');
   }
+});
+
+socket.on('trivia:retry', () => {
+  if (mode !== 'duo' || !roundActive) return;
+  myWrong = false;
+  const buttons = el('triviaOptions').querySelectorAll('.trivia-option');
+  buttons.forEach((b, i) => { b.disabled = myWrongIndices.has(i); });
+  addFeedItem('✅ You can guess again!');
 });
 
 socket.on('trivia:round:result', (data) => {
@@ -314,7 +346,7 @@ el('playAgainBtn').addEventListener('click', () => {
   }
   if (!amHost() || !roomCode) return;
   gameOver.classList.add('hidden');
-  socket.emit('trivia:host:start', { code: roomCode, rounds: totalRounds, category: selectedCategory, difficulty: selectedDifficulty });
+  socket.emit('trivia:host:start', { code: roomCode, rounds: totalRounds, categories: selectedCategories, difficulty: selectedDifficulty });
 });
 
 // --- Solo (local practice) mode -------------------------------------------
@@ -344,7 +376,7 @@ el('soloStartBtn').addEventListener('click', () => {
 
 function soloQuestionPool() {
   let pool = allQuestions;
-  if (selectedCategory !== 'any') pool = pool.filter((q) => q.category === selectedCategory);
+  if (selectedCategories.length) pool = pool.filter((q) => selectedCategories.includes(q.category));
   if (selectedDifficulty !== 'any') pool = pool.filter((q) => q.difficulty === selectedDifficulty);
   // A narrow genre+difficulty combo can come up short of the requested
   // round count — top back up from the full bank rather than ever

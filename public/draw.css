@@ -148,14 +148,13 @@
 }
 
 .color-palette {
-  display: flex;
+  flex-wrap: wrap;
   gap: 8px;
-  flex: 1;
 }
 
 .color-swatch {
-  width: 30px;
-  height: 30px;
+  width: 28px;
+  height: 28px;
   border-radius: 50%;
   border: 3px solid transparent;
   appearance: none;

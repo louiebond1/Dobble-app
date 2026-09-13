@@ -598,9 +598,9 @@ function triviaRoomPlayers(room) {
   return Array.from(room.players.values()).map((p) => ({ name: p.name, score: p.score }));
 }
 
-function pickTriviaQuestion(usedIds, category, difficulty) {
+function pickTriviaQuestion(usedIds, categories, difficulty) {
   let pool = TRIVIA_QUESTIONS;
-  if (category && category !== 'any') pool = pool.filter((q) => q.category === category);
+  if (categories && categories.length) pool = pool.filter((q) => categories.includes(q.category));
   if (difficulty && difficulty !== 'any') pool = pool.filter((q) => q.difficulty === difficulty);
   // A narrow genre+difficulty combo can run dry well before totalRounds is
   // reached — widen back out (first ignoring what's already been asked,
@@ -622,7 +622,7 @@ function startTriviaRound(code) {
   }
 
   room.roundNumber += 1;
-  const question = pickTriviaQuestion(room.usedQuestionIds, room.category, room.difficulty);
+  const question = pickTriviaQuestion(room.usedQuestionIds, room.categories, room.difficulty);
   room.usedQuestionIds.add(question.id);
   room.currentQuestion = question;
   room.roundActive = true;
@@ -1667,7 +1667,8 @@ io.on('connection', (socket) => {
     const room = triviaRooms.get(code);
     if (!room || room.hostSocketId !== socket.id || room.players.size < 2) return;
     room.totalRounds = Math.max(1, Math.min(25, Number(payload && payload.rounds) || 8));
-    room.category = TRIVIA_CATEGORIES.includes(payload && payload.category) ? payload.category : 'any';
+    const requestedCategories = Array.isArray(payload && payload.categories) ? payload.categories : [];
+    room.categories = requestedCategories.filter((c) => TRIVIA_CATEGORIES.includes(c));
     room.difficulty = TRIVIA_DIFFICULTIES.includes(payload && payload.difficulty) ? payload.difficulty : 'any';
     room.roundNumber = 0;
     room.usedQuestionIds = new Set();
@@ -1691,9 +1692,17 @@ io.on('connection', (socket) => {
     room.wrongAnswerers.add(socket.id);
     const player = room.players.get(socket.id);
     io.to(`trivia:${code}`).emit('trivia:wrong', { name: player.name, index });
-    if (room.wrongAnswerers.size >= room.players.size) {
-      resolveTriviaRound(code, { timedOut: false, winnerSocketId: null });
-    }
+
+    // A wrong guess is a 3-second penalty, not a lifetime ban from the
+    // round — the round itself only ends on a correct answer or the
+    // timeout, so there's no "everyone's wrong, resolve now" shortcut
+    // to take here anymore.
+    const roundAtGuess = room.roundNumber;
+    setTimeout(() => {
+      if (room.roundNumber !== roundAtGuess || !room.roundActive) return;
+      room.wrongAnswerers.delete(socket.id);
+      io.to(socket.id).emit('trivia:retry');
+    }, 3000);
   });
 
   // --- Word Scramble Sprint (networked unscramble race) ---------------------

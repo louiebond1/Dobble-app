@@ -156,9 +156,21 @@ function resetStrokes() {
   activeStroke = null;
 }
 
+// On iOS Safari, getBoundingClientRect() is relative to the layout
+// viewport, but PointerEvent.clientX/Y can drift to being relative to the
+// visual viewport instead — whenever the two diverge (the on-screen
+// keyboard is up, the dynamic toolbar has partially collapsed, the page
+// is pinch-zoomed), every touch point is off by a fixed vertical amount,
+// which reads exactly like "it's drawing above my finger." Correcting by
+// visualViewport's offset is the standard fix; where visualViewport isn't
+// supported (or isn't offset) this is a no-op and behaves exactly as
+// before.
 function pointFromEvent(e) {
   const rect = canvas.getBoundingClientRect();
-  return { x: (e.clientX - rect.left) / rect.width, y: (e.clientY - rect.top) / rect.height };
+  const vv = window.visualViewport;
+  const clientX = e.clientX + (vv ? vv.offsetLeft : 0);
+  const clientY = e.clientY + (vv ? vv.offsetTop : 0);
+  return { x: (clientX - rect.left) / rect.width, y: (clientY - rect.top) / rect.height };
 }
 
 function applyTool(tool, color) {
@@ -444,9 +456,24 @@ el('playAgainBtn').addEventListener('click', () => {
   socket.emit('draw:host:start', { code: roomCode, rounds: totalRounds });
 });
 
-window.addEventListener('resize', () => {
-  if (!gameArea.classList.contains('hidden')) resizeCanvas();
-});
+// Resizing canvas.width/height (inside resizeCanvas) always clears the
+// bitmap — a real, silent bug: on a phone, the browser's own chrome
+// (address bar collapsing, the on-screen keyboard opening/closing) fires
+// exactly this resize mid-game, which was wiping the drawing instead of
+// just rescaling it. Since every stroke is stored as 0-1 normalized
+// points, replaying them after a resize maps them onto the new size
+// perfectly — no offset, nothing lost.
+function handleViewportResize() {
+  if (gameArea.classList.contains('hidden')) return;
+  resizeCanvas();
+  redrawAll();
+}
+window.addEventListener('resize', handleViewportResize);
+if (window.visualViewport) {
+  // iOS can fire a visualViewport resize (keyboard, dynamic toolbar)
+  // without a matching window resize event.
+  window.visualViewport.addEventListener('resize', handleViewportResize);
+}
 
 // --- Party Mashup: auto-join and auto-start a single-round leg ------------
 (function initMashup() {
