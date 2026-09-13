@@ -20,10 +20,62 @@ let myWrong = false;
 
 const TRIVIA_ROUND_MS = 20000;
 let allQuestions = [];
+let selectedCategory = 'any';
+let selectedDifficulty = 'any';
+
 fetch('/api/trivia')
   .then((r) => r.json())
-  .then((data) => { allQuestions = data.questions || []; })
+  .then((data) => {
+    allQuestions = data.questions || [];
+    renderDifficultyChips(data.difficulties || []);
+    renderGenreChips(data.categories || []);
+  })
   .catch(() => {});
+
+const DIFFICULTY_LABELS = { easy: '🟢 Easy', medium: '🟡 Medium', hard: '🟠 Hard', expert: '🔴 Expert' };
+
+function renderDifficultyChips(difficulties) {
+  const container = el('difficultyChips');
+  container.innerHTML = '';
+  const options = ['any', ...difficulties];
+  options.forEach((level) => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'chip';
+    btn.textContent = level === 'any' ? '🎲 Any' : DIFFICULTY_LABELS[level] || level;
+    if (level === 'any') btn.classList.add('active');
+    btn.addEventListener('click', () => {
+      selectedDifficulty = level;
+      container.querySelectorAll('.chip').forEach((c) => c.classList.toggle('active', c === btn));
+    });
+    container.appendChild(btn);
+  });
+}
+
+function formatGenreLabel(cat) {
+  return cat
+    .split(' ')
+    .map((word) => (word === 'tv' ? 'TV' : word.charAt(0).toUpperCase() + word.slice(1)))
+    .join(' ');
+}
+
+function renderGenreChips(categories) {
+  const container = el('genreChips');
+  container.innerHTML = '';
+  const options = ['any', ...categories];
+  options.forEach((cat) => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'chip';
+    btn.textContent = cat === 'any' ? '🌈 Any' : formatGenreLabel(cat);
+    if (cat === 'any') btn.classList.add('active');
+    btn.addEventListener('click', () => {
+      selectedCategory = cat;
+      container.querySelectorAll('.chip').forEach((c) => c.classList.toggle('active', c === btn));
+    });
+    container.appendChild(btn);
+  });
+}
 
 // --- Round-count picker ------------------------------------------------
 
@@ -123,7 +175,7 @@ function updateLobby() {
 el('startBtn').addEventListener('click', () => {
   if (!amHost() || !roomCode) return;
   totalRounds = parseInt(el('roundsInput').value, 10) || 8;
-  socket.emit('trivia:host:start', { code: roomCode, rounds: totalRounds });
+  socket.emit('trivia:host:start', { code: roomCode, rounds: totalRounds, category: selectedCategory, difficulty: selectedDifficulty });
 });
 
 socket.on('trivia:room:cancelled', () => {
@@ -157,6 +209,10 @@ function renderQuestion(data) {
   el('roundNum').textContent = roundNumber;
   el('totalRounds').textContent = totalRounds;
   el('triviaCategory').textContent = data.category;
+  const diffEl = el('triviaDifficulty');
+  diffEl.textContent = data.difficulty || '';
+  diffEl.dataset.level = data.difficulty || '';
+  diffEl.classList.toggle('hidden', !data.difficulty);
   el('triviaQuestionText').textContent = data.question;
   el('triviaFeed').innerHTML = '';
 
@@ -258,7 +314,7 @@ el('playAgainBtn').addEventListener('click', () => {
   }
   if (!amHost() || !roomCode) return;
   gameOver.classList.add('hidden');
-  socket.emit('trivia:host:start', { code: roomCode, rounds: totalRounds });
+  socket.emit('trivia:host:start', { code: roomCode, rounds: totalRounds, category: selectedCategory, difficulty: selectedDifficulty });
 });
 
 // --- Solo (local practice) mode -------------------------------------------
@@ -286,11 +342,27 @@ el('soloStartBtn').addEventListener('click', () => {
   startSoloGame();
 });
 
+function soloQuestionPool() {
+  let pool = allQuestions;
+  if (selectedCategory !== 'any') pool = pool.filter((q) => q.category === selectedCategory);
+  if (selectedDifficulty !== 'any') pool = pool.filter((q) => q.difficulty === selectedDifficulty);
+  // A narrow genre+difficulty combo can come up short of the requested
+  // round count — top back up from the full bank rather than ever
+  // shorting the player on rounds they asked for.
+  return pool.length ? pool : allQuestions;
+}
+
 function startSoloGame() {
   soloScore = 0;
   roundNumber = 0;
+  const pool = soloQuestionPool();
   totalRounds = Math.min(soloTotalRounds, allQuestions.length);
-  soloQueue = shuffle(allQuestions).slice(0, totalRounds);
+  soloQueue = shuffle(pool).slice(0, totalRounds);
+  if (soloQueue.length < totalRounds) {
+    const usedIds = new Set(soloQueue.map((q) => q.id));
+    const filler = shuffle(allQuestions.filter((q) => !usedIds.has(q.id)));
+    soloQueue = soloQueue.concat(filler).slice(0, totalRounds);
+  }
   players = [{ name: soloName, score: 0 }];
 
   setupWrap.classList.add('hidden');
@@ -315,6 +387,7 @@ function startSoloRound() {
 
   renderQuestion({
     category: soloCurrentQuestion.category,
+    difficulty: soloCurrentQuestion.difficulty,
     question: soloCurrentQuestion.question,
     options: soloCurrentQuestion.options,
   });

@@ -180,15 +180,36 @@
   text-wrap: balance;
 }
 
+.trivia-tags {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+
 .trivia-category {
-  display: block;
   font-size: 0.7rem;
   font-weight: 800;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--accent-dark);
-  margin-bottom: 6px;
 }
+
+.trivia-difficulty {
+  font-size: 0.62rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 2px 8px;
+  border-radius: 999px;
+  color: white;
+}
+
+.trivia-difficulty[data-level="easy"] { background: #4cae6b; }
+.trivia-difficulty[data-level="medium"] { background: #d6a72e; }
+.trivia-difficulty[data-level="hard"] { background: #e07a3f; }
+.trivia-difficulty[data-level="expert"] { background: #d3455b; }
 
 .trivia-options {
   display: flex;

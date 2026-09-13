@@ -28,6 +28,16 @@
       </div>
 
       <div class="field-group">
+        <p class="field-label">Difficulty</p>
+        <div class="pair-chips" id="difficultyChips"></div>
+      </div>
+
+      <div class="field-group">
+        <p class="field-label">Genre</p>
+        <div class="pair-chips" id="genreChips"></div>
+      </div>
+
+      <div class="field-group">
         <p class="field-label">Players</p>
         <div class="mode-toggle" id="modeToggle">
           <button type="button" class="mode-btn" id="modeSoloBtn" data-mode="solo">🧍 Solo</button>
@@ -82,7 +92,10 @@
 
     <div class="duel-middle">
       <div class="trivia-question" id="triviaQuestion">
-        <span class="trivia-category" id="triviaCategory"></span>
+        <span class="trivia-tags">
+          <span class="trivia-category" id="triviaCategory"></span>
+          <span class="trivia-difficulty" id="triviaDifficulty"></span>
+        </span>
         <span id="triviaQuestionText"></span>
       </div>
 

@@ -10,7 +10,7 @@ const { PHOTOS } = require('./lib/photos');
 const { QUESTIONS, CATEGORIES: PREDICT_CATEGORIES, DIFFICULTY_POINTS } = require('./lib/whatWouldYouSay');
 const { DATES, CATEGORIES: DATE_CATEGORIES } = require('./lib/dates');
 const { DECK: DRAW_WORDS } = require('./lib/drawWords');
-const { TRIVIA_QUESTIONS } = require('./lib/triviaQuestions');
+const { TRIVIA_QUESTIONS, TRIVIA_CATEGORIES, TRIVIA_DIFFICULTIES } = require('./lib/triviaQuestions');
 const { SCRAMBLE_WORDS } = require('./lib/scrambleWords');
 const { COUNTRIES } = require('./lib/countries');
 
@@ -598,10 +598,17 @@ function triviaRoomPlayers(room) {
   return Array.from(room.players.values()).map((p) => ({ name: p.name, score: p.score }));
 }
 
-function pickTriviaQuestion(usedIds) {
-  const pool = TRIVIA_QUESTIONS.filter((q) => !usedIds.has(q.id));
-  const source = pool.length ? pool : TRIVIA_QUESTIONS;
-  return source[Math.floor(Math.random() * source.length)];
+function pickTriviaQuestion(usedIds, category, difficulty) {
+  let pool = TRIVIA_QUESTIONS;
+  if (category && category !== 'any') pool = pool.filter((q) => q.category === category);
+  if (difficulty && difficulty !== 'any') pool = pool.filter((q) => q.difficulty === difficulty);
+  // A narrow genre+difficulty combo can run dry well before totalRounds is
+  // reached — widen back out (first ignoring what's already been asked,
+  // then dropping the filters entirely) rather than ever getting stuck.
+  let unused = pool.filter((q) => !usedIds.has(q.id));
+  if (!unused.length) unused = pool.length ? pool : TRIVIA_QUESTIONS.filter((q) => !usedIds.has(q.id));
+  if (!unused.length) unused = TRIVIA_QUESTIONS;
+  return unused[Math.floor(Math.random() * unused.length)];
 }
 
 function startTriviaRound(code) {
@@ -615,7 +622,7 @@ function startTriviaRound(code) {
   }
 
   room.roundNumber += 1;
-  const question = pickTriviaQuestion(room.usedQuestionIds);
+  const question = pickTriviaQuestion(room.usedQuestionIds, room.category, room.difficulty);
   room.usedQuestionIds.add(question.id);
   room.currentQuestion = question;
   room.roundActive = true;
@@ -625,6 +632,7 @@ function startTriviaRound(code) {
     roundNumber: room.roundNumber,
     totalRounds: room.totalRounds,
     category: question.category,
+    difficulty: question.difficulty,
     question: question.question,
     options: question.options,
     players: triviaRoomPlayers(room),
@@ -1659,6 +1667,8 @@ io.on('connection', (socket) => {
     const room = triviaRooms.get(code);
     if (!room || room.hostSocketId !== socket.id || room.players.size < 2) return;
     room.totalRounds = Math.max(1, Math.min(25, Number(payload && payload.rounds) || 8));
+    room.category = TRIVIA_CATEGORIES.includes(payload && payload.category) ? payload.category : 'any';
+    room.difficulty = TRIVIA_DIFFICULTIES.includes(payload && payload.difficulty) ? payload.difficulty : 'any';
     room.roundNumber = 0;
     room.usedQuestionIds = new Set();
     room.started = true;
@@ -2569,7 +2579,7 @@ app.get('/api/deck', (req, res) => {
 // fetched once, then played entirely client-side with no server round-trip
 // per question/word, same reasoning as /api/deck for Trial Mode.
 app.get('/api/trivia', (req, res) => {
-  res.json({ questions: TRIVIA_QUESTIONS });
+  res.json({ questions: TRIVIA_QUESTIONS, categories: TRIVIA_CATEGORIES, difficulties: TRIVIA_DIFFICULTIES });
 });
 
 app.get('/api/scramble-words', (req, res) => {
