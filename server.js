@@ -1226,6 +1226,22 @@ io.on('connection', (socket) => {
         if (!io.sockets.sockets.has(pid)) room.players.delete(pid);
       }
     }
+    // Go Fish is a two-seat game. Reject duplicate seats and extra
+    // browsers instead of letting a third socket corrupt playerOrder.
+    if (room && room.players.size > 0) {
+      const nameTaken = Array.from(room.players.values()).some(
+        (player) => player.name.toLowerCase() === name.toLowerCase()
+      );
+      if (nameTaken) {
+        if (typeof ack === 'function') ack({ ok: false, error: 'seat-taken' });
+        return;
+      }
+      if (room.players.size >= 2) {
+        if (typeof ack === 'function') ack({ ok: false, error: room.started ? 'game-in-progress' : 'room-full' });
+        return;
+      }
+    }
+
     let isHost = false;
     let hostToken = null;
     if (!room || room.players.size === 0 || !io.sockets.sockets.has(room.hostSocketId)) {
@@ -2079,6 +2095,7 @@ io.on('connection', (socket) => {
           pond: [],
           turn: null,
           gameActive: false,
+          actionLocked: false,
           createdAt: Date.now(),
         };
         goFishRooms.set(code, room);
@@ -2109,6 +2126,26 @@ io.on('connection', (socket) => {
     if (!room || room.hostSocketId !== socket.id) return;
     io.to(`gofish:${code}`).emit('gofish:room:cancelled');
     goFishRooms.delete(code);
+  });
+
+  socket.on('gofish:leave', (payload) => {
+    const code = String((payload && payload.code) || '').toUpperCase();
+    const room = goFishRooms.get(code);
+    if (!room) return;
+    if (room.hostSocketId === socket.id) {
+      io.to(`gofish:${code}`).emit('gofish:room:cancelled');
+      goFishRooms.delete(code);
+      return;
+    }
+    if (room.players.delete(socket.id)) {
+      socket.leave(`gofish:${code}`);
+      socket.data.goFishCode = null;
+      socket.data.goFishRole = null;
+      io.to(`gofish:${code}`).emit(
+        'gofish:players:update',
+        Array.from(room.players.values()).map((p) => ({ name: p.name, score: p.score }))
+      );
+    }
   });
 
   socket.on('gofish:host:start', (payload) => {
