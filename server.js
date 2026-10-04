@@ -2160,18 +2160,25 @@ io.on('connection', (socket) => {
     goFishDealGame(code);
   });
 
-  socket.on('gofish:ask', (payload) => {
+  socket.on('gofish:ask', (payload, ack) => {
     const code = String((payload && payload.code) || '').toUpperCase();
     const rank = String((payload && payload.rank) || '');
     const room = goFishRooms.get(code);
-    if (!room || !room.gameActive || room.actionLocked || socket.id !== room.turn || !CARD_RANKS.includes(rank)) return;
+    if (!room || !room.gameActive || room.actionLocked || socket.id !== room.turn || !CARD_RANKS.includes(rank)) {
+      if (typeof ack === 'function') ack({ ok: false });
+      return;
+    }
 
     const asker = room.players.get(socket.id);
     const opponentId = goFishOpponentId(room, socket.id);
     const opponent = opponentId ? room.players.get(opponentId) : null;
-    if (!opponent || !asker.hand.some((c) => c.rank === rank)) return;
+    if (!opponent || !asker.hand.some((c) => c.rank === rank)) {
+      if (typeof ack === 'function') ack({ ok: false });
+      return;
+    }
 
     room.actionLocked = true;
+    if (typeof ack === 'function') ack({ ok: true });
     const matches = opponent.hand.filter((c) => c.rank === rank);
     if (matches.length > 0) {
       opponent.hand = opponent.hand.filter((c) => c.rank !== rank);
