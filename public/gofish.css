@@ -589,6 +589,20 @@ button.gf-card {
   font-size: clamp(1.55rem, 7vw, 2.15rem);
 }
 
+/* Keep the whole visible card as one reliable iOS hit target. */
+button.gf-card > * {
+  pointer-events: none;
+}
+
+button.gf-card:active {
+  filter: brightness(.985);
+}
+
+button.gf-card:focus-visible {
+  outline: 3px solid rgba(216, 111, 116, .32);
+  outline-offset: 2px;
+}
+
 .gf-card.selected {
   box-shadow:
     0 13px 28px rgba(99, 62, 66, 0.18),
