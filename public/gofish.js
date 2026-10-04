@@ -753,19 +753,34 @@ el('joinLouieBtn').addEventListener('click', () => quickPlayJoin('Louie'));
 el('joinArielBtn').addEventListener('click', () => quickPlayJoin('Ariel'));
 
 function quickPlayJoin(name) {
+  const note = el('quickplayNote');
+  if (note) note.textContent = 'Joining…';
   socket.emit('gofish:quickplay:join', { name }, (res) => {
-    if (!res || !res.ok) return;
+    if (!res || !res.ok) {
+      if (note) {
+        const messages = {
+          'seat-taken': `${name} is already in the game on another phone.`,
+          'room-full': 'Louie and Ariel are already both in the game.',
+          'game-in-progress': 'A Go Fish game is already in progress.',
+        };
+        note.textContent = messages[res && res.error] || 'Couldn’t join that game. Try again.';
+      }
+      return;
+    }
     isHost = res.isHost;
     hostToken = res.hostToken || null;
     roomCode = res.code;
     myName = res.name;
+    if (note) note.textContent = 'Open Go Fish on both phones, then each take your seat.';
     setup.classList.add('hidden');
     lobby.classList.remove('hidden');
   });
 }
 
 el('lobbyBackBtn').addEventListener('click', () => {
-  if (roomCode) socket.emit('gofish:host:cancel', { code: roomCode });
+  if (roomCode) {
+    socket.emit(amHost() ? 'gofish:host:cancel' : 'gofish:leave', { code: roomCode });
+  }
   resetRoomState();
   lobby.classList.add('hidden');
   setup.classList.remove('hidden');
