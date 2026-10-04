@@ -28,10 +28,9 @@ let askPending = false;
 const actionQueue = [];
 
 const TURN_TIMING = {
-  anticipation: 280,
-  transfer: 620,
-  settle: 220,
-  book: 620,
+  anticipation: 430,
+  settle: 280,
+  book: 760,
 };
 
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -63,9 +62,12 @@ function sortHand(hand) {
 
 let selectedRank = null;
 
-const RANK_PLURAL = {
-  A: 'Aces', J: 'Jacks', Q: 'Queens', K: 'Kings',
-};
+const RANK_SINGULAR = { A: 'Ace', J: 'Jack', Q: 'Queen', K: 'King' };
+const RANK_PLURAL = { A: 'Aces', J: 'Jacks', Q: 'Queens', K: 'Kings' };
+
+function rankSingular(rank) {
+  return RANK_SINGULAR[rank] || rank;
+}
 
 function rankPlural(rank) {
   return RANK_PLURAL[rank] || `${rank}s`;
@@ -616,8 +618,8 @@ async function playTurnAction(action) {
   if (action.kind === 'take') {
     showEventBanner(
       mine
-        ? `${targetName} has ${humanCount(action.count)} ${action.count === 1 ? action.rank : rankPlural(action.rank)}`
-        : `You hand over ${humanCount(action.count)} ${action.count === 1 ? action.rank : rankPlural(action.rank)}`,
+        ? `${targetName} has ${humanCount(action.count)} ${action.count === 1 ? rankSingular(action.rank) : rankPlural(action.rank)}`
+        : `You hand over ${humanCount(action.count)} ${action.count === 1 ? rankSingular(action.rank) : rankPlural(action.rank)}`,
       { persist: true }
     );
   } else {
@@ -832,6 +834,12 @@ function updateDuelHud() {
 
 socket.on('gofish:round:start', (data) => {
   if (mode !== 'duo') return;
+  selectedRank = null;
+  pendingGameState = null;
+  pendingRoundResult = null;
+  actionQueue.length = 0;
+  actionAnimating = false;
+  askPending = false;
   roundNumber = data.roundNumber;
   totalRounds = data.totalRounds;
   if (Array.isArray(data.players)) players = data.players;
@@ -955,7 +963,7 @@ function startSoloGame() {
   gameOver.classList.add('hidden');
   gameArea.classList.remove('hidden');
   el('hudP2').classList.remove('hidden');
-  el('opponentLabel').textContent = 'CPU';
+  updateDuelHud();
 
   startSoloRound();
 }
@@ -975,22 +983,32 @@ function startSoloRound() {
   soloTurn = (roundNumber - 1) % 2 === 0 ? 'me' : 'cpu';
   soloGameActive = true;
 
-  showEventBanner(`🎴 New deal — ${soloTurn === 'me' ? soloName : 'CPU'} goes first.`);
+  selectedRank = null;
   soloCheckBooks('me');
   soloCheckBooks('cpu');
   soloBeginTurn();
+  showEventBanner(`${soloTurn === 'me' ? 'You go' : 'CPU goes'} first`);
+}
+
+function getSoloStateSnapshot() {
+  return {
+    myHand: soloHands.me.slice(),
+    myBooks: soloBooks.me.slice(),
+    opponent: {
+      name: 'CPU',
+      handCount: soloHands.cpu.length,
+      books: soloBooks.cpu.slice(),
+    },
+    pondCount: soloPond.length,
+    isMyTurn: soloGameActive && soloTurn === 'me',
+    turnName: soloTurn === 'me' ? soloName : 'CPU',
+    askableRanks: [...new Set(soloHands.me.map((c) => c.rank))],
+    actionLocked: actionAnimating || askPending,
+  };
 }
 
 function soloRenderState() {
-  renderMyHand(soloHands.me, {
-    interactive: soloGameActive && soloTurn === 'me',
-    askableRanks: [...new Set(soloHands.me.map((c) => c.rank))],
-  });
-  renderBooks('myBooks', soloBooks.me);
-  renderOpponentBacks(soloHands.cpu.length);
-  renderBooks('opponentBooks', soloBooks.cpu);
-  el('pondCount').textContent = soloPond.length;
-  updateTurnPill(soloTurn === 'me', soloTurn === 'me' ? soloName : 'CPU');
+  applyGameState(getSoloStateSnapshot());
 }
 
 function soloBeginTurn() {
@@ -1011,8 +1029,8 @@ function soloBeginTurn() {
 
 function soloAsk(rank) {
   if (actionAnimating || askPending || !soloGameActive || soloTurn !== 'me' || !soloHands.me.some((c) => c.rank === rank)) return;
-  lockVisibleHand(rank);
-  showEventBanner(`You ask CPU for ${rank}s…`);
+  lockVisibleHand();
+  showEventBanner(`You ask CPU for ${rankPlural(rank)}…`, { persist: true });
   soloResolveAsk('me', 'cpu', rank, soloName, 'CPU');
 }
 
@@ -1052,6 +1070,7 @@ async function soloResolveAsk(askerKey, targetKey, rank, askerName, targetName) 
       opponentName: targetName,
       rank,
       count: matches.length,
+      cards: matches.map((card) => ({ rank: card.rank, suit: card.suit })),
       books,
       keepsTurn: true,
     };
@@ -1084,7 +1103,7 @@ async function soloResolveAsk(askerKey, targetKey, rank, askerName, targetName) 
   } finally {
     actionAnimating = false;
     askPending = false;
-    gameArea.classList.remove('gofish-resolving');
+    gameArea.classList.remove('gf-resolving');
   }
 
   if (soloTotalBooks() >= RANKS.length) return soloEndDeal();
@@ -1102,7 +1121,7 @@ function soloEndDeal() {
   players[1].score = soloScore.cpu;
   updateDuelHud();
 
-  showEventBanner(winnerName ? `🏆 ${winnerName} took this deal!` : "🤝 This deal's a tie!");
+  showEventBanner(winnerName ? `${winnerName} took this deal` : 'This deal is a tie');
   if (winnerName === soloName) { hapticSuccess(); playSuccess(); }
 
   setTimeout(startSoloRound, 3200);
