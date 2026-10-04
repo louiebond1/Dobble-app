@@ -83,25 +83,28 @@
 
     <div class="duel-middle gofish-middle">
       <div class="gofish-table">
-        <div class="gofish-opponent-row">
-          <div class="gofish-pile-label" id="opponentLabel">Opponent</div>
+        <div class="gofish-zone gofish-opponent-zone">
+          <div class="gofish-zone-header">
+            <span class="gofish-pile-label" id="opponentLabel">Opponent</span>
+            <div class="gofish-books" id="opponentBooks"></div>
+          </div>
           <div class="gofish-facedown-hand" id="opponentHand"></div>
-          <div class="gofish-books" id="opponentBooks"></div>
         </div>
 
-        <div class="gofish-pond-row">
-          <div class="gofish-pond" id="pondPile">
+        <div class="gofish-center">
+          <div class="gofish-turn-pill" id="turnPill">Waiting…</div>
+          <div class="gofish-pond">
             <div class="gofish-pond-card">🂠</div>
             <div class="gofish-pond-count" id="pondCount">0</div>
           </div>
-          <p class="gofish-status" id="gofishStatus">Waiting…</p>
+          <div class="gofish-event-banner" id="eventBanner"></div>
         </div>
 
-        <div class="gofish-feed" id="gofishFeed"></div>
-
-        <div class="gofish-my-row">
-          <div class="gofish-books" id="myBooks"></div>
-          <div class="gofish-pile-label">Your hand — tap a card to ask for that rank</div>
+        <div class="gofish-zone gofish-my-zone">
+          <div class="gofish-zone-header">
+            <span class="gofish-pile-label">Your hand — tap a card to ask for it</span>
+            <div class="gofish-books" id="myBooks"></div>
+          </div>
           <div class="gofish-hand" id="myHand"></div>
         </div>
       </div>

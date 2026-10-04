@@ -825,13 +825,14 @@ function goFishOpponentId(room, socketId) {
 // player's face-up "books" pile — this is checked after every hand change
 // (a successful ask, a draw from the pond, even the initial deal) since a
 // book can complete at any of those moments, not just on a player's turn.
-function goFishCheckBooks(player) {
+function goFishCheckBooks(code, player) {
   const counts = new Map();
   for (const card of player.hand) counts.set(card.rank, (counts.get(card.rank) || 0) + 1);
   for (const [rank, count] of counts) {
     if (count >= 4) {
       player.hand = player.hand.filter((c) => c.rank !== rank);
       player.books.push(rank);
+      io.to(`gofish:${code}`).emit('gofish:book', { name: player.name, rank });
     }
   }
 }
@@ -850,7 +851,7 @@ function goFishBeginTurn(code) {
   if (player.hand.length === 0) {
     if (room.pond.length > 0) {
       player.hand.push(room.pond.pop());
-      goFishCheckBooks(player);
+      goFishCheckBooks(code, player);
       if (goFishTotalBooks(room) >= GOFISH_BOOK_COUNT) return goFishEndDeal(code);
     } else {
       return goFishEndDeal(code);
@@ -906,7 +907,7 @@ function goFishDealGame(code) {
     const player = room.players.get(id);
     player.hand = deck.splice(0, GOFISH_DEAL_SIZE);
     player.books = [];
-    goFishCheckBooks(player);
+    goFishCheckBooks(code, player);
   }
   room.pond = deck;
   // Alternate who asks first each deal, same convention as Tic-Tac-Toe.
@@ -2103,7 +2104,7 @@ io.on('connection', (socket) => {
       opponent.hand = opponent.hand.filter((c) => c.rank !== rank);
       asker.hand.push(...matches);
       goFishFeed(code, `🎣 ${asker.name} asked ${opponent.name} for ${rank}s — got ${matches.length}!`);
-      goFishCheckBooks(asker);
+      goFishCheckBooks(code, asker);
       if (goFishTotalBooks(room) >= GOFISH_BOOK_COUNT) return goFishEndDeal(code);
       // Asker goes again — room.turn is unchanged.
       goFishBeginTurn(code);
@@ -2114,7 +2115,7 @@ io.on('connection', (socket) => {
     if (room.pond.length > 0) {
       const drawn = room.pond.pop();
       asker.hand.push(drawn);
-      goFishCheckBooks(asker);
+      goFishCheckBooks(code, asker);
       if (goFishTotalBooks(room) >= GOFISH_BOOK_COUNT) return goFishEndDeal(code);
       if (drawn.rank === rank) {
         goFishFeed(code, `🐟 Drew a ${rank} — go again!`);

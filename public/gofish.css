@@ -5,8 +5,7 @@
 .gofish-middle {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding: 0 14px 10px;
+  padding: 0 10px 10px;
   min-height: 0;
   overflow: hidden;
 }
@@ -14,46 +13,66 @@
 .gofish-table {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  justify-content: space-around;
   min-height: 0;
   flex: 1;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 20px;
+  padding: 10px;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12);
 }
 
-.gofish-opponent-row,
-.gofish-my-row {
+.gofish-zone {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  gap: 4px;
+  gap: 6px;
   flex-shrink: 0;
 }
 
+.gofish-zone-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
 .gofish-pile-label {
-  font-size: 0.72rem;
-  font-weight: 700;
-  color: rgba(255, 255, 255, 0.75);
+  font-size: 0.68rem;
+  font-weight: 800;
+  color: rgba(255, 255, 255, 0.7);
   text-transform: uppercase;
   letter-spacing: 0.04em;
 }
 
+.gofish-opponent-zone .gofish-pile-label {
+  color: #ffd166;
+}
+
+/* Hands render as an overlapping "fan" — each card's rotation and lift are
+   set inline per-card in JS (based on its position relative to the hand's
+   center) rather than via CSS nth-child math, since the fan has to adapt
+   to however many cards are actually in the hand right now. */
 .gofish-facedown-hand,
 .gofish-hand {
   display: flex;
   flex-wrap: wrap;
   justify-content: center;
-  gap: 6px;
-  max-width: 100%;
+  align-items: flex-end;
+  gap: 4px;
+  min-height: 78px;
+  padding: 6px 2px 2px;
 }
 
-/* A generic playing-card face: rounded rectangle, white, rank top-left,
-   suit centered — red suits get red text via .red, everything else
-   (black suits, card backs) stays dark ink. */
+/* A loose fan — rotation and lift only, no overlap. Overlapping cards
+   looked nicer but reliably covered part of their neighbor's tap target
+   (confirmed: real taps landed on the wrong card, or on nothing), which
+   fails "easy to play" far harder than a bit less visual flourish costs. */
 .gofish-card {
-  width: 38px;
-  height: 54px;
-  border-radius: 7px;
+  width: 46px;
+  height: 66px;
+  border-radius: 8px;
   background: white;
-  box-shadow: 0 2px 6px rgba(20, 8, 40, 0.3);
+  box-shadow: 0 3px 8px rgba(20, 8, 40, 0.35);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -63,14 +82,15 @@
   line-height: 1;
   flex-shrink: 0;
   user-select: none;
+  transition: transform 0.15s ease;
 }
 
 .gofish-card .rank {
-  font-size: 0.72rem;
+  font-size: 0.85rem;
 }
 
 .gofish-card .suit {
-  font-size: 1.1rem;
+  font-size: 1.3rem;
   margin-top: 2px;
 }
 
@@ -80,8 +100,10 @@
 
 .gofish-card.back {
   background: linear-gradient(135deg, var(--accent), var(--accent-dark));
-  color: rgba(255, 255, 255, 0.5);
-  font-size: 1.3rem;
+  background-image:
+    repeating-linear-gradient(45deg, rgba(255, 255, 255, 0.08) 0 6px, transparent 6px 12px),
+    linear-gradient(135deg, var(--accent), var(--accent-dark));
+  box-shadow: 0 3px 8px rgba(20, 8, 40, 0.35), inset 0 0 0 2px rgba(255, 255, 255, 0.25);
 }
 
 /* My own cards are real buttons — tapping one asks for that rank. */
@@ -89,91 +111,123 @@ button.gofish-card {
   appearance: none;
   border: none;
   cursor: pointer;
-  transition: transform 0.12s ease;
+  position: relative;
+  z-index: 1;
 }
 
-button.gofish-card:active {
-  transform: translateY(2px) scale(0.96);
+button.gofish-card:not(:disabled):hover,
+button.gofish-card:not(:disabled):focus-visible {
+  transform: translateY(-10px) !important;
+  z-index: 5;
+}
+
+button.gofish-card:not(:disabled):active {
+  transform: translateY(-4px) scale(0.95) !important;
 }
 
 button.gofish-card:disabled {
-  opacity: 0.55;
+  opacity: 0.5;
   cursor: default;
 }
 
-.gofish-pond-row {
+.gofish-center {
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 12px;
+  gap: 10px;
   flex-shrink: 0;
+  padding: 10px 0;
+}
+
+.gofish-turn-pill {
+  font-size: 0.85rem;
+  font-weight: 800;
+  color: white;
+  background: rgba(255, 255, 255, 0.14);
+  border-radius: 999px;
+  padding: 6px 16px;
+  text-align: center;
+}
+
+.gofish-turn-pill.mine {
+  background: linear-gradient(135deg, var(--accent), var(--accent-dark));
+  animation: gofishPulse 1.4s ease-in-out infinite;
+}
+
+@keyframes gofishPulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(239, 77, 149, 0.55); }
+  50% { box-shadow: 0 0 0 9px rgba(239, 77, 149, 0); }
 }
 
 .gofish-pond {
   position: relative;
-  width: 38px;
-  height: 54px;
+  width: 44px;
+  height: 62px;
   flex-shrink: 0;
 }
 
 .gofish-pond-card {
   width: 100%;
   height: 100%;
-  border-radius: 7px;
-  background: linear-gradient(135deg, var(--accent), var(--accent-dark));
-  color: rgba(255, 255, 255, 0.5);
+  border-radius: 8px;
+  background: linear-gradient(135deg, #6e5a8c, #4a3070);
+  background-image:
+    repeating-linear-gradient(45deg, rgba(255, 255, 255, 0.07) 0 6px, transparent 6px 12px),
+    linear-gradient(135deg, #6e5a8c, #4a3070);
+  color: rgba(255, 255, 255, 0.4);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 1.3rem;
-  box-shadow: 0 2px 6px rgba(20, 8, 40, 0.3);
+  font-size: 1.5rem;
+  box-shadow: 0 3px 8px rgba(20, 8, 40, 0.35);
 }
 
 .gofish-pond-count {
   position: absolute;
-  bottom: -6px;
-  right: -6px;
+  bottom: -7px;
+  right: -8px;
   background: white;
   color: var(--ink);
-  font-size: 0.68rem;
+  font-size: 0.7rem;
   font-weight: 800;
   border-radius: 999px;
-  padding: 1px 6px;
+  padding: 1px 7px;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
 }
 
-.gofish-status {
-  margin: 0;
-  font-size: 0.85rem;
+/* Transient callouts — "asked for 7s, got 2!", "Go Fish!", a completed
+   book — replace each other with a quick pop/fade rather than stacking
+   into a scrolling history, so the one thing that just happened is always
+   unambiguous at a glance. */
+.gofish-event-banner {
+  min-height: 1.4em;
+  font-size: 0.82rem;
   font-weight: 700;
   color: white;
   text-align: center;
+  padding: 0 8px;
 }
 
-.gofish-feed {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column-reverse;
-  gap: 4px;
-  padding: 2px 0;
+.gofish-event-banner.show {
+  animation: gofishBannerPop 0.35s ease both;
 }
 
-.gofish-feed-item {
-  font-size: 0.78rem;
-  color: rgba(255, 255, 255, 0.85);
-  background: rgba(255, 255, 255, 0.1);
-  border-radius: 10px;
-  padding: 4px 10px;
-  align-self: center;
-  text-align: center;
+.gofish-event-banner.book {
+  font-size: 1rem;
+  font-weight: 800;
+  color: #ffd166;
+}
+
+@keyframes gofishBannerPop {
+  0% { opacity: 0; transform: scale(0.8) translateY(6px); }
+  60% { opacity: 1; transform: scale(1.08) translateY(0); }
+  100% { opacity: 1; transform: scale(1) translateY(0); }
 }
 
 .gofish-books {
   display: flex;
   flex-wrap: wrap;
-  justify-content: center;
   gap: 4px;
   min-height: 20px;
 }
@@ -186,6 +240,29 @@ button.gofish-card:disabled {
   border-radius: 999px;
   padding: 2px 8px;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+  white-space: nowrap;
+}
+
+@keyframes gofishBookChipIn {
+  0% { opacity: 0; transform: scale(0.5); }
+  60% { opacity: 1; transform: scale(1.15); }
+  100% { opacity: 1; transform: scale(1); }
+}
+
+.gofish-book-chip {
+  animation: gofishBookChipIn 0.4s ease both;
+}
+
+/* A brief full-table flash the instant a book completes — on top of the
+   event banner text, a bit of extra "that was a big deal" celebration. */
+.gofish-celebrate {
+  animation: gofishCelebrate 0.6s ease;
+}
+
+@keyframes gofishCelebrate {
+  0% { box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12); }
+  30% { box-shadow: inset 0 0 0 3px #ffd166, 0 0 24px rgba(255, 209, 102, 0.6); }
+  100% { box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12); }
 }
 
 @media (orientation: landscape) {
@@ -195,13 +272,17 @@ button.gofish-card:disabled {
     align-items: center;
   }
 
-  .gofish-opponent-row,
-  .gofish-my-row {
-    flex: 1 1 40%;
+  .gofish-opponent-zone,
+  .gofish-my-zone {
+    flex: 1 1 42%;
   }
 
-  .gofish-pond-row,
-  .gofish-feed {
+  .gofish-center {
     flex: 1 1 100%;
+    order: 10;
+  }
+
+  .gofish-my-zone {
+    order: 11;
   }
 }

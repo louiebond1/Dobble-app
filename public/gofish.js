@@ -41,6 +41,17 @@ function sortHand(hand) {
 
 // --- Rendering helpers -------------------------------------------------
 
+// Fans a row of cards out around center — each card's rotation/lift is set
+// inline since it depends on how many cards are in the hand right now (a
+// fixed CSS angle would look cramped at 3 cards and absurd at 13).
+function fanTransform(index, count) {
+  const mid = (count - 1) / 2;
+  const offset = index - mid;
+  const rotate = Math.max(-10, Math.min(10, offset * 3.5));
+  const lift = Math.min(8, Math.abs(offset) * 1.3);
+  return `rotate(${rotate}deg) translateY(${lift}px)`;
+}
+
 function cardEl(card, { tag = 'div', onClick = null, disabled = false } = {}) {
   const node = document.createElement(tag);
   node.className = 'gofish-card' + (RED_SUITS.has(card.suit) ? ' red' : '');
@@ -56,13 +67,16 @@ function cardEl(card, { tag = 'div', onClick = null, disabled = false } = {}) {
 function renderMyHand(hand, { interactive, askableRanks } = {}) {
   const container = el('myHand');
   container.innerHTML = '';
-  sortHand(hand).forEach((card) => {
+  const sorted = sortHand(hand);
+  sorted.forEach((card, i) => {
     const canAsk = interactive && (!askableRanks || askableRanks.includes(card.rank));
-    container.appendChild(cardEl(card, {
+    const node = cardEl(card, {
       tag: 'button',
       disabled: !canAsk,
       onClick: () => askForRank(card.rank),
-    }));
+    });
+    node.style.transform = fanTransform(i, sorted.length);
+    container.appendChild(node);
   });
 }
 
@@ -73,6 +87,7 @@ function renderOpponentBacks(count) {
     const back = document.createElement('div');
     back.className = 'gofish-card back';
     back.textContent = '🂠';
+    back.style.transform = fanTransform(i, count);
     container.appendChild(back);
   }
 }
@@ -83,18 +98,36 @@ function renderBooks(containerId, books) {
   books.forEach((rank) => {
     const chip = document.createElement('span');
     chip.className = 'gofish-book-chip';
-    chip.textContent = `${rank}s`;
+    chip.textContent = `📚 ${rank}s`;
     container.appendChild(chip);
   });
 }
 
-function addFeedItem(text) {
-  const feed = el('gofishFeed');
-  const item = document.createElement('div');
-  item.className = 'gofish-feed-item';
-  item.textContent = text;
-  feed.appendChild(item);
-  feed.scrollTop = feed.scrollHeight;
+function updateTurnPill(isMyTurn, turnName) {
+  const pill = el('turnPill');
+  pill.textContent = isMyTurn ? "🫵 Your turn!" : `⏳ ${turnName}'s turn…`;
+  pill.classList.toggle('mine', isMyTurn);
+}
+
+let bannerTimer = null;
+function showEventBanner(text, { book = false } = {}) {
+  const banner = el('eventBanner');
+  clearTimeout(bannerTimer);
+  banner.textContent = text;
+  banner.classList.remove('show');
+  // Force a reflow so re-triggering the animation on consecutive events
+  // (the class never actually left) still plays from the start each time.
+  void banner.offsetWidth;
+  banner.classList.add('show');
+  banner.classList.toggle('book', book);
+  if (book) {
+    const table = document.querySelector('.gofish-table');
+    table.classList.remove('gofish-celebrate');
+    void table.offsetWidth;
+    table.classList.add('gofish-celebrate');
+    hapticSuccess();
+  }
+  bannerTimer = setTimeout(() => { banner.textContent = ''; banner.classList.remove('show', 'book'); }, 2600);
 }
 
 function askForRank(rank) {
@@ -229,7 +262,7 @@ socket.on('gofish:round:start', (data) => {
   totalRounds = data.totalRounds;
   el('roundNum').textContent = roundNumber;
   el('totalRounds').textContent = totalRounds;
-  el('gofishFeed').innerHTML = '';
+  el('eventBanner').textContent = '';
 
   setupWrap.classList.add('hidden');
   lobby.classList.add('hidden');
@@ -247,10 +280,11 @@ socket.on('gofish:state', (data) => {
     renderBooks('opponentBooks', data.opponent.books);
   }
   el('pondCount').textContent = data.pondCount;
-  el('gofishStatus').textContent = data.isMyTurn ? 'Your turn — tap a card to ask for it' : `${data.turnName}'s turn…`;
+  updateTurnPill(data.isMyTurn, data.turnName);
 });
 
-socket.on('gofish:feed', (data) => addFeedItem(data.text));
+socket.on('gofish:feed', (data) => showEventBanner(data.text));
+socket.on('gofish:book', (data) => showEventBanner(`📚 ${data.name === myName ? 'You' : data.name} got the book of ${data.rank}s!`, { book: true }));
 
 socket.on('gofish:round:result', (data) => {
   if (mode !== 'duo') return;
@@ -305,6 +339,7 @@ function soloCheckBooks(who) {
     if (count >= 4) {
       soloHands[who] = soloHands[who].filter((c) => c.rank !== rank);
       soloBooks[who].push(rank);
+      showEventBanner(`📚 ${who === 'me' ? 'You' : 'CPU'} got the book of ${rank}s!`, { book: true });
     }
   }
 }
@@ -341,19 +376,19 @@ function startSoloRound() {
   roundNumber += 1;
   el('roundNum').textContent = roundNumber;
   el('totalRounds').textContent = totalRounds;
-  el('gofishFeed').innerHTML = '';
+  el('eventBanner').textContent = '';
 
   const deck = shuffle(buildDeck());
   soloHands = { me: deck.splice(0, 7), cpu: deck.splice(0, 7) };
   soloBooks = { me: [], cpu: [] };
-  soloCheckBooks('me');
-  soloCheckBooks('cpu');
   soloPond = deck;
   // Alternate who asks first each deal, same convention as duo mode.
   soloTurn = (roundNumber - 1) % 2 === 0 ? 'me' : 'cpu';
   soloGameActive = true;
 
-  addFeedItem(`🎴 New deal — ${soloTurn === 'me' ? soloName : 'CPU'} goes first.`);
+  showEventBanner(`🎴 New deal — ${soloTurn === 'me' ? soloName : 'CPU'} goes first.`);
+  soloCheckBooks('me');
+  soloCheckBooks('cpu');
   soloBeginTurn();
 }
 
@@ -366,7 +401,7 @@ function soloRenderState() {
   renderOpponentBacks(soloHands.cpu.length);
   renderBooks('opponentBooks', soloBooks.cpu);
   el('pondCount').textContent = soloPond.length;
-  el('gofishStatus').textContent = soloTurn === 'me' ? 'Your turn — tap a card to ask for it' : "CPU's turn…";
+  updateTurnPill(soloTurn === 'me', soloTurn === 'me' ? soloName : 'CPU');
 }
 
 function soloBeginTurn() {
@@ -415,21 +450,21 @@ function soloResolveAsk(askerKey, targetKey, rank, askerName, targetName) {
   if (matches.length > 0) {
     soloHands[targetKey] = target.filter((c) => c.rank !== rank);
     soloHands[askerKey] = asker.concat(matches);
-    addFeedItem(`🎣 ${askerName} asked ${targetName} for ${rank}s — got ${matches.length}!`);
+    showEventBanner(`🎣 ${askerName} asked ${targetName} for ${rank}s — got ${matches.length}!`);
     soloCheckBooks(askerKey);
     if (soloTotalBooks() >= RANKS.length) return soloEndDeal();
     soloBeginTurn(); // same player goes again
     return;
   }
 
-  addFeedItem(`🎣 ${askerName} asked ${targetName} for ${rank}s — Go Fish!`);
+  showEventBanner(`🎣 ${askerName} asked ${targetName} for ${rank}s — Go Fish!`);
   if (soloPond.length > 0) {
     const drawn = soloPond.pop();
     soloHands[askerKey].push(drawn);
     soloCheckBooks(askerKey);
     if (soloTotalBooks() >= RANKS.length) return soloEndDeal();
     if (drawn.rank === rank) {
-      addFeedItem(`🐟 Drew a ${rank} — go again!`);
+      showEventBanner(`🐟 Drew a ${rank} — go again!`);
       soloBeginTurn();
       return;
     }
@@ -449,7 +484,7 @@ function soloEndDeal() {
   players[1].score = soloScore.cpu;
   updateDuelHud();
 
-  addFeedItem(winnerName ? `🏆 ${winnerName} took this deal!` : "🤝 This deal's a tie!");
+  showEventBanner(winnerName ? `🏆 ${winnerName} took this deal!` : "🤝 This deal's a tie!");
   if (winnerName === soloName) { hapticSuccess(); playSuccess(); }
 
   setTimeout(startSoloRound, 3200);
