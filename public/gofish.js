@@ -28,10 +28,9 @@ let askPending = false;
 const actionQueue = [];
 
 const TURN_TIMING = {
-  anticipation: 280,
-  transfer: 620,
-  settle: 220,
-  book: 620,
+  anticipation: 430,
+  settle: 280,
+  book: 760,
 };
 
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -59,45 +58,94 @@ function sortHand(hand) {
   return [...hand].sort((a, b) => RANKS.indexOf(a.rank) - RANKS.indexOf(b.rank));
 }
 
-// --- Rendering helpers -------------------------------------------------
+// --- Premium rendering + turn choreography ---------------------------------
 
-// Fans a row of cards out around center — each card's rotation/lift is set
-// inline since it depends on how many cards are in the hand right now (a
-// fixed CSS angle would look cramped at 3 cards and absurd at 13).
-function fanTransform(index, count) {
-  const mid = (count - 1) / 2;
-  const offset = index - mid;
-  const rotate = Math.max(-10, Math.min(10, offset * 3.5));
-  const lift = Math.min(8, Math.abs(offset) * 1.3);
-  return `rotate(${rotate}deg) translateY(${lift}px)`;
+let selectedRank = null;
+
+const RANK_SINGULAR = { A: 'Ace', J: 'Jack', Q: 'Queen', K: 'King' };
+const RANK_PLURAL = { A: 'Aces', J: 'Jacks', Q: 'Queens', K: 'Kings' };
+
+function rankSingular(rank) {
+  return RANK_SINGULAR[rank] || rank;
 }
 
-function cardEl(card, { tag = 'div', onClick = null, disabled = false } = {}) {
-  const node = document.createElement(tag);
-  node.className = 'gofish-card' + (RED_SUITS.has(card.suit) ? ' red' : '');
+function rankPlural(rank) {
+  return RANK_PLURAL[rank] || `${rank}s`;
+}
+
+function cardKey(card) {
+  return `${card.rank}-${card.suit}`;
+}
+
+function currentPlayerName() {
+  if (mode === 'solo') return typeof soloName !== 'undefined' ? soloName : 'You';
+  return myName || 'You';
+}
+
+function initialFor(name) {
+  return String(name || '?').trim().charAt(0).toUpperCase() || '?';
+}
+
+function fanTransform(index, count, opponent = false) {
+  const mid = (count - 1) / 2;
+  const offset = index - mid;
+  const rotateStep = opponent ? 2.25 : 2.7;
+  const rotate = Math.max(-11, Math.min(11, offset * rotateStep));
+  const arc = Math.min(opponent ? 7 : 10, Math.abs(offset) * (opponent ? 1.15 : 1.45));
+  return `rotate(${rotate}deg) translateY(${arc}px)`;
+}
+
+function setHandOverlap(container, count, opponent = false) {
+  const viewport = Math.min(window.innerWidth || 390, 620);
+  const available = Math.max(250, viewport - 46);
+  const cardWidth = opponent ? Math.min(60, Math.max(49, viewport * 0.138)) : Math.min(72, Math.max(58, viewport * 0.166));
+  const needed = count * cardWidth;
+  const overlap = count <= 1 ? 0 : Math.max(opponent ? 8 : 10, (needed - available) / (count - 1));
+  const cap = opponent ? cardWidth * 0.74 : cardWidth * 0.76;
+  container.style.setProperty('--gf-overlap', `${-Math.min(cap, overlap)}px`);
+}
+
+function cardFaceMarkup(card) {
+  return `
+    <span class="gf-card-corner">
+      <span class="gf-card-rank">${card.rank}</span>
+      <span class="gf-card-suit">${card.suit}</span>
+    </span>
+    <span class="gf-card-center">${card.suit}</span>
+    <span class="gf-card-corner bottom">
+      <span class="gf-card-rank">${card.rank}</span>
+      <span class="gf-card-suit">${card.suit}</span>
+    </span>`;
+}
+
+function cardEl(card, { interactive = false } = {}) {
+  const node = document.createElement(interactive ? 'button' : 'div');
+  node.className = 'gf-card' + (RED_SUITS.has(card.suit) ? ' red' : '');
   node.dataset.rank = card.rank;
   node.dataset.suit = card.suit;
-  node.innerHTML = `<span class="rank">${card.rank}</span><span class="suit">${card.suit}</span>`;
-  if (tag === 'button') {
+  node.dataset.cardKey = cardKey(card);
+  node.innerHTML = cardFaceMarkup(card);
+  if (interactive) {
     node.type = 'button';
-    node.disabled = disabled;
-    if (onClick) node.addEventListener('click', () => onClick(card));
+    node.setAttribute('aria-label', `Select ${rankPlural(card.rank)}`);
+    node.addEventListener('click', () => selectRank(card.rank));
   }
   return node;
 }
 
-function renderMyHand(hand, { interactive, askableRanks } = {}) {
+function renderMyHand(hand, { interactive = false, askableRanks = [] } = {}) {
   const container = el('myHand');
   container.innerHTML = '';
   const sorted = sortHand(hand);
+  setHandOverlap(container, sorted.length, false);
   sorted.forEach((card, i) => {
-    const canAsk = interactive && (!askableRanks || askableRanks.includes(card.rank));
-    const node = cardEl(card, {
-      tag: 'button',
-      disabled: !canAsk,
-      onClick: () => askForRank(card.rank),
-    });
-    node.style.transform = fanTransform(i, sorted.length);
+    const canSelect = interactive && askableRanks.includes(card.rank);
+    const node = cardEl(card, { interactive: canSelect });
+    const isSelected = selectedRank === card.rank;
+    node.style.transform = fanTransform(i, sorted.length, false) + (isSelected ? ' translateY(-10px)' : '');
+    node.style.zIndex = String(i + 1 + (isSelected ? 30 : 0));
+    node.classList.toggle('selected', isSelected);
+    if (!canSelect) node.classList.add('is-disabled');
     container.appendChild(node);
   });
 }
@@ -105,11 +153,14 @@ function renderMyHand(hand, { interactive, askableRanks } = {}) {
 function renderOpponentBacks(count) {
   const container = el('opponentHand');
   container.innerHTML = '';
+  setHandOverlap(container, count, true);
   for (let i = 0; i < count; i++) {
     const back = document.createElement('div');
-    back.className = 'gofish-card back';
-    back.textContent = '🂠';
-    back.style.transform = fanTransform(i, count);
+    back.className = 'gf-card gf-card-back';
+    back.dataset.backIndex = String(i);
+    back.innerHTML = '<span class="gf-card-back-mark">A+L</span>';
+    back.style.transform = fanTransform(i, count, true);
+    back.style.zIndex = String(i + 1);
     container.appendChild(back);
   }
 }
@@ -118,212 +169,507 @@ function renderBooks(containerId, books) {
   const container = el(containerId);
   container.innerHTML = '';
   books.forEach((rank) => {
-    const chip = document.createElement('span');
-    chip.className = 'gofish-book-chip';
-    chip.textContent = `📚 ${rank}s`;
-    container.appendChild(chip);
+    const book = document.createElement('span');
+    book.className = 'gf-book';
+    book.dataset.bookRank = rank;
+    book.textContent = rank;
+    book.title = `Book of ${rankPlural(rank)}`;
+    container.appendChild(book);
   });
+}
+
+function updateIdentity(data) {
+  const opponentName = data.opponent ? data.opponent.name : (mode === 'solo' ? 'CPU' : 'Opponent');
+  const mine = currentPlayerName();
+
+  el('opponentLabel').textContent = opponentName;
+  el('opponentAvatar').textContent = initialFor(opponentName);
+  el('opponentAvatar').classList.toggle('gf-avatar-ariel', opponentName === 'Ariel');
+  el('opponentAvatar').classList.toggle('gf-avatar-louie', opponentName === 'Louie');
+
+  el('myNameLabel').textContent = mine;
+  el('myAvatar').textContent = initialFor(mine);
+  el('myAvatar').classList.toggle('gf-avatar-louie', mine === 'Louie');
+  el('myAvatar').classList.toggle('gf-avatar-ariel', mine === 'Ariel');
+
+  el('askTargetName').textContent = opponentName;
+  el('myCardCount').textContent = `${data.myHand.length} card${data.myHand.length === 1 ? '' : 's'}`;
+  el('myBookCount').textContent = `${data.myBooks.length} book${data.myBooks.length === 1 ? '' : 's'}`;
+  if (data.opponent) {
+    el('opponentCardCount').textContent = `${data.opponent.handCount} card${data.opponent.handCount === 1 ? '' : 's'}`;
+    el('opponentBookCount').textContent = `${data.opponent.books.length} book${data.opponent.books.length === 1 ? '' : 's'}`;
+  }
 }
 
 function updateTurnPill(isMyTurn, turnName) {
   const pill = el('turnPill');
-  pill.textContent = isMyTurn ? "🫵 Your turn!" : `⏳ ${turnName}'s turn…`;
+  pill.textContent = isMyTurn ? 'Your turn' : `${turnName || 'Opponent'}’s turn`;
   pill.classList.toggle('mine', isMyTurn);
 }
 
-function applyGameState(data) {
-  lastGameState = data;
-  renderMyHand(data.myHand, {
-    interactive: data.isMyTurn && !data.actionLocked && !actionAnimating && !askPending,
-    askableRanks: data.askableRanks,
+function renderRankChoices(data) {
+  const wrap = el('rankChoices');
+  wrap.innerHTML = '';
+  const ranks = (data.askableRanks || [])
+    .filter((rank, index, arr) => arr.indexOf(rank) === index)
+    .sort((a, b) => RANKS.indexOf(a) - RANKS.indexOf(b));
+  const enabled = data.isMyTurn && !data.actionLocked && !actionAnimating && !askPending;
+
+  ranks.forEach((rank) => {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'gf-rank-chip';
+    button.textContent = rank;
+    button.disabled = !enabled;
+    button.classList.toggle('selected', selectedRank === rank);
+    button.setAttribute('aria-pressed', selectedRank === rank ? 'true' : 'false');
+    button.addEventListener('click', () => selectRank(rank));
+    wrap.appendChild(button);
   });
-  renderBooks('myBooks', data.myBooks);
+}
+
+function updateAskControls(data) {
+  const askButton = el('askBtn');
+  const hint = el('askHint');
+  const opponentName = data.opponent ? data.opponent.name : 'your opponent';
+  const canAct = data.isMyTurn && !data.actionLocked && !actionAnimating && !askPending;
+  const rankStillValid = selectedRank && (data.askableRanks || []).includes(selectedRank);
+
+  if (!rankStillValid) selectedRank = null;
+
+  if (!data.isMyTurn) {
+    askButton.disabled = true;
+    askButton.textContent = `${data.turnName || opponentName}’s turn`;
+    hint.textContent = 'Their move — your hand will update when they finish.';
+  } else if (actionAnimating || askPending || data.actionLocked) {
+    askButton.disabled = true;
+    askButton.textContent = 'Resolving…';
+    hint.textContent = 'Watch the cards — the result is playing out.';
+  } else if (selectedRank) {
+    askButton.disabled = !canAct;
+    askButton.textContent = `Ask ${opponentName} for ${rankPlural(selectedRank)}`;
+    hint.textContent = `Your ${rankPlural(selectedRank)} are highlighted. Nothing happens until you ask.`;
+  } else {
+    askButton.disabled = true;
+    askButton.textContent = 'Choose a rank';
+    hint.textContent = 'Pick any rank you already hold.';
+  }
+
+  const handCards = Array.from(document.querySelectorAll('#myHand .gf-card'));
+  handCards.forEach((card, index) => {
+    const on = !!selectedRank && card.dataset.rank === selectedRank;
+    card.classList.toggle('selected', on);
+    card.style.transform = fanTransform(index, handCards.length, false) + (on ? ' translateY(-10px)' : '');
+    card.style.zIndex = String(index + 1 + (on ? 30 : 0));
+  });
+  document.querySelectorAll('#rankChoices .gf-rank-chip').forEach((button) => {
+    const on = button.textContent === selectedRank;
+    button.classList.toggle('selected', on);
+    button.setAttribute('aria-pressed', on ? 'true' : 'false');
+  });
+}
+
+function selectRank(rank) {
+  if (!lastGameState || !lastGameState.isMyTurn || lastGameState.actionLocked || actionAnimating || askPending) return;
+  if (!(lastGameState.askableRanks || []).includes(rank)) return;
+  selectedRank = selectedRank === rank ? null : rank;
+  updateAskControls(lastGameState);
+}
+
+function applyGameState(data, { freezeTurn = false } = {}) {
+  lastGameState = data;
+  const interactive = data.isMyTurn && !data.actionLocked && !actionAnimating && !askPending;
+  if (!data.isMyTurn || !(data.askableRanks || []).includes(selectedRank)) selectedRank = null;
+
+  renderMyHand(data.myHand, { interactive, askableRanks: data.askableRanks || [] });
+  renderBooks('myBooks', data.myBooks || []);
   if (data.opponent) {
-    el('opponentLabel').textContent = data.opponent.name;
     renderOpponentBacks(data.opponent.handCount);
-    renderBooks('opponentBooks', data.opponent.books);
+    renderBooks('opponentBooks', data.opponent.books || []);
   }
   el('pondCount').textContent = data.pondCount;
-  updateTurnPill(data.isMyTurn, data.turnName);
-  gameArea.classList.toggle('gofish-resolving', !!data.actionLocked || actionAnimating || askPending);
+  updateIdentity(data);
+  if (!freezeTurn) updateTurnPill(data.isMyTurn, data.turnName);
+  renderRankChoices(data);
+  updateAskControls(data);
+  gameArea.classList.toggle('gf-resolving', !!data.actionLocked || actionAnimating || askPending);
 }
 
-function lockVisibleHand(rank = null) {
+function lockVisibleHand() {
   askPending = true;
-  gameArea.classList.add('gofish-resolving');
-  document.querySelectorAll('#myHand button.gofish-card').forEach((card) => {
-    card.disabled = true;
-    card.classList.toggle('asking', !!rank && card.dataset.rank === rank);
-  });
+  gameArea.classList.add('gf-resolving');
+  if (lastGameState) {
+    renderRankChoices(lastGameState);
+    updateAskControls(lastGameState);
+  }
 }
 
-function unlockVisibleHand() {
-  askPending = false;
-  document.querySelectorAll('#myHand .gofish-card.asking').forEach((card) => card.classList.remove('asking'));
-  if (lastGameState) applyGameState(lastGameState);
-}
-
-function rectCenter(node) {
+function rectOf(node) {
+  if (!node) return null;
   const r = node.getBoundingClientRect();
-  return { x: r.left + r.width / 2, y: r.top + r.height / 2, w: r.width, h: r.height };
+  return { left: r.left, top: r.top, width: r.width, height: r.height, right: r.right, bottom: r.bottom };
 }
 
-function makeFlyingCard(sourceNode, { faceCard = null } = {}) {
-  const start = rectCenter(sourceNode);
-  const ghost = document.createElement('div');
-  ghost.className = 'gofish-card gofish-flying-card';
-  if (faceCard) {
-    if (RED_SUITS.has(faceCard.suit)) ghost.classList.add('red');
-    ghost.innerHTML = `<span class="rank">${faceCard.rank}</span><span class="suit">${faceCard.suit}</span>`;
-  } else if (sourceNode.classList.contains('back') || sourceNode.classList.contains('gofish-pond-card')) {
-    ghost.classList.add('back');
-    ghost.textContent = '🂠';
+function captureVisualState() {
+  const my = new Map();
+  document.querySelectorAll('#myHand [data-card-key]').forEach((node) => my.set(node.dataset.cardKey, rectOf(node)));
+  const opponent = Array.from(document.querySelectorAll('#opponentHand .gf-card')).map(rectOf);
+  return {
+    my,
+    opponent,
+    pond: rectOf(el('pondCard')),
+  };
+}
+
+function cardDifference(fromCards, toCards) {
+  const toKeys = new Set((toCards || []).map(cardKey));
+  return (fromCards || []).filter((card) => !toKeys.has(cardKey(card)));
+}
+
+function createFlightCard(card, back = false) {
+  const node = document.createElement('div');
+  node.className = 'gf-card gf-flight-card';
+  if (back || !card) {
+    node.classList.add('gf-card-back');
+    node.innerHTML = '<span class="gf-card-back-mark">A+L</span>';
   } else {
-    ghost.className = sourceNode.className + ' gofish-flying-card';
-    ghost.innerHTML = sourceNode.innerHTML;
+    if (RED_SUITS.has(card.suit)) node.classList.add('red');
+    node.innerHTML = cardFaceMarkup(card);
   }
-  ghost.style.left = `${start.x - start.w / 2}px`;
-  ghost.style.top = `${start.y - start.h / 2}px`;
-  ghost.style.width = `${start.w}px`;
-  ghost.style.height = `${start.h}px`;
-  document.body.appendChild(ghost);
-  return { ghost, start };
+  document.body.appendChild(node);
+  return node;
 }
 
-async function flyCard(sourceNode, targetNode, { delay = 0, faceCard = null, reveal = false, hideSource = false } = {}) {
-  if (!sourceNode || !targetNode) return;
+function setFlightAppearance(node, card, back) {
+  node.className = 'gf-card gf-flight-card';
+  if (back || !card) {
+    node.classList.add('gf-card-back');
+    node.innerHTML = '<span class="gf-card-back-mark">A+L</span>';
+  } else {
+    if (RED_SUITS.has(card.suit)) node.classList.add('red');
+    node.innerHTML = cardFaceMarkup(card);
+  }
+}
+
+async function flyBetweenRects(startRect, endRect, {
+  card = null,
+  startBack = false,
+  endBack = false,
+  delay = 0,
+  targetNode = null,
+} = {}) {
+  if (!startRect || !endRect) return;
   if (delay) await wait(delay);
-  const { ghost, start } = makeFlyingCard(sourceNode, { faceCard: reveal ? null : faceCard });
-  if (hideSource && sourceNode.classList && sourceNode.classList.contains('gofish-card')) {
-    sourceNode.classList.add('departing');
-  }
-  const end = rectCenter(targetNode);
-  const dx = end.x - start.x;
-  const dy = end.y - start.y;
-  const animation = ghost.animate(
-    [
-      { transform: 'translate3d(0,0,0) rotate(0deg) scale(1)', offset: 0 },
-      { transform: `translate3d(${dx * 0.52}px,${dy * 0.42 - 28}px,0) rotate(-4deg) scale(1.08)`, offset: 0.52 },
-      { transform: `translate3d(${dx}px,${dy}px,0) rotate(2deg) scale(.96)`, offset: 1 },
-    ],
-    { duration: TURN_TIMING.transfer, easing: 'cubic-bezier(.22,.8,.24,1)', fill: 'forwards' }
+  if (targetNode) targetNode.classList.add('gf-staging-hidden');
+
+  const node = createFlightCard(card, startBack);
+  const endW = Math.max(1, endRect.width);
+  const endH = Math.max(1, endRect.height);
+  const startCx = startRect.left + startRect.width / 2;
+  const startCy = startRect.top + startRect.height / 2;
+  const endCx = endRect.left + endRect.width / 2;
+  const endCy = endRect.top + endRect.height / 2;
+  const dx = endCx - startCx;
+  const dy = endCy - startCy;
+  const sx = startRect.width / endW;
+  const sy = startRect.height / endH;
+
+  node.style.left = `${startCx - endW / 2}px`;
+  node.style.top = `${startCy - endH / 2}px`;
+  node.style.width = `${endW}px`;
+  node.style.height = `${endH}px`;
+
+  const startTransform = `translate3d(0,0,0) scale(${sx},${sy}) rotate(0deg)`;
+  const midTransform = `translate3d(${dx * .56}px,${dy * .48 - 24}px,0) scale(${(sx + 1) / 2},${(sy + 1) / 2}) rotate(-4deg)`;
+  const endTransform = `translate3d(${dx}px,${dy}px,0) scale(1,1) rotate(0deg)`;
+
+  const first = node.animate(
+    [{ transform: startTransform }, { transform: midTransform }],
+    { duration: 390, easing: 'cubic-bezier(.24,.75,.22,1)', fill: 'forwards' }
   );
-  try { await animation.finished; } catch (e) {}
+  try { await first.finished; } catch (e) {}
 
-  if (reveal && faceCard) {
-    ghost.classList.remove('back');
-    if (RED_SUITS.has(faceCard.suit)) ghost.classList.add('red');
-    ghost.innerHTML = `<span class="rank">${faceCard.rank}</span><span class="suit">${faceCard.suit}</span>`;
-    const flip = ghost.animate(
-      [
-        { transform: `translate3d(${dx}px,${dy}px,0) rotateY(90deg) scale(.96)` },
-        { transform: `translate3d(${dx}px,${dy}px,0) rotateY(0deg) scale(1.04)` },
-      ],
-      { duration: 260, easing: 'ease-out', fill: 'forwards' }
+  if (startBack !== endBack) {
+    const close = node.animate(
+      [{ transform: midTransform + ' scaleX(1)' }, { transform: midTransform + ' scaleX(.06)' }],
+      { duration: 95, easing: 'ease-in', fill: 'forwards' }
     );
-    try { await flip.finished; } catch (e) {}
-    await wait(160);
+    try { await close.finished; } catch (e) {}
+    setFlightAppearance(node, card, endBack);
+    const open = node.animate(
+      [{ transform: midTransform + ' scaleX(.06)' }, { transform: midTransform + ' scaleX(1)' }],
+      { duration: 120, easing: 'ease-out', fill: 'forwards' }
+    );
+    try { await open.finished; } catch (e) {}
   }
-  ghost.remove();
+
+  const second = node.animate(
+    [{ transform: midTransform }, { transform: endTransform }],
+    { duration: 330, easing: 'cubic-bezier(.18,.8,.25,1)', fill: 'forwards' }
+  );
+  try { await second.finished; } catch (e) {}
+  node.remove();
+  if (targetNode) targetNode.classList.remove('gf-staging-hidden');
 }
 
-async function animateTransfer(action) {
-  const mine = action.askerName === (mode === 'solo' ? soloName : myName);
-  const from = mine ? el('opponentHand') : el('myHand');
-  const to = mine ? el('myHand') : el('opponentHand');
-  const sourceCards = mine
-    ? Array.from(from.querySelectorAll('.gofish-card'))
-    : Array.from(from.querySelectorAll(`.gofish-card[data-rank="${action.rank}"]`));
-
+function animateExistingLayout(before) {
   const jobs = [];
-  for (let i = 0; i < action.count; i++) {
-    const source = sourceCards[Math.min(i, Math.max(0, sourceCards.length - 1))] || from;
-    jobs.push(flyCard(source, to, { delay: i * 80, hideSource: true }));
+  document.querySelectorAll('#myHand [data-card-key]').forEach((node) => {
+    const oldRect = before.my.get(node.dataset.cardKey);
+    if (!oldRect) return;
+    const now = rectOf(node);
+    const dx = oldRect.left - now.left;
+    const dy = oldRect.top - now.top;
+    const sx = oldRect.width / now.width;
+    const sy = oldRect.height / now.height;
+    const base = node.style.transform || '';
+    if (Math.abs(dx) < 1 && Math.abs(dy) < 1 && Math.abs(sx - 1) < .01 && Math.abs(sy - 1) < .01) return;
+    jobs.push(node.animate(
+      [
+        { transform: `translate(${dx}px,${dy}px) scale(${sx},${sy}) ${base}` },
+        { transform: base },
+      ],
+      { duration: 520, easing: 'cubic-bezier(.2,.8,.2,1)' }
+    ).finished.catch(() => {}));
+  });
+
+  const newOpp = Array.from(document.querySelectorAll('#opponentHand .gf-card'));
+  const common = Math.min(before.opponent.length, newOpp.length);
+  for (let i = 0; i < common; i++) {
+    const oldRect = before.opponent[i];
+    const node = newOpp[i];
+    const now = rectOf(node);
+    const dx = oldRect.left - now.left;
+    const dy = oldRect.top - now.top;
+    const base = node.style.transform || '';
+    jobs.push(node.animate(
+      [{ transform: `translate(${dx}px,${dy}px) ${base}` }, { transform: base }],
+      { duration: 480, easing: 'cubic-bezier(.2,.8,.2,1)' }
+    ).finished.catch(() => {}));
   }
-  await Promise.all(jobs);
+  return jobs;
 }
 
-async function animateFish(action) {
-  const mine = action.askerName === (mode === 'solo' ? soloName : myName);
-  if (action.pondEmpty) {
-    showEventBanner('The pond is empty');
-    await wait(650);
-    return;
+function findBookNode(containerId, rank) {
+  return document.querySelector(`#${containerId} [data-book-rank="${rank}"]`);
+}
+
+async function waitForPendingState(timeout = 900) {
+  const start = Date.now();
+  while (!pendingGameState && Date.now() - start < timeout) await wait(18);
+  return pendingGameState;
+}
+
+async function animateStateTransition(action, nextState) {
+  if (!nextState) return;
+  const oldState = lastGameState;
+  const before = captureVisualState();
+  const mine = action.askerName === currentPlayerName();
+  const bookRank = Array.isArray(action.books) && action.books.length ? action.books[0] : null;
+
+  selectedRank = null;
+  applyGameState(nextState, { freezeTurn: true });
+
+  const layoutJobs = animateExistingLayout(before);
+  const flightJobs = [];
+  const newMy = new Map();
+  document.querySelectorAll('#myHand [data-card-key]').forEach((node) => newMy.set(node.dataset.cardKey, node));
+  const newOpp = Array.from(document.querySelectorAll('#opponentHand .gf-card'));
+
+  if (action.kind === 'take') {
+    const movedCards = Array.isArray(action.cards) ? action.cards : [];
+    if (mine) {
+      if (bookRank) {
+        const bookNode = findBookNode('myBooks', bookRank);
+        const targetRect = rectOf(bookNode);
+        if (bookNode) bookNode.classList.add('gf-staging-hidden');
+
+        const existing = (oldState && oldState.myHand || []).filter((card) => card.rank === bookRank);
+        existing.forEach((card, index) => {
+          const startRect = before.my.get(cardKey(card));
+          flightJobs.push(flyBetweenRects(startRect, targetRect, { card, startBack: false, endBack: false, delay: index * 55 }));
+        });
+        movedCards.forEach((card, index) => {
+          const source = before.opponent[Math.max(0, before.opponent.length - 1 - index)];
+          flightJobs.push(flyBetweenRects(source, targetRect, { card, startBack: true, endBack: false, delay: 80 + index * 60 }));
+        });
+        Promise.all(flightJobs).then(() => {
+          if (bookNode) {
+            bookNode.classList.remove('gf-staging-hidden');
+            bookNode.classList.add('gf-book-pop');
+          }
+        });
+      } else {
+        movedCards.forEach((card, index) => {
+          const targetNode = newMy.get(cardKey(card));
+          const source = before.opponent[Math.max(0, before.opponent.length - 1 - index)];
+          flightJobs.push(flyBetweenRects(source, rectOf(targetNode), {
+            card, startBack: true, endBack: false, delay: index * 80, targetNode,
+          }));
+        });
+      }
+    } else {
+      const targetBook = bookRank ? findBookNode('opponentBooks', bookRank) : null;
+      const targetRect = targetBook ? rectOf(targetBook) : null;
+      if (targetBook) targetBook.classList.add('gf-staging-hidden');
+      movedCards.forEach((card, index) => {
+        const startRect = before.my.get(cardKey(card));
+        const targetNode = targetBook ? null : newOpp[Math.max(0, newOpp.length - 1 - index)];
+        flightJobs.push(flyBetweenRects(startRect, targetBook ? targetRect : rectOf(targetNode), {
+          card, startBack: false, endBack: true, delay: index * 75, targetNode,
+        }));
+      });
+      Promise.all(flightJobs).then(() => {
+        if (targetBook) {
+          targetBook.classList.remove('gf-staging-hidden');
+          targetBook.classList.add('gf-book-pop');
+        }
+      });
+    }
+  } else if (action.kind === 'fish' && !action.pondEmpty) {
+    if (mine) {
+      const drawn = action.drawnCard;
+      if (bookRank) {
+        const bookNode = findBookNode('myBooks', bookRank);
+        const targetRect = rectOf(bookNode);
+        if (bookNode) bookNode.classList.add('gf-staging-hidden');
+        const existing = (oldState && oldState.myHand || []).filter((card) => card.rank === bookRank);
+        existing.forEach((card, index) => {
+          flightJobs.push(flyBetweenRects(before.my.get(cardKey(card)), targetRect, {
+            card, startBack: false, endBack: false, delay: index * 45,
+          }));
+        });
+        flightJobs.push(flyBetweenRects(before.pond, targetRect, {
+          card: drawn, startBack: true, endBack: false, delay: 90,
+        }));
+        Promise.all(flightJobs).then(() => {
+          if (bookNode) {
+            bookNode.classList.remove('gf-staging-hidden');
+            bookNode.classList.add('gf-book-pop');
+          }
+        });
+      } else if (drawn) {
+        const targetNode = newMy.get(cardKey(drawn));
+        flightJobs.push(flyBetweenRects(before.pond, rectOf(targetNode), {
+          card: drawn, startBack: true, endBack: false, targetNode,
+        }));
+      }
+    } else {
+      const targetBook = bookRank ? findBookNode('opponentBooks', bookRank) : null;
+      const targetNode = targetBook ? null : newOpp[newOpp.length - 1];
+      if (targetBook) targetBook.classList.add('gf-staging-hidden');
+      flightJobs.push(flyBetweenRects(before.pond, rectOf(targetBook || targetNode), {
+        card: null, startBack: true, endBack: true, targetNode,
+      }));
+      Promise.all(flightJobs).then(() => {
+        if (targetBook) {
+          targetBook.classList.remove('gf-staging-hidden');
+          targetBook.classList.add('gf-book-pop');
+        }
+      });
+    }
   }
 
-  showEventBanner('🐟 Go Fish!');
-  await wait(260);
-  const source = document.querySelector('.gofish-pond-card');
-  const target = mine ? el('myHand') : el('opponentHand');
-  await flyCard(source, target, {
-    faceCard: mine ? action.drawnCard : null,
-    reveal: mine && !!action.drawnCard,
-  });
+  await Promise.all([...layoutJobs, ...flightJobs]);
+  updateTurnPill(nextState.isMyTurn, nextState.turnName);
+  renderRankChoices(nextState);
+  updateAskControls(nextState);
+}
+
+let bannerTimer = null;
+function showEventBanner(text, { book = false, persist = false, emphasis = false } = {}) {
+  const banner = el('eventBanner');
+  clearTimeout(bannerTimer);
+  banner.textContent = text;
+  banner.classList.remove('show', 'book', 'emphasis');
+  void banner.offsetWidth;
+  banner.classList.add('show');
+  banner.classList.toggle('book', book);
+  banner.classList.toggle('emphasis', emphasis);
+  if (book) {
+    const table = document.querySelector('.gf-table');
+    table.classList.remove('gf-celebrate');
+    void table.offsetWidth;
+    table.classList.add('gf-celebrate');
+    hapticSuccess();
+  }
+  if (!persist) {
+    bannerTimer = setTimeout(() => {
+      banner.textContent = '';
+      banner.classList.remove('show', 'book', 'emphasis');
+    }, book ? 3000 : 2300);
+  }
+}
+
+function humanCount(count) {
+  if (count === 1) return 'one';
+  if (count === 2) return 'two';
+  if (count === 3) return 'three';
+  return String(count);
 }
 
 async function playTurnAction(action) {
-  const mine = action.askerName === (mode === 'solo' ? soloName : myName);
-  const actor = mine ? 'You' : action.askerName;
+  const mine = action.askerName === currentPlayerName();
+  const targetName = action.opponentName || 'your opponent';
+  gameArea.classList.add('gf-resolving');
 
-  gameArea.classList.add('gofish-resolving');
-  document.querySelectorAll('#myHand button.gofish-card').forEach((card) => { card.disabled = true; });
+  showEventBanner(
+    mine
+      ? `You ask ${targetName} for ${rankPlural(action.rank)}…`
+      : `${action.askerName} asks you for ${rankPlural(action.rank)}…`,
+    { persist: true }
+  );
+  await wait(TURN_TIMING.anticipation);
 
   if (action.kind === 'take') {
-    showEventBanner(mine
-      ? `You ask ${action.opponentName} for ${action.rank}s…`
-      : `${actor} asks you for ${action.rank}s…`
+    showEventBanner(
+      mine
+        ? `${targetName} has ${humanCount(action.count)} ${action.count === 1 ? rankSingular(action.rank) : rankPlural(action.rank)}`
+        : `You hand over ${humanCount(action.count)} ${action.count === 1 ? rankSingular(action.rank) : rankPlural(action.rank)}`,
+      { persist: true }
     );
-    await wait(TURN_TIMING.anticipation);
-    showEventBanner(mine
-      ? `${action.opponentName} has ${action.count} × ${action.rank}`
-      : `You have ${action.count} × ${action.rank}`
-    );
-    await animateTransfer(action);
   } else {
-    showEventBanner(mine
-      ? `You ask ${action.opponentName} for ${action.rank}s…`
-      : `${action.askerName} asks you for ${action.rank}s…`
-    );
-    await wait(TURN_TIMING.anticipation);
-    await animateFish(action);
+    showEventBanner(mine ? 'Go Fish' : `${action.askerName} goes fishing`, { persist: true, emphasis: true });
+    await wait(160);
   }
 
+  let nextState = null;
+  if (mode === 'solo') {
+    nextState = getSoloStateSnapshot();
+  } else {
+    nextState = await waitForPendingState();
+    if (nextState) pendingGameState = null;
+  }
+
+  if (nextState) await animateStateTransition(action, nextState);
   await wait(TURN_TIMING.settle);
 }
 
 function applyPendingAfterAction(action) {
-  if (pendingGameState) {
-    const state = pendingGameState;
-    pendingGameState = null;
-    applyGameState(state);
-  } else if (mode === 'solo') {
-    soloRenderState();
-  }
+  const mine = action.askerName === currentPlayerName();
 
   if (action.books && action.books.length) {
-    const mine = action.askerName === (mode === 'solo' ? soloName : myName);
     const who = mine ? 'You' : action.askerName;
-    showEventBanner(`📚 ${who} completed the book of ${action.books.join(', ')}s!`, { book: true });
+    showEventBanner(`${who} completed the book of ${rankPlural(action.books[0])}`, { book: true });
   } else if (action.kind === 'take') {
-    showEventBanner(action.askerName === (mode === 'solo' ? soloName : myName)
-      ? 'They’re yours — go again'
-      : `${action.askerName} gets another go`);
+    showEventBanner(mine ? 'They’re yours — go again' : `${action.askerName} gets another go`);
   } else if (action.pondEmpty) {
-    showEventBanner('No cards left in the pond');
+    showEventBanner('The pond is empty');
   } else if (action.matched) {
-    showEventBanner(action.askerName === (mode === 'solo' ? soloName : myName)
-      ? `You drew the ${action.rank} — go again`
-      : `${action.askerName} drew the ${action.rank} — they go again`);
-  } else if (action.askerName === (mode === 'solo' ? soloName : myName) && action.drawnCard) {
-    showEventBanner(`You drew ${action.drawnCard.rank}${action.drawnCard.suit} — ${action.opponentName}'s turn`);
+    showEventBanner(mine
+      ? `You fished the ${action.rank} — go again`
+      : `${action.askerName} found the ${action.rank} — they go again`);
+  } else if (mine && action.drawnCard) {
+    showEventBanner(`You drew ${action.drawnCard.rank}${action.drawnCard.suit} — ${action.opponentName}’s turn`);
   } else {
-    showEventBanner(`${action.opponentName}'s turn`);
+    showEventBanner(`${action.opponentName}’s turn`);
   }
 }
 
 async function drainActionQueue() {
   if (actionAnimating || !actionQueue.length) return;
   actionAnimating = true;
+  askPending = false;
   const action = actionQueue.shift();
   try {
     await playTurnAction(action);
@@ -332,7 +678,7 @@ async function drainActionQueue() {
   } finally {
     actionAnimating = false;
     askPending = false;
-    gameArea.classList.remove('gofish-resolving');
+    gameArea.classList.remove('gf-resolving');
     if (pendingGameState) {
       const state = pendingGameState;
       pendingGameState = null;
@@ -345,7 +691,7 @@ async function drainActionQueue() {
       players = result.players;
       pendingRoundResult = null;
       updateDuelHud();
-      showEventBanner(result.winnerName ? `🏆 ${result.winnerName} took this deal!` : "🤝 This deal's a tie!");
+      showEventBanner(result.winnerName ? `${result.winnerName} took this deal` : 'This deal is a tie');
     }
     drainActionQueue();
   }
@@ -356,36 +702,26 @@ function queueTurnAction(action) {
   drainActionQueue();
 }
 
-let bannerTimer = null;
-function showEventBanner(text, { book = false } = {}) {
-  const banner = el('eventBanner');
-  clearTimeout(bannerTimer);
-  banner.textContent = text;
-  banner.classList.remove('show');
-  // Force a reflow so re-triggering the animation on consecutive events
-  // (the class never actually left) still plays from the start each time.
-  void banner.offsetWidth;
-  banner.classList.add('show');
-  banner.classList.toggle('book', book);
-  if (book) {
-    const table = document.querySelector('.gofish-table');
-    table.classList.remove('gofish-celebrate');
-    void table.offsetWidth;
-    table.classList.add('gofish-celebrate');
-    hapticSuccess();
-  }
-  bannerTimer = setTimeout(() => { banner.textContent = ''; banner.classList.remove('show', 'book'); }, 2600);
-}
-
 function askForRank(rank) {
-  if (actionAnimating || askPending) return;
+  if (!rank || actionAnimating || askPending) return;
   if (mode === 'solo') return soloAsk(rank);
   if (!lastGameState || !lastGameState.isMyTurn || lastGameState.actionLocked) return;
-  lockVisibleHand(rank);
+  if (!(lastGameState.askableRanks || []).includes(rank)) return;
+  lockVisibleHand();
   const opponentName = lastGameState.opponent ? lastGameState.opponent.name : 'your opponent';
-  showEventBanner(`You ask ${opponentName} for ${rank}s…`);
-  socket.emit('gofish:ask', { code: roomCode, rank });
+  showEventBanner(`You ask ${opponentName} for ${rankPlural(rank)}…`, { persist: true });
+  socket.emit('gofish:ask', { code: roomCode, rank }, (res) => {
+    if (res && res.ok) return;
+    askPending = false;
+    gameArea.classList.remove('gf-resolving');
+    if (lastGameState) applyGameState(lastGameState);
+    showEventBanner('That move is no longer available');
+  });
 }
+
+el('askBtn').addEventListener('click', () => {
+  if (selectedRank) askForRank(selectedRank);
+});
 
 // --- Round-count picker ------------------------------------------------
 
@@ -424,19 +760,34 @@ el('joinLouieBtn').addEventListener('click', () => quickPlayJoin('Louie'));
 el('joinArielBtn').addEventListener('click', () => quickPlayJoin('Ariel'));
 
 function quickPlayJoin(name) {
+  const note = el('quickplayNote');
+  if (note) note.textContent = 'Joining…';
   socket.emit('gofish:quickplay:join', { name }, (res) => {
-    if (!res || !res.ok) return;
+    if (!res || !res.ok) {
+      if (note) {
+        const messages = {
+          'seat-taken': `${name} is already in the game on another phone.`,
+          'room-full': 'Louie and Ariel are already both in the game.',
+          'game-in-progress': 'A Go Fish game is already in progress.',
+        };
+        note.textContent = messages[res && res.error] || 'Couldn’t join that game. Try again.';
+      }
+      return;
+    }
     isHost = res.isHost;
     hostToken = res.hostToken || null;
     roomCode = res.code;
     myName = res.name;
+    if (note) note.textContent = 'Open Go Fish on both phones, then each take your seat.';
     setup.classList.add('hidden');
     lobby.classList.remove('hidden');
   });
 }
 
 el('lobbyBackBtn').addEventListener('click', () => {
-  if (roomCode) socket.emit('gofish:host:cancel', { code: roomCode });
+  if (roomCode) {
+    socket.emit(amHost() ? 'gofish:host:cancel' : 'gofish:leave', { code: roomCode });
+  }
   resetRoomState();
   lobby.classList.add('hidden');
   setup.classList.remove('hidden');
@@ -510,6 +861,12 @@ function updateDuelHud() {
 
 socket.on('gofish:round:start', (data) => {
   if (mode !== 'duo') return;
+  selectedRank = null;
+  pendingGameState = null;
+  pendingRoundResult = null;
+  actionQueue.length = 0;
+  actionAnimating = false;
+  askPending = false;
   roundNumber = data.roundNumber;
   totalRounds = data.totalRounds;
   if (Array.isArray(data.players)) players = data.players;
@@ -633,7 +990,7 @@ function startSoloGame() {
   gameOver.classList.add('hidden');
   gameArea.classList.remove('hidden');
   el('hudP2').classList.remove('hidden');
-  el('opponentLabel').textContent = 'CPU';
+  updateDuelHud();
 
   startSoloRound();
 }
@@ -653,22 +1010,32 @@ function startSoloRound() {
   soloTurn = (roundNumber - 1) % 2 === 0 ? 'me' : 'cpu';
   soloGameActive = true;
 
-  showEventBanner(`🎴 New deal — ${soloTurn === 'me' ? soloName : 'CPU'} goes first.`);
+  selectedRank = null;
   soloCheckBooks('me');
   soloCheckBooks('cpu');
   soloBeginTurn();
+  showEventBanner(`${soloTurn === 'me' ? 'You go' : 'CPU goes'} first`);
+}
+
+function getSoloStateSnapshot() {
+  return {
+    myHand: soloHands.me.slice(),
+    myBooks: soloBooks.me.slice(),
+    opponent: {
+      name: 'CPU',
+      handCount: soloHands.cpu.length,
+      books: soloBooks.cpu.slice(),
+    },
+    pondCount: soloPond.length,
+    isMyTurn: soloGameActive && soloTurn === 'me',
+    turnName: soloTurn === 'me' ? soloName : 'CPU',
+    askableRanks: [...new Set(soloHands.me.map((c) => c.rank))],
+    actionLocked: actionAnimating || askPending,
+  };
 }
 
 function soloRenderState() {
-  renderMyHand(soloHands.me, {
-    interactive: soloGameActive && soloTurn === 'me',
-    askableRanks: [...new Set(soloHands.me.map((c) => c.rank))],
-  });
-  renderBooks('myBooks', soloBooks.me);
-  renderOpponentBacks(soloHands.cpu.length);
-  renderBooks('opponentBooks', soloBooks.cpu);
-  el('pondCount').textContent = soloPond.length;
-  updateTurnPill(soloTurn === 'me', soloTurn === 'me' ? soloName : 'CPU');
+  applyGameState(getSoloStateSnapshot());
 }
 
 function soloBeginTurn() {
@@ -689,8 +1056,8 @@ function soloBeginTurn() {
 
 function soloAsk(rank) {
   if (actionAnimating || askPending || !soloGameActive || soloTurn !== 'me' || !soloHands.me.some((c) => c.rank === rank)) return;
-  lockVisibleHand(rank);
-  showEventBanner(`You ask CPU for ${rank}s…`);
+  lockVisibleHand();
+  showEventBanner(`You ask CPU for ${rankPlural(rank)}…`, { persist: true });
   soloResolveAsk('me', 'cpu', rank, soloName, 'CPU');
 }
 
@@ -730,6 +1097,7 @@ async function soloResolveAsk(askerKey, targetKey, rank, askerName, targetName) 
       opponentName: targetName,
       rank,
       count: matches.length,
+      cards: matches.map((card) => ({ rank: card.rank, suit: card.suit })),
       books,
       keepsTurn: true,
     };
@@ -762,7 +1130,7 @@ async function soloResolveAsk(askerKey, targetKey, rank, askerName, targetName) 
   } finally {
     actionAnimating = false;
     askPending = false;
-    gameArea.classList.remove('gofish-resolving');
+    gameArea.classList.remove('gf-resolving');
   }
 
   if (soloTotalBooks() >= RANKS.length) return soloEndDeal();
@@ -780,7 +1148,7 @@ function soloEndDeal() {
   players[1].score = soloScore.cpu;
   updateDuelHud();
 
-  showEventBanner(winnerName ? `🏆 ${winnerName} took this deal!` : "🤝 This deal's a tie!");
+  showEventBanner(winnerName ? `${winnerName} took this deal` : 'This deal is a tie');
   if (winnerName === soloName) { hapticSuccess(); playSuccess(); }
 
   setTimeout(startSoloRound, 3200);
@@ -828,3 +1196,9 @@ function endSoloGame() {
   rewireMashupQuitLink();
   quickPlayJoin(mp.name);
 })();
+
+window.addEventListener('resize', () => {
+  if (!gameArea.classList.contains('hidden') && lastGameState && !actionAnimating) {
+    applyGameState(lastGameState);
+  }
+});

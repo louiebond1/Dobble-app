@@ -2063,6 +2063,22 @@ io.on('connection', (socket) => {
         if (!io.sockets.sockets.has(pid)) room.players.delete(pid);
       }
     }
+    // Go Fish is a two-seat game. Reject duplicate seats and extra
+    // browsers instead of letting a third socket corrupt playerOrder.
+    if (room && room.players.size > 0) {
+      const nameTaken = Array.from(room.players.values()).some(
+        (player) => player.name.toLowerCase() === name.toLowerCase()
+      );
+      if (nameTaken) {
+        if (typeof ack === 'function') ack({ ok: false, error: 'seat-taken' });
+        return;
+      }
+      if (room.players.size >= 2) {
+        if (typeof ack === 'function') ack({ ok: false, error: room.started ? 'game-in-progress' : 'room-full' });
+        return;
+      }
+    }
+
     let isHost = false;
     let hostToken = null;
     if (!room || room.players.size === 0 || !io.sockets.sockets.has(room.hostSocketId)) {
@@ -2079,6 +2095,7 @@ io.on('connection', (socket) => {
           pond: [],
           turn: null,
           gameActive: false,
+          actionLocked: false,
           createdAt: Date.now(),
         };
         goFishRooms.set(code, room);
@@ -2111,6 +2128,26 @@ io.on('connection', (socket) => {
     goFishRooms.delete(code);
   });
 
+  socket.on('gofish:leave', (payload) => {
+    const code = String((payload && payload.code) || '').toUpperCase();
+    const room = goFishRooms.get(code);
+    if (!room) return;
+    if (room.hostSocketId === socket.id) {
+      io.to(`gofish:${code}`).emit('gofish:room:cancelled');
+      goFishRooms.delete(code);
+      return;
+    }
+    if (room.players.delete(socket.id)) {
+      socket.leave(`gofish:${code}`);
+      socket.data.goFishCode = null;
+      socket.data.goFishRole = null;
+      io.to(`gofish:${code}`).emit(
+        'gofish:players:update',
+        Array.from(room.players.values()).map((p) => ({ name: p.name, score: p.score }))
+      );
+    }
+  });
+
   socket.on('gofish:host:start', (payload) => {
     const code = String((payload && payload.code) || '').toUpperCase();
     const room = goFishRooms.get(code);
@@ -2123,18 +2160,25 @@ io.on('connection', (socket) => {
     goFishDealGame(code);
   });
 
-  socket.on('gofish:ask', (payload) => {
+  socket.on('gofish:ask', (payload, ack) => {
     const code = String((payload && payload.code) || '').toUpperCase();
     const rank = String((payload && payload.rank) || '');
     const room = goFishRooms.get(code);
-    if (!room || !room.gameActive || room.actionLocked || socket.id !== room.turn || !CARD_RANKS.includes(rank)) return;
+    if (!room || !room.gameActive || room.actionLocked || socket.id !== room.turn || !CARD_RANKS.includes(rank)) {
+      if (typeof ack === 'function') ack({ ok: false });
+      return;
+    }
 
     const asker = room.players.get(socket.id);
     const opponentId = goFishOpponentId(room, socket.id);
     const opponent = opponentId ? room.players.get(opponentId) : null;
-    if (!opponent || !asker.hand.some((c) => c.rank === rank)) return;
+    if (!opponent || !asker.hand.some((c) => c.rank === rank)) {
+      if (typeof ack === 'function') ack({ ok: false });
+      return;
+    }
 
     room.actionLocked = true;
+    if (typeof ack === 'function') ack({ ok: true });
     const matches = opponent.hand.filter((c) => c.rank === rank);
     if (matches.length > 0) {
       opponent.hand = opponent.hand.filter((c) => c.rank !== rank);
@@ -2146,6 +2190,10 @@ io.on('connection', (socket) => {
         opponentName: opponent.name,
         rank,
         count: matches.length,
+        // Once a player hands these cards over, both players know exactly
+        // which physical cards moved. Sending them lets the clients animate
+        // the real cards instead of a generic placeholder.
+        cards: matches.map((card) => ({ rank: card.rank, suit: card.suit })),
         books: completedBooks,
         keepsTurn: true,
       });

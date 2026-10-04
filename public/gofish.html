@@ -3,124 +3,149 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover" />
-  <meta name="theme-color" content="#4a3070" />
+  <meta name="theme-color" content="#f8f1ec" />
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
   <title>Go Fish — Our Favourite Things</title>
   <link rel="icon" href="/favicon.ico" sizes="any" />
   <link rel="icon" href="/favicon-32.png" type="image/png" />
   <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
   <link rel="manifest" href="/manifest.webmanifest" />
   <link rel="stylesheet" href="/style.css" />
-  <link rel="stylesheet" href="/duel.css" />
   <link rel="stylesheet" href="/gofish.css" />
 </head>
-<body>
-  <div class="wrap" id="setupWrap">
-    <h1>🎣 Go Fish</h1>
-    <p class="subtitle">Ask for a rank, collect the book, or go fish — or take on the CPU solo</p>
+<body class="gofish-page">
+  <main class="gf-setup-shell" id="setupWrap">
+    <div class="gf-setup-brand">
+      <div class="gf-brand-mark">A + L</div>
+      <h1>Go Fish</h1>
+      <p>Classic cards, just us.</p>
+    </div>
 
-    <div class="panel" id="setup">
-      <div class="field-group">
-        <p class="field-label">How many deals</p>
+    <section class="gf-setup-card" id="setup">
+      <div class="gf-field">
+        <div class="gf-field-label">Deals</div>
         <div class="pair-chips" id="roundChips"></div>
         <input type="number" id="roundsInput" min="1" max="15" value="5" class="hidden" />
       </div>
 
-      <div class="field-group">
-        <p class="field-label">Players</p>
+      <div class="gf-field">
+        <div class="gf-field-label">Play</div>
         <div class="mode-toggle" id="modeToggle">
-          <button type="button" class="mode-btn" id="modeSoloBtn" data-mode="solo">🤖 Vs CPU</button>
-          <button type="button" class="mode-btn active" id="modeDuoBtn" data-mode="duo">🧑‍🤝‍🧑 Head-to-Head</button>
+          <button type="button" class="mode-btn" id="modeSoloBtn" data-mode="solo">Vs CPU</button>
+          <button type="button" class="mode-btn active" id="modeDuoBtn" data-mode="duo">Louie vs Ariel</button>
         </div>
       </div>
 
       <div id="soloFields" class="hidden">
         <label for="soloNameInput">Your name</label>
-        <input type="text" id="soloNameInput" maxlength="20" placeholder="e.g. Louie" />
-        <button class="btn" id="soloStartBtn">🤖 Play the CPU</button>
+        <input type="text" id="soloNameInput" maxlength="20" placeholder="Louie" />
+        <button class="gf-primary-btn" id="soloStartBtn">Play CPU</button>
       </div>
 
       <div id="duoFields">
-        <div class="quickplay-row">
-          <button type="button" class="quickplay-btn" id="joinLouieBtn">⚡ I'm Louie</button>
-          <button type="button" class="quickplay-btn" id="joinArielBtn">⚡ I'm Ariel</button>
+        <div class="gf-seat-grid">
+          <button type="button" class="gf-seat" id="joinLouieBtn">
+            <span class="gf-seat-avatar gf-avatar-louie">L</span>
+            <span><strong>I'm Louie</strong><small>Take this seat</small></span>
+          </button>
+          <button type="button" class="gf-seat" id="joinArielBtn">
+            <span class="gf-seat-avatar gf-avatar-ariel">A</span>
+            <span><strong>I'm Ariel</strong><small>Take this seat</small></span>
+          </button>
         </div>
-        <p class="quickplay-hint">Just the two of us — no code needed, both tap in and go.</p>
+        <p class="gf-setup-note" id="quickplayNote">Open Go Fish on both phones, then each take your seat.</p>
       </div>
 
-      <a href="/" class="btn btn-outline">← Back to Home</a>
-    </div>
+      <a href="/" class="gf-secondary-btn">Back to games</a>
+    </section>
 
-    <div class="panel hidden" id="lobby">
-      <div class="panel-header">
-        <button class="btn-back" id="lobbyBackBtn">← Back</button>
-      </div>
-      <h3>Players (<span id="playerCount">0</span>)</h3>
+    <section class="gf-setup-card gf-lobby hidden" id="lobby">
+      <button class="gf-text-btn" id="lobbyBackBtn">‹ Back</button>
+      <div class="gf-lobby-icon">♥</div>
+      <h2>Almost ready</h2>
+      <p><span id="playerCount">0</span> of 2 players joined</p>
       <ul id="playerList" class="player-list"></ul>
-      <button class="btn" id="startBtn" disabled>Start Game</button>
-      <p class="lobby-hint" id="lobbyHint">Waiting for at least one more player to join…</p>
-    </div>
-  </div>
+      <button class="gf-primary-btn" id="startBtn" disabled>Start Go Fish</button>
+      <p class="gf-setup-note" id="lobbyHint">Waiting for one more player…</p>
+    </section>
+  </main>
 
-  <div class="duel-stage hidden" id="gameArea">
-    <div class="duel-topbar">
-      <a href="/gofish" class="btn-back duel-quit">← Quit</a>
-      <div class="duel-round-info">Deal <span id="roundNum"></span> / <span id="totalRounds"></span></div>
-    </div>
-
-    <div class="duel-hud" id="duelHud">
-      <div class="duel-player" id="hudP1">
-        <span class="duel-player-name" id="hudP1Name"></span>
-        <span class="duel-player-score" id="hudP1Score">0</span>
+  <main class="gf-game hidden" id="gameArea">
+    <header class="gf-topbar">
+      <a href="/gofish" class="gf-topbar-back">‹ Games</a>
+      <div class="gf-topbar-title">
+        <strong>Go Fish</strong>
+        <span>Deal <span id="roundNum"></span> of <span id="totalRounds"></span></span>
       </div>
-      <div class="duel-player" id="hudP2">
-        <span class="duel-player-name" id="hudP2Name"></span>
-        <span class="duel-player-score" id="hudP2Score">0</span>
+      <div class="gf-match-score" id="duelHud" aria-label="Match score">
+        <div id="hudP1"><span id="hudP1Name">Louie</span> <b id="hudP1Score">0</b></div>
+        <span class="gf-score-divider">·</span>
+        <div id="hudP2"><b id="hudP2Score">0</b> <span id="hudP2Name">Ariel</span></div>
       </div>
+    </header>
+
+    <div class="gf-table">
+      <section class="gf-player-zone gf-opponent-zone">
+        <div class="gf-player-row">
+          <div class="gf-avatar gf-avatar-ariel" id="opponentAvatar" aria-hidden="true">A</div>
+          <div class="gf-player-copy">
+            <div class="gf-player-name" id="opponentLabel">Ariel</div>
+            <div class="gf-player-meta"><span id="opponentCardCount">7 cards</span> · <span id="opponentBookCount">0 books</span></div>
+          </div>
+          <div class="gf-books" id="opponentBooks" aria-label="Opponent books"></div>
+        </div>
+        <div class="gf-hand gf-opponent-hand" id="opponentHand" aria-label="Opponent hand"></div>
+      </section>
+
+      <section class="gf-action-stage" id="actionStage">
+        <div class="gf-turn-pill" id="turnPill">Waiting…</div>
+        <div class="gf-pond-wrap">
+          <div class="gf-pond-shadow gf-pond-shadow-two"></div>
+          <div class="gf-pond-shadow gf-pond-shadow-one"></div>
+          <div class="gf-pond-card" id="pondCard" aria-hidden="true">
+            <span class="gf-card-back-mark">A+L</span>
+          </div>
+          <div class="gf-pond-copy">
+            <strong>Fish pond</strong>
+            <span><span id="pondCount">0</span> cards</span>
+          </div>
+        </div>
+        <div class="gf-event-banner" id="eventBanner" role="status" aria-live="polite" aria-atomic="true"></div>
+      </section>
+
+      <section class="gf-player-zone gf-me-zone">
+        <div class="gf-player-row">
+          <div class="gf-avatar gf-avatar-louie" id="myAvatar" aria-hidden="true">L</div>
+          <div class="gf-player-copy">
+            <div class="gf-player-name"><span id="myNameLabel">Louie</span> <span class="gf-you">You</span></div>
+            <div class="gf-player-meta"><span id="myCardCount">7 cards</span> · <span id="myBookCount">0 books</span></div>
+          </div>
+          <div class="gf-books" id="myBooks" aria-label="Your books"></div>
+        </div>
+        <div class="gf-hand gf-my-hand" id="myHand" aria-label="Your hand"></div>
+      </section>
     </div>
 
-    <div class="duel-middle gofish-middle">
-      <div class="gofish-table">
-        <div class="gofish-zone gofish-opponent-zone">
-          <div class="gofish-zone-header">
-            <span class="gofish-pile-label" id="opponentLabel">Opponent</span>
-            <div class="gofish-books" id="opponentBooks"></div>
-          </div>
-          <div class="gofish-facedown-hand" id="opponentHand"></div>
-        </div>
+    <section class="gf-ask-panel" id="askPanel">
+      <div class="gf-ask-heading">Ask <span id="askTargetName">Ariel</span> for…</div>
+      <div class="gf-rank-choices" id="rankChoices" aria-label="Choose a rank"></div>
+      <button class="gf-ask-btn" id="askBtn" disabled>Choose a rank</button>
+      <div class="gf-ask-hint" id="askHint">Pick any rank you already hold.</div>
+    </section>
+  </main>
 
-        <div class="gofish-center">
-          <div class="gofish-turn-pill" id="turnPill">Waiting…</div>
-          <div class="gofish-pond">
-            <div class="gofish-pond-card">🂠</div>
-            <div class="gofish-pond-count" id="pondCount">0</div>
-          </div>
-          <div class="gofish-event-banner" id="eventBanner" role="status" aria-live="polite" aria-atomic="true"></div>
-        </div>
-
-        <div class="gofish-zone gofish-my-zone">
-          <div class="gofish-zone-header">
-            <span class="gofish-pile-label">Your hand — tap a card to ask for it</span>
-            <div class="gofish-books" id="myBooks"></div>
-          </div>
-          <div class="gofish-hand" id="myHand"></div>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <div class="duel-stage duel-stage-over hidden" id="gameOver">
-    <div class="duel-over-content">
-      <div class="duel-over-emoji">🎉</div>
-      <h2 id="overTitle">Game Complete!</h2>
-      <p class="duel-solo-summary" id="soloSummary"></p>
+  <main class="gf-game-over hidden" id="gameOver">
+    <div class="gf-over-card">
+      <div class="gf-over-mark">♥</div>
+      <h2 id="overTitle">Game complete</h2>
+      <p id="soloSummary"></p>
       <div class="leaderboard" id="finalBoard"></div>
-      <button class="btn hidden" id="playAgainBtn">🔁 Play Again</button>
-      <a href="/" class="btn btn-outline">← Back to Home</a>
+      <button class="gf-primary-btn hidden" id="playAgainBtn">Play again</button>
+      <a href="/" class="gf-secondary-btn">Back to games</a>
     </div>
-  </div>
+  </main>
 
   <script src="/socket.io/socket.io.js"></script>
   <script src="/layout.js"></script>
