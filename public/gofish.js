@@ -141,9 +141,10 @@ function renderMyHand(hand, { interactive = false, askableRanks = [] } = {}) {
   sorted.forEach((card, i) => {
     const canSelect = interactive && askableRanks.includes(card.rank);
     const node = cardEl(card, { interactive: canSelect });
-    node.style.transform = fanTransform(i, sorted.length, false);
-    node.style.zIndex = String(i + 1);
-    node.classList.toggle('selected', selectedRank === card.rank);
+    const isSelected = selectedRank === card.rank;
+    node.style.transform = fanTransform(i, sorted.length, false) + (isSelected ? ' translateY(-10px)' : '');
+    node.style.zIndex = String(i + 1 + (isSelected ? 30 : 0));
+    node.classList.toggle('selected', isSelected);
     if (!canSelect) node.classList.add('is-disabled');
     container.appendChild(node);
   });
@@ -254,8 +255,12 @@ function updateAskControls(data) {
     hint.textContent = 'Pick any rank you already hold.';
   }
 
-  document.querySelectorAll('#myHand .gf-card').forEach((card) => {
-    card.classList.toggle('selected', !!selectedRank && card.dataset.rank === selectedRank);
+  const handCards = Array.from(document.querySelectorAll('#myHand .gf-card'));
+  handCards.forEach((card, index) => {
+    const on = !!selectedRank && card.dataset.rank === selectedRank;
+    card.classList.toggle('selected', on);
+    card.style.transform = fanTransform(index, handCards.length, false) + (on ? ' translateY(-10px)' : '');
+    card.style.zIndex = String(index + 1 + (on ? 30 : 0));
   });
   document.querySelectorAll('#rankChoices .gf-rank-chip').forEach((button) => {
     const on = button.textContent === selectedRank;
@@ -1169,3 +1174,9 @@ function endSoloGame() {
   rewireMashupQuitLink();
   quickPlayJoin(mp.name);
 })();
+
+window.addEventListener('resize', () => {
+  if (!gameArea.classList.contains('hidden') && lastGameState && !actionAnimating) {
+    applyGameState(lastGameState);
+  }
+});
