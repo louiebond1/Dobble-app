@@ -1226,22 +1226,6 @@ io.on('connection', (socket) => {
         if (!io.sockets.sockets.has(pid)) room.players.delete(pid);
       }
     }
-    // Go Fish is a two-seat game. Reject duplicate seats and extra
-    // browsers instead of letting a third socket corrupt playerOrder.
-    if (room && room.players.size > 0) {
-      const nameTaken = Array.from(room.players.values()).some(
-        (player) => player.name.toLowerCase() === name.toLowerCase()
-      );
-      if (nameTaken) {
-        if (typeof ack === 'function') ack({ ok: false, error: 'seat-taken' });
-        return;
-      }
-      if (room.players.size >= 2) {
-        if (typeof ack === 'function') ack({ ok: false, error: room.started ? 'game-in-progress' : 'room-full' });
-        return;
-      }
-    }
-
     let isHost = false;
     let hostToken = null;
     if (!room || room.players.size === 0 || !io.sockets.sockets.has(room.hostSocketId)) {
@@ -2079,6 +2063,22 @@ io.on('connection', (socket) => {
         if (!io.sockets.sockets.has(pid)) room.players.delete(pid);
       }
     }
+    // Go Fish is a two-seat game. Reject duplicate seats and extra
+    // browsers instead of letting a third socket corrupt playerOrder.
+    if (room && room.players.size > 0) {
+      const nameTaken = Array.from(room.players.values()).some(
+        (player) => player.name.toLowerCase() === name.toLowerCase()
+      );
+      if (nameTaken) {
+        if (typeof ack === 'function') ack({ ok: false, error: 'seat-taken' });
+        return;
+      }
+      if (room.players.size >= 2) {
+        if (typeof ack === 'function') ack({ ok: false, error: room.started ? 'game-in-progress' : 'room-full' });
+        return;
+      }
+    }
+
     let isHost = false;
     let hostToken = null;
     if (!room || room.players.size === 0 || !io.sockets.sockets.has(room.hostSocketId)) {
