@@ -190,10 +190,13 @@ function makeFlyingCard(sourceNode, { faceCard = null } = {}) {
   return { ghost, start };
 }
 
-async function flyCard(sourceNode, targetNode, { delay = 0, faceCard = null, reveal = false } = {}) {
+async function flyCard(sourceNode, targetNode, { delay = 0, faceCard = null, reveal = false, hideSource = false } = {}) {
   if (!sourceNode || !targetNode) return;
   if (delay) await wait(delay);
   const { ghost, start } = makeFlyingCard(sourceNode, { faceCard: reveal ? null : faceCard });
+  if (hideSource && sourceNode.classList && sourceNode.classList.contains('gofish-card')) {
+    sourceNode.classList.add('departing');
+  }
   const end = rectCenter(targetNode);
   const dx = end.x - start.x;
   const dy = end.y - start.y;
@@ -235,7 +238,7 @@ async function animateTransfer(action) {
   const jobs = [];
   for (let i = 0; i < action.count; i++) {
     const source = sourceCards[Math.min(i, Math.max(0, sourceCards.length - 1))] || from;
-    jobs.push(flyCard(source, to, { delay: i * 80 }));
+    jobs.push(flyCard(source, to, { delay: i * 80, hideSource: true }));
   }
   await Promise.all(jobs);
 }
@@ -261,13 +264,15 @@ async function animateFish(action) {
 async function playTurnAction(action) {
   const mine = action.askerName === (mode === 'solo' ? soloName : myName);
   const actor = mine ? 'You' : action.askerName;
-  const target = mine ? action.opponentName : 'you';
 
   gameArea.classList.add('gofish-resolving');
   document.querySelectorAll('#myHand button.gofish-card').forEach((card) => { card.disabled = true; });
 
   if (action.kind === 'take') {
-    showEventBanner(`${actor} asked ${mine ? action.opponentName : ''}${mine ? ' for ' : ' for '}${action.rank}s…`.replace('asked  for', 'asked you for'));
+    showEventBanner(mine
+      ? `You ask ${action.opponentName} for ${action.rank}s…`
+      : `${actor} asks you for ${action.rank}s…`
+    );
     await wait(TURN_TIMING.anticipation);
     showEventBanner(mine
       ? `${action.opponentName} has ${action.count} × ${action.rank}`
@@ -336,9 +341,11 @@ async function drainActionQueue() {
       applyGameState(lastGameState);
     }
     if (pendingRoundResult) {
-      players = pendingRoundResult.players;
+      const result = pendingRoundResult;
+      players = result.players;
       pendingRoundResult = null;
       updateDuelHud();
+      showEventBanner(result.winnerName ? `🏆 ${result.winnerName} took this deal!` : "🤝 This deal's a tie!");
     }
     drainActionQueue();
   }
