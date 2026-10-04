@@ -480,6 +480,7 @@
 }
 
 .gf-book {
+  position: relative;
   width: 29px;
   height: 36px;
   display: grid;
@@ -492,6 +493,20 @@
   font-size: 0.66rem;
   font-weight: 820;
 }
+
+.gf-book::before,
+.gf-book::after {
+  content: "";
+  position: absolute;
+  inset: 2px;
+  z-index: -1;
+  border: 1px solid rgba(199,155,85,.20);
+  border-radius: 7px;
+  background: #f8e9c9;
+}
+
+.gf-book::before { transform: translate(2px, -2px) rotate(2deg); }
+.gf-book::after { transform: translate(4px, -4px) rotate(4deg); }
 
 .gf-hand {
   position: relative;
@@ -700,13 +715,16 @@ button.gf-card {
 }
 
 .gf-event-banner {
-  min-height: 25px;
-  max-width: min(92vw, 420px);
-  padding: 5px 10px;
-  border-radius: 10px;
+  min-height: 30px;
+  max-width: min(92vw, 440px);
+  display: grid;
+  place-items: center;
+  padding: 6px 12px;
+  border-radius: 11px;
   color: var(--gf-plum);
-  font-size: 0.75rem;
-  font-weight: 690;
+  background: rgba(255,255,255,.56);
+  font-size: 0.84rem;
+  font-weight: 710;
   text-align: center;
   transition: opacity .18s ease, transform .18s ease;
 }
@@ -722,6 +740,15 @@ button.gf-card {
 .gf-event-banner.book {
   color: #865f28;
   background: #fff4d9;
+}
+
+.gf-event-banner.emphasis {
+  min-width: 124px;
+  color: var(--gf-coral-dark);
+  background: var(--gf-blush-soft);
+  font-size: 1.08rem;
+  font-weight: 820;
+  letter-spacing: -.025em;
 }
 
 @keyframes gfMessageIn {
