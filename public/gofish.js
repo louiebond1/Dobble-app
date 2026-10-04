@@ -139,8 +139,9 @@ function renderMyHand(hand, { interactive = false, askableRanks = [] } = {}) {
   const sorted = sortHand(hand);
   setHandOverlap(container, sorted.length, false);
   sorted.forEach((card, i) => {
-    const canSelect = interactive && askableRanks.includes(card.rank);
-    const node = cardEl(card, { interactive: canSelect });
+    // The hand is visual. Rank chips below it are the deliberate controls,
+    // which means the cards can overlap like a real hand without bad taps.
+    const node = cardEl(card, { interactive: false });
     const isSelected = selectedRank === card.rank;
     node.style.transform = fanTransform(i, sorted.length, false) + (isSelected ? ' translateY(-10px)' : '');
     node.style.zIndex = String(i + 1 + (isSelected ? 30 : 0));
@@ -454,7 +455,7 @@ function findBookNode(containerId, rank) {
   return document.querySelector(`#${containerId} [data-book-rank="${rank}"]`);
 }
 
-async function waitForPendingState(timeout = 900) {
+async function waitForPendingState(timeout = 1500) {
   const start = Date.now();
   while (!pendingGameState && Date.now() - start < timeout) await wait(18);
   return pendingGameState;
