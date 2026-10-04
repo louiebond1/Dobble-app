@@ -710,7 +710,13 @@ function askForRank(rank) {
   lockVisibleHand();
   const opponentName = lastGameState.opponent ? lastGameState.opponent.name : 'your opponent';
   showEventBanner(`You ask ${opponentName} for ${rankPlural(rank)}…`, { persist: true });
-  socket.emit('gofish:ask', { code: roomCode, rank });
+  socket.emit('gofish:ask', { code: roomCode, rank }, (res) => {
+    if (res && res.ok) return;
+    askPending = false;
+    gameArea.classList.remove('gf-resolving');
+    if (lastGameState) applyGameState(lastGameState);
+    showEventBanner('That move is no longer available');
+  });
 }
 
 el('askBtn').addEventListener('click', () => {
