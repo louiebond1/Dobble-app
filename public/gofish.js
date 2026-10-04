@@ -101,7 +101,7 @@ function setHandOverlap(container, count, opponent = false) {
   const cardWidth = opponent ? Math.min(60, Math.max(49, viewport * 0.138)) : Math.min(72, Math.max(58, viewport * 0.166));
   const needed = count * cardWidth;
   const overlap = count <= 1 ? 0 : Math.max(opponent ? 8 : 10, (needed - available) / (count - 1));
-  const cap = opponent ? cardWidth * 0.62 : cardWidth * 0.60;
+  const cap = opponent ? cardWidth * 0.74 : cardWidth * 0.76;
   container.style.setProperty('--gf-overlap', `${-Math.min(cap, overlap)}px`);
 }
 
@@ -577,14 +577,15 @@ async function animateStateTransition(action, nextState) {
 }
 
 let bannerTimer = null;
-function showEventBanner(text, { book = false, persist = false } = {}) {
+function showEventBanner(text, { book = false, persist = false, emphasis = false } = {}) {
   const banner = el('eventBanner');
   clearTimeout(bannerTimer);
   banner.textContent = text;
-  banner.classList.remove('show', 'book');
+  banner.classList.remove('show', 'book', 'emphasis');
   void banner.offsetWidth;
   banner.classList.add('show');
   banner.classList.toggle('book', book);
+  banner.classList.toggle('emphasis', emphasis);
   if (book) {
     const table = document.querySelector('.gf-table');
     table.classList.remove('gf-celebrate');
@@ -595,7 +596,7 @@ function showEventBanner(text, { book = false, persist = false } = {}) {
   if (!persist) {
     bannerTimer = setTimeout(() => {
       banner.textContent = '';
-      banner.classList.remove('show', 'book');
+      banner.classList.remove('show', 'book', 'emphasis');
     }, book ? 3000 : 2300);
   }
 }
@@ -628,7 +629,7 @@ async function playTurnAction(action) {
       { persist: true }
     );
   } else {
-    showEventBanner(mine ? 'Go Fish' : `${action.askerName} goes fishing`, { persist: true });
+    showEventBanner(mine ? 'Go Fish' : `${action.askerName} goes fishing`, { persist: true, emphasis: true });
     await wait(160);
   }
 
