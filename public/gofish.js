@@ -585,6 +585,7 @@ let soloTurn = 'me';
 let soloGameActive = false;
 
 function soloCheckBooks(who) {
+  const completed = [];
   const hand = soloHands[who];
   const counts = new Map();
   for (const c of hand) counts.set(c.rank, (counts.get(c.rank) || 0) + 1);
@@ -592,9 +593,10 @@ function soloCheckBooks(who) {
     if (count >= 4) {
       soloHands[who] = soloHands[who].filter((c) => c.rank !== rank);
       soloBooks[who].push(rank);
-      showEventBanner(`📚 ${who === 'me' ? 'You' : 'CPU'} got the book of ${rank}s!`, { book: true });
+      completed.push(rank);
     }
   }
+  return completed;
 }
 
 function soloTotalBooks() {
@@ -714,9 +716,7 @@ async function soloResolveAsk(askerKey, targetKey, rank, askerName, targetName) 
   if (matches.length > 0) {
     soloHands[targetKey] = target.filter((c) => c.rank !== rank);
     soloHands[askerKey] = asker.concat(matches);
-    const before = soloBooks[askerKey].slice();
-    soloCheckBooks(askerKey);
-    const books = soloBooks[askerKey].filter((r) => !before.includes(r));
+    const books = soloCheckBooks(askerKey);
     action = {
       kind: 'take',
       askerName,
@@ -732,9 +732,7 @@ async function soloResolveAsk(askerKey, targetKey, rank, askerName, targetName) 
       drawn = soloPond.pop();
       soloHands[askerKey].push(drawn);
     }
-    const before = soloBooks[askerKey].slice();
-    soloCheckBooks(askerKey);
-    const books = soloBooks[askerKey].filter((r) => !before.includes(r));
+    const books = soloCheckBooks(askerKey);
     const matched = !!drawn && drawn.rank === rank;
     action = {
       kind: 'fish',
@@ -752,7 +750,6 @@ async function soloResolveAsk(askerKey, targetKey, rank, askerName, targetName) 
 
   try {
     await playTurnAction(action);
-    soloRenderState();
     applyPendingAfterAction(action);
     if (action.books.length) await wait(TURN_TIMING.book);
   } finally {
