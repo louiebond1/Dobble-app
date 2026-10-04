@@ -179,6 +179,8 @@
   border-radius: 50%;
   font-weight: 800;
   letter-spacing: -0.04em;
+  color: #6e5f61;
+  background: #e9dfda;
 }
 
 .gf-seat-avatar {
@@ -518,6 +520,7 @@
   -webkit-user-select: none;
   touch-action: manipulation;
   will-change: transform;
+  transition: transform 180ms cubic-bezier(.2,.8,.2,1), box-shadow 180ms ease;
 }
 
 .gf-card:first-child {
