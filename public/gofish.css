@@ -1,340 +1,1032 @@
-/* Go Fish — self-contained styling. Reuses duel.css's stage shell
-   (topbar/HUD/end-screen) and style.css's shared setup-panel classes; only
-   what's unique to this game lives here. */
+/* Go Fish — purpose-built, tactile card-table UI.
+   This screen deliberately does not inherit the generic purple duel layout. */
 
-.gofish-middle {
-  display: flex;
-  flex-direction: column;
-  padding: 0 10px 10px;
-  min-height: 0;
-  overflow: hidden;
+.gofish-page {
+  --gf-bg: #f7f1ec;
+  --gf-surface: #fffdfa;
+  --gf-surface-strong: #ffffff;
+  --gf-ink: #2f2729;
+  --gf-muted: #8b7e7e;
+  --gf-line: rgba(80, 58, 62, 0.10);
+  --gf-coral: #d86f74;
+  --gf-coral-dark: #b95159;
+  --gf-blush: #f1d4d2;
+  --gf-blush-soft: #fae9e6;
+  --gf-plum: #5c4550;
+  --gf-gold: #c79b55;
+  --gf-shadow: 0 18px 50px rgba(77, 53, 55, 0.10);
+  --gf-card-shadow: 0 9px 22px rgba(66, 46, 49, 0.16);
+  margin: 0;
+  min-height: 100%;
+  color: var(--gf-ink);
+  background:
+    radial-gradient(90% 70% at 50% -5%, #fff8f4 0%, transparent 72%),
+    var(--gf-bg);
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", sans-serif;
+  letter-spacing: -0.015em;
 }
 
-.gofish-table {
-  display: flex;
-  flex-direction: column;
-  justify-content: space-around;
-  min-height: 0;
-  flex: 1;
-  background: rgba(255, 255, 255, 0.08);
-  border-radius: 20px;
-  padding: 10px;
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12);
+.gofish-page *,
+.gofish-page *::before,
+.gofish-page *::after {
+  box-sizing: border-box;
 }
 
-.gofish-zone {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  flex-shrink: 0;
+.gofish-page button,
+.gofish-page a,
+.gofish-page input {
+  font: inherit;
 }
 
-.gofish-zone-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
+.gofish-page .hidden {
+  display: none !important;
+}
+
+/* ---------- Setup / lobby ---------- */
+
+.gf-setup-shell {
+  min-height: 100vh;
+  min-height: 100dvh;
+  width: min(100%, 560px);
+  margin: 0 auto;
+  padding:
+    calc(34px + env(safe-area-inset-top))
+    calc(18px + env(safe-area-inset-right))
+    calc(34px + env(safe-area-inset-bottom))
+    calc(18px + env(safe-area-inset-left));
+}
+
+.gf-setup-brand {
+  text-align: center;
+  margin: 8vh 0 28px;
+}
+
+.gf-brand-mark {
+  width: max-content;
+  margin: 0 auto 12px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  color: var(--gf-coral-dark);
+  background: var(--gf-blush-soft);
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+}
+
+.gf-setup-brand h1 {
+  margin: 0;
+  color: var(--gf-ink);
+  text-shadow: none;
+  font-size: clamp(2.15rem, 9vw, 3rem);
+  line-height: 1;
+  font-weight: 780;
+  letter-spacing: -0.055em;
+}
+
+.gf-setup-brand p {
+  margin: 10px 0 0;
+  color: var(--gf-muted);
+  font-size: 0.98rem;
+}
+
+.gf-setup-card {
+  width: 100%;
+  padding: 22px;
+  border: 1px solid var(--gf-line);
+  border-radius: 26px;
+  background: rgba(255, 253, 250, 0.92);
+  box-shadow: var(--gf-shadow);
+  backdrop-filter: blur(18px);
+}
+
+.gf-field + .gf-field {
+  margin-top: 20px;
+}
+
+.gf-field-label {
+  margin-bottom: 9px;
+  color: var(--gf-muted);
+  font-size: 0.72rem;
+  font-weight: 760;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  text-align: left;
+}
+
+.gofish-page .pair-chips {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  margin: 0;
+}
+
+.gofish-page .chip,
+.gofish-page .mode-btn {
+  min-height: 44px;
+  border: 1px solid var(--gf-line);
+  border-radius: 14px;
+  background: #fff;
+  color: var(--gf-muted);
+  box-shadow: none;
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+
+.gofish-page .chip.active,
+.gofish-page .mode-btn.active {
+  border-color: rgba(216, 111, 116, 0.35);
+  background: var(--gf-blush-soft);
+  color: var(--gf-coral-dark);
+}
+
+.gofish-page .mode-toggle {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
   gap: 8px;
 }
 
-.gofish-pile-label {
-  font-size: 0.68rem;
-  font-weight: 800;
-  color: rgba(255, 255, 255, 0.7);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
+.gf-seat-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-top: 20px;
 }
 
-.gofish-opponent-zone .gofish-pile-label {
-  color: #ffd166;
-}
-
-/* Hands render as an overlapping "fan" — each card's rotation and lift are
-   set inline per-card in JS (based on its position relative to the hand's
-   center) rather than via CSS nth-child math, since the fan has to adapt
-   to however many cards are actually in the hand right now. */
-.gofish-facedown-hand,
-.gofish-hand {
+.gf-seat {
   display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  align-items: flex-end;
-  gap: 4px;
-  min-height: 78px;
-  padding: 6px 2px 2px;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  padding: 13px 12px;
+  border: 1px solid var(--gf-line);
+  border-radius: 18px;
+  background: #fff;
+  color: var(--gf-ink);
+  text-align: left;
+  cursor: pointer;
+  box-shadow: 0 8px 22px rgba(76, 54, 56, 0.06);
 }
 
-/* A loose fan — rotation and lift only, no overlap. Overlapping cards
-   looked nicer but reliably covered part of their neighbor's tap target
-   (confirmed: real taps landed on the wrong card, or on nothing), which
-   fails "easy to play" far harder than a bit less visual flourish costs. */
-.gofish-card {
-  width: 46px;
-  height: 66px;
-  border-radius: 8px;
-  background: white;
-  box-shadow: 0 3px 8px rgba(20, 8, 40, 0.35);
+.gf-seat:active {
+  transform: scale(0.985);
+}
+
+.gf-seat-avatar,
+.gf-avatar {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  font-weight: 800;
+  letter-spacing: -0.04em;
+}
+
+.gf-seat-avatar {
+  width: 42px;
+  height: 42px;
+  font-size: 0.92rem;
+}
+
+.gf-avatar-louie {
+  color: #fff;
+  background: linear-gradient(145deg, #5f4d55, #342b2f);
+}
+
+.gf-avatar-ariel {
+  color: #7e3f46;
+  background: linear-gradient(145deg, #f6d7d5, #eeb9ba);
+}
+
+.gf-seat strong,
+.gf-seat small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gf-seat strong {
+  font-size: 0.88rem;
+}
+
+.gf-seat small {
+  margin-top: 2px;
+  color: var(--gf-muted);
+  font-size: 0.72rem;
+}
+
+.gf-setup-note {
+  margin: 13px 2px 0;
+  color: var(--gf-muted);
+  text-align: center;
+  font-size: 0.78rem;
+  line-height: 1.4;
+}
+
+.gofish-page label {
+  margin-top: 18px;
+  color: var(--gf-muted);
+  font-size: 0.78rem;
+}
+
+.gofish-page input[type="text"] {
+  border: 1px solid var(--gf-line);
+  border-radius: 14px;
+  margin: 7px 0 4px;
+  background: #fff;
+  color: var(--gf-ink);
+}
+
+.gf-primary-btn,
+.gf-secondary-btn {
+  display: flex;
+  width: 100%;
+  min-height: 50px;
+  align-items: center;
+  justify-content: center;
+  margin-top: 14px;
+  border-radius: 16px;
+  text-decoration: none;
+  font-size: 0.95rem;
+  font-weight: 760;
+  cursor: pointer;
+}
+
+.gf-primary-btn {
+  border: 0;
+  color: #fff;
+  background: linear-gradient(145deg, var(--gf-coral), var(--gf-coral-dark));
+  box-shadow: 0 10px 22px rgba(185, 81, 89, 0.22);
+}
+
+.gf-primary-btn:disabled {
+  opacity: 0.42;
+  box-shadow: none;
+}
+
+.gf-secondary-btn {
+  border: 1px solid var(--gf-line);
+  color: var(--gf-muted);
+  background: transparent;
+}
+
+.gf-lobby {
+  position: relative;
+  text-align: center;
+}
+
+.gf-text-btn {
+  appearance: none;
+  position: absolute;
+  left: 18px;
+  top: 18px;
+  border: 0;
+  padding: 6px;
+  background: transparent;
+  color: var(--gf-muted);
+  cursor: pointer;
+}
+
+.gf-lobby-icon,
+.gf-over-mark {
+  display: grid;
+  place-items: center;
+  margin: 18px auto 10px;
+  color: var(--gf-coral);
+  background: var(--gf-blush-soft);
+  border-radius: 50%;
+}
+
+.gf-lobby-icon {
+  width: 52px;
+  height: 52px;
+}
+
+.gf-lobby h2 {
+  margin: 0;
+  color: var(--gf-ink);
+}
+
+.gf-lobby > p {
+  color: var(--gf-muted);
+}
+
+.gofish-page .player-list {
+  display: grid;
+  gap: 7px;
+  padding: 0;
+  margin: 18px 0;
+  list-style: none;
+}
+
+.gofish-page .player-list li {
+  padding: 11px 14px;
+  border-radius: 13px;
+  background: var(--gf-blush-soft);
+  color: var(--gf-plum);
+  font-weight: 700;
+}
+
+/* ---------- Game shell ---------- */
+
+.gf-game {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-height: 100vh;
+  min-height: 100dvh;
+  padding:
+    env(safe-area-inset-top)
+    env(safe-area-inset-right)
+    env(safe-area-inset-bottom)
+    env(safe-area-inset-left);
+  background:
+    radial-gradient(80% 55% at 50% 0%, rgba(255, 255, 255, 0.88), transparent 75%),
+    linear-gradient(180deg, #faf5f0 0%, #f5eee8 100%);
+}
+
+.gf-topbar {
+  display: grid;
+  grid-template-columns: 76px 1fr auto;
+  align-items: center;
+  min-height: 58px;
+  padding: 8px 16px 7px;
+  border-bottom: 1px solid var(--gf-line);
+  background: rgba(250, 245, 240, 0.86);
+  backdrop-filter: blur(18px);
+  flex: 0 0 auto;
+}
+
+.gf-topbar-back {
+  color: var(--gf-muted);
+  text-decoration: none;
+  font-size: 0.88rem;
+  font-weight: 650;
+}
+
+.gf-topbar-title {
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
-  font-weight: 800;
-  color: var(--ink);
-  line-height: 1;
-  flex-shrink: 0;
-  user-select: none;
-  transition: transform 0.15s ease;
+  line-height: 1.15;
 }
 
-.gofish-card .rank {
-  font-size: 0.85rem;
+.gf-topbar-title strong {
+  color: var(--gf-ink);
+  font-size: 1rem;
+  font-weight: 780;
 }
 
-.gofish-card .suit {
-  font-size: 1.3rem;
+.gf-topbar-title span {
+  margin-top: 3px;
+  color: var(--gf-muted);
+  font-size: 0.67rem;
+  font-weight: 650;
+}
+
+.gf-match-score {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 76px;
+  justify-content: flex-end;
+  color: var(--gf-muted);
+  font-size: 0.67rem;
+  white-space: nowrap;
+}
+
+.gf-match-score b {
+  color: var(--gf-ink);
+  font-size: 0.82rem;
+}
+
+.gf-score-divider {
+  color: #c7babb;
+}
+
+.gf-table {
+  width: min(100%, 680px);
+  margin: 0 auto;
+  padding: 9px 16px 5px;
+  min-height: 0;
+  flex: 1 1 auto;
+  display: grid;
+  grid-template-rows: minmax(116px, 0.86fr) minmax(110px, 0.78fr) minmax(150px, 1.08fr);
+  gap: 4px;
+}
+
+.gf-player-zone {
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.gf-player-row {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-height: 40px;
+}
+
+.gf-avatar {
+  width: 36px;
+  height: 36px;
+  font-size: 0.82rem;
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,.55);
+}
+
+.gf-player-copy {
+  min-width: 0;
+  flex: 1;
+}
+
+.gf-player-name {
+  color: var(--gf-ink);
+  font-size: 0.88rem;
+  font-weight: 780;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.gf-you {
+  display: inline-block;
+  margin-left: 4px;
+  color: var(--gf-coral-dark);
+  font-size: 0.62rem;
+  font-weight: 760;
+  vertical-align: 1px;
+}
+
+.gf-player-meta {
   margin-top: 2px;
+  color: var(--gf-muted);
+  font-size: 0.67rem;
+  font-weight: 560;
 }
 
-.gofish-card.red {
-  color: #d1335b;
+.gf-books {
+  max-width: 47%;
+  display: flex;
+  justify-content: flex-end;
+  gap: 4px;
+  min-height: 34px;
 }
 
-.gofish-card.back {
-  background: linear-gradient(135deg, var(--accent), var(--accent-dark));
-  background-image:
-    repeating-linear-gradient(45deg, rgba(255, 255, 255, 0.08) 0 6px, transparent 6px 12px),
-    linear-gradient(135deg, var(--accent), var(--accent-dark));
-  box-shadow: 0 3px 8px rgba(20, 8, 40, 0.35), inset 0 0 0 2px rgba(255, 255, 255, 0.25);
+.gf-book {
+  width: 29px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(199, 155, 85, 0.26);
+  border-radius: 7px;
+  color: #805f2f;
+  background: linear-gradient(145deg, #fffaf0, #f4e2bd);
+  box-shadow: 0 3px 8px rgba(93, 69, 37, 0.10);
+  font-size: 0.66rem;
+  font-weight: 820;
 }
 
-/* My own cards are real buttons — tapping one asks for that rank. */
-button.gofish-card {
-  appearance: none;
-  border: none;
-  cursor: pointer;
+.gf-hand {
   position: relative;
-  z-index: 1;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  overflow: visible;
+  padding: 7px 4px 0;
 }
 
-button.gofish-card:not(:disabled):hover,
-button.gofish-card:not(:disabled):focus-visible {
-  transform: translateY(-10px) !important;
-  z-index: 5;
+.gf-card {
+  position: relative;
+  width: clamp(58px, 16.6vw, 72px);
+  height: clamp(82px, 23.2vw, 101px);
+  flex: 0 0 auto;
+  margin-left: var(--gf-overlap, -17px);
+  border: 1px solid rgba(69, 52, 56, 0.10);
+  border-radius: 11px;
+  background: var(--gf-surface-strong);
+  box-shadow: var(--gf-card-shadow);
+  color: #30272b;
+  transform-origin: 50% 115%;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: manipulation;
+  will-change: transform;
 }
 
-button.gofish-card:not(:disabled):active {
-  transform: translateY(-4px) scale(0.95) !important;
+.gf-card:first-child {
+  margin-left: 0;
 }
 
-button.gofish-card:disabled {
-  opacity: 0.5;
+button.gf-card {
+  appearance: none;
+  padding: 0;
+  cursor: pointer;
+}
+
+.gf-card.red {
+  color: #bd4350;
+}
+
+.gf-card-corner {
+  position: absolute;
+  left: 8px;
+  top: 7px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  line-height: .88;
+}
+
+.gf-card-corner.bottom {
+  left: auto;
+  top: auto;
+  right: 8px;
+  bottom: 7px;
+  transform: rotate(180deg);
+}
+
+.gf-card-rank {
+  font-size: clamp(0.82rem, 3.5vw, 1rem);
+  font-weight: 800;
+}
+
+.gf-card-corner .gf-card-suit {
+  margin-top: 2px;
+  font-size: 0.65rem;
+}
+
+.gf-card-center {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-size: clamp(1.55rem, 7vw, 2.15rem);
+}
+
+.gf-card.selected {
+  box-shadow:
+    0 13px 28px rgba(99, 62, 66, 0.18),
+    0 0 0 3px rgba(216, 111, 116, 0.24);
+}
+
+.gf-card.is-disabled {
   cursor: default;
 }
 
-/* During a turn resolution the hand stays visible but cannot fire a second
-   action. The rank just asked for remains visually lifted while the server
-   result comes back. */
-.gofish-resolving button.gofish-card:disabled {
-  opacity: 0.78;
+.gf-card-back,
+.gf-pond-card {
+  color: rgba(255,255,255,.86);
+  border-color: rgba(132, 70, 76, .15);
+  background:
+    linear-gradient(45deg, rgba(255,255,255,.12) 25%, transparent 25% 75%, rgba(255,255,255,.12) 75%),
+    linear-gradient(-45deg, rgba(255,255,255,.09) 25%, transparent 25% 75%, rgba(255,255,255,.09) 75%),
+    linear-gradient(145deg, #df8588, #b95761);
+  background-size: 12px 12px, 12px 12px, auto;
+  box-shadow: 0 10px 24px rgba(117, 63, 67, 0.18);
 }
 
-button.gofish-card.asking {
-  opacity: 1 !important;
-  transform: translateY(-12px) scale(1.06) !important;
-  box-shadow: 0 10px 24px rgba(239, 77, 149, 0.45), 0 0 0 3px rgba(255, 255, 255, 0.7);
-  z-index: 8;
+.gf-opponent-hand .gf-card {
+  width: clamp(49px, 13.8vw, 60px);
+  height: clamp(69px, 19.2vw, 83px);
+  margin-left: var(--gf-overlap, -24px);
 }
 
-.gofish-card.departing {
-  opacity: 0 !important;
-  transition: opacity 0.12s ease;
+.gf-card-back-mark {
+  position: absolute;
+  inset: 5px;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(255,255,255,.45);
+  border-radius: 8px;
+  font-size: 0.55rem;
+  font-weight: 850;
+  letter-spacing: .13em;
 }
 
-/* Temporary physical card used by the turn sequencer. It lives above the
-   fixed duel stage so transfers and pond draws read as actual card movement,
-   not an instant DOM redraw. */
-.gofish-flying-card {
+.gf-action-stage {
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 2px 0;
+}
+
+.gf-turn-pill {
+  min-height: 28px;
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 11px;
+  border: 1px solid var(--gf-line);
+  border-radius: 999px;
+  color: var(--gf-muted);
+  background: rgba(255,255,255,.66);
+  font-size: 0.7rem;
+  font-weight: 720;
+  transition: background .25s ease, color .25s ease, transform .25s ease;
+}
+
+.gf-turn-pill.mine {
+  color: var(--gf-coral-dark);
+  border-color: rgba(216,111,116,.18);
+  background: var(--gf-blush-soft);
+}
+
+.gf-pond-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  min-height: 72px;
+}
+
+.gf-pond-card,
+.gf-pond-shadow {
+  width: 47px;
+  height: 66px;
+  border-radius: 9px;
+}
+
+.gf-pond-card {
+  position: relative;
+  z-index: 3;
+}
+
+.gf-pond-shadow {
+  position: absolute;
+  left: 0;
+  top: 1px;
+  border: 1px solid rgba(107,75,78,.12);
+  background: #fff7f2;
+}
+
+.gf-pond-shadow-one {
+  z-index: 2;
+  transform: translate(3px, -3px) rotate(1.5deg);
+}
+
+.gf-pond-shadow-two {
+  z-index: 1;
+  transform: translate(6px, -6px) rotate(3deg);
+}
+
+.gf-pond-copy {
+  display: flex;
+  min-width: 78px;
+  flex-direction: column;
+  line-height: 1.2;
+}
+
+.gf-pond-copy strong {
+  color: var(--gf-ink);
+  font-size: 0.75rem;
+}
+
+.gf-pond-copy span {
+  margin-top: 3px;
+  color: var(--gf-muted);
+  font-size: 0.65rem;
+}
+
+.gf-event-banner {
+  min-height: 25px;
+  max-width: min(92vw, 420px);
+  padding: 5px 10px;
+  border-radius: 10px;
+  color: var(--gf-plum);
+  font-size: 0.75rem;
+  font-weight: 690;
+  text-align: center;
+  transition: opacity .18s ease, transform .18s ease;
+}
+
+.gf-event-banner:empty {
+  opacity: 0;
+}
+
+.gf-event-banner.show {
+  animation: gfMessageIn .24s cubic-bezier(.2,.8,.2,1) both;
+}
+
+.gf-event-banner.book {
+  color: #865f28;
+  background: #fff4d9;
+}
+
+@keyframes gfMessageIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* ---------- Ask tray ---------- */
+
+.gf-ask-panel {
+  flex: 0 0 auto;
+  padding:
+    12px
+    calc(16px + env(safe-area-inset-right))
+    calc(12px + env(safe-area-inset-bottom))
+    calc(16px + env(safe-area-inset-left));
+  border-top: 1px solid var(--gf-line);
+  background: rgba(255,253,250,.94);
+  backdrop-filter: blur(20px);
+  box-shadow: 0 -14px 36px rgba(77,53,55,.06);
+}
+
+.gf-ask-heading {
+  width: min(100%, 620px);
+  margin: 0 auto 8px;
+  color: var(--gf-muted);
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.gf-ask-heading span {
+  color: var(--gf-ink);
+}
+
+.gf-rank-choices {
+  width: min(100%, 620px);
+  margin: 0 auto;
+  display: flex;
+  gap: 7px;
+  overflow-x: auto;
+  padding: 1px 1px 6px;
+  scrollbar-width: none;
+}
+
+.gf-rank-choices::-webkit-scrollbar {
+  display: none;
+}
+
+.gf-rank-chip {
+  flex: 0 0 42px;
+  height: 42px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--gf-line);
+  border-radius: 12px;
+  color: var(--gf-plum);
+  background: #fff;
+  box-shadow: 0 4px 10px rgba(72, 48, 52, .05);
+  font-size: .9rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.gf-rank-chip.selected {
+  border-color: rgba(216,111,116,.30);
+  color: var(--gf-coral-dark);
+  background: var(--gf-blush-soft);
+  box-shadow: 0 5px 14px rgba(185,81,89,.12);
+}
+
+.gf-rank-chip:disabled {
+  opacity: .42;
+  cursor: default;
+}
+
+.gf-ask-btn {
+  display: flex;
+  width: min(100%, 620px);
+  min-height: 49px;
+  align-items: center;
+  justify-content: center;
+  margin: 2px auto 0;
+  border: 0;
+  border-radius: 15px;
+  color: #fff;
+  background: linear-gradient(145deg, var(--gf-coral), var(--gf-coral-dark));
+  box-shadow: 0 9px 21px rgba(185,81,89,.20);
+  font-size: .93rem;
+  font-weight: 780;
+  cursor: pointer;
+  transition: transform .12s ease, opacity .18s ease, box-shadow .18s ease;
+}
+
+.gf-ask-btn:active:not(:disabled) {
+  transform: scale(.985);
+}
+
+.gf-ask-btn:disabled {
+  color: #aa9d9c;
+  background: #eee7e3;
+  box-shadow: none;
+  cursor: default;
+}
+
+.gf-ask-hint {
+  width: min(100%, 620px);
+  min-height: 16px;
+  margin: 6px auto 0;
+  color: #a39796;
+  text-align: center;
+  font-size: .62rem;
+}
+
+.gf-resolving .gf-ask-panel {
+  pointer-events: none;
+}
+
+.gf-resolving .gf-rank-chip:not(.selected),
+.gf-resolving .gf-ask-btn {
+  opacity: .48;
+}
+
+/* ---------- Physical motion ---------- */
+
+.gf-flight-card {
   position: fixed !important;
   z-index: 1000 !important;
   margin: 0 !important;
   pointer-events: none !important;
-  transform-origin: center center;
+  transform-origin: center;
   transform-style: preserve-3d;
-  backface-visibility: hidden;
-  will-change: transform;
-  box-shadow: 0 12px 28px rgba(20, 8, 40, 0.38);
+  will-change: transform, opacity;
 }
 
-.gofish-resolving .gofish-pond-card {
-  box-shadow: 0 5px 16px rgba(20, 8, 40, 0.42);
-}
-
-
-.gofish-center {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-  flex-shrink: 0;
-  padding: 10px 0;
-}
-
-.gofish-turn-pill {
-  font-size: 0.85rem;
-  font-weight: 800;
-  color: white;
-  background: rgba(255, 255, 255, 0.14);
-  border-radius: 999px;
-  padding: 6px 16px;
-  text-align: center;
-}
-
-.gofish-turn-pill.mine {
-  background: linear-gradient(135deg, var(--accent), var(--accent-dark));
-  animation: gofishPulse 1.4s ease-in-out infinite;
-}
-
-@keyframes gofishPulse {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(239, 77, 149, 0.55); }
-  50% { box-shadow: 0 0 0 9px rgba(239, 77, 149, 0); }
-}
-
-.gofish-pond {
-  position: relative;
-  width: 44px;
-  height: 62px;
-  flex-shrink: 0;
-}
-
-.gofish-pond-card {
-  width: 100%;
-  height: 100%;
-  border-radius: 8px;
-  background: linear-gradient(135deg, #6e5a8c, #4a3070);
-  background-image:
-    repeating-linear-gradient(45deg, rgba(255, 255, 255, 0.07) 0 6px, transparent 6px 12px),
-    linear-gradient(135deg, #6e5a8c, #4a3070);
-  color: rgba(255, 255, 255, 0.4);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 1.5rem;
-  box-shadow: 0 3px 8px rgba(20, 8, 40, 0.35);
-}
-
-.gofish-pond-count {
+.gf-flight-card .gf-flight-inner {
   position: absolute;
-  bottom: -7px;
-  right: -8px;
-  background: white;
-  color: var(--ink);
-  font-size: 0.7rem;
-  font-weight: 800;
-  border-radius: 999px;
-  padding: 1px 7px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+  inset: 0;
+  transform-style: preserve-3d;
+  transition: transform 220ms ease;
 }
 
-/* Transient callouts — "asked for 7s, got 2!", "Go Fish!", a completed
-   book — replace each other with a quick pop/fade rather than stacking
-   into a scrolling history, so the one thing that just happened is always
-   unambiguous at a glance. */
-.gofish-event-banner {
-  min-height: 1.4em;
-  font-size: 0.82rem;
-  font-weight: 700;
-  color: white;
+.gf-flight-card.revealed .gf-flight-inner {
+  transform: rotateY(180deg);
+}
+
+.gf-flight-face {
+  position: absolute;
+  inset: 0;
+  backface-visibility: hidden;
+}
+
+.gf-flight-front {
+  transform: rotateY(180deg);
+}
+
+.gf-staging-hidden {
+  opacity: 0 !important;
+}
+
+.gf-book-pop {
+  animation: gfBookPop .56s cubic-bezier(.18,.9,.2,1.15) both;
+}
+
+@keyframes gfBookPop {
+  0% { transform: scale(.55) rotate(-8deg); opacity: 0; }
+  65% { transform: scale(1.1) rotate(2deg); opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+.gf-table.gf-celebrate {
+  animation: gfCelebrate .7s ease;
+}
+
+@keyframes gfCelebrate {
+  0%,100% { filter: none; }
+  38% { filter: drop-shadow(0 0 16px rgba(199,155,85,.18)); }
+}
+
+/* ---------- End screen ---------- */
+
+.gf-game-over {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background:
+    radial-gradient(70% 50% at 50% 20%, #fff9f4 0%, transparent 78%),
+    var(--gf-bg);
+}
+
+.gf-over-card {
+  width: min(100%, 390px);
+  padding: 28px 22px 22px;
+  border: 1px solid var(--gf-line);
+  border-radius: 28px;
+  background: var(--gf-surface);
+  box-shadow: var(--gf-shadow);
   text-align: center;
-  padding: 0 8px;
 }
 
-.gofish-event-banner.show {
-  animation: gofishBannerPop 0.35s ease both;
+.gf-over-mark {
+  width: 58px;
+  height: 58px;
+  font-size: 1.2rem;
 }
 
-.gofish-event-banner.book {
-  font-size: 1rem;
-  font-weight: 800;
-  color: #ffd166;
+.gf-over-card h2 {
+  margin: 8px 0;
+  color: var(--gf-ink);
+  font-size: 1.55rem;
+  letter-spacing: -.04em;
 }
 
-@keyframes gofishBannerPop {
-  0% { opacity: 0; transform: scale(0.8) translateY(6px); }
-  60% { opacity: 1; transform: scale(1.08) translateY(0); }
-  100% { opacity: 1; transform: scale(1) translateY(0); }
+.gf-over-card > p {
+  margin: 0 0 16px;
+  color: var(--gf-muted);
+  font-size: .84rem;
 }
 
-.gofish-books {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-  min-height: 20px;
+.gf-over-card .leaderboard {
+  margin: 14px 0;
 }
 
-.gofish-book-chip {
-  font-size: 0.68rem;
-  font-weight: 800;
-  color: var(--ink);
-  background: #ffd166;
-  border-radius: 999px;
-  padding: 2px 8px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
-  white-space: nowrap;
-}
+/* ---------- Responsive ---------- */
 
-@keyframes gofishBookChipIn {
-  0% { opacity: 0; transform: scale(0.5); }
-  60% { opacity: 1; transform: scale(1.15); }
-  100% { opacity: 1; transform: scale(1); }
-}
-
-.gofish-book-chip {
-  animation: gofishBookChipIn 0.4s ease both;
-}
-
-/* A brief full-table flash the instant a book completes — on top of the
-   event banner text, a bit of extra "that was a big deal" celebration. */
-.gofish-celebrate {
-  animation: gofishCelebrate 0.6s ease;
-}
-
-@keyframes gofishCelebrate {
-  0% { box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12); }
-  30% { box-shadow: inset 0 0 0 3px #ffd166, 0 0 24px rgba(255, 209, 102, 0.6); }
-  100% { box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12); }
-}
-
-@media (orientation: landscape) {
-  .gofish-table {
-    flex-direction: row;
-    flex-wrap: wrap;
-    align-items: center;
+@media (max-height: 720px) {
+  .gf-topbar {
+    min-height: 52px;
   }
 
-  .gofish-opponent-zone,
-  .gofish-my-zone {
-    flex: 1 1 42%;
+  .gf-table {
+    padding-top: 5px;
+    grid-template-rows: minmax(104px, .82fr) minmax(92px, .68fr) minmax(132px, 1fr);
   }
 
-  .gofish-center {
-    flex: 1 1 100%;
-    order: 10;
+  .gf-avatar {
+    width: 32px;
+    height: 32px;
   }
 
-  .gofish-my-zone {
-    order: 11;
+  .gf-card {
+    width: clamp(53px, 14.5vw, 64px);
+    height: clamp(75px, 20.5vw, 90px);
+  }
+
+  .gf-opponent-hand .gf-card {
+    width: clamp(44px, 12.5vw, 55px);
+    height: clamp(62px, 17.6vw, 76px);
+  }
+
+  .gf-pond-card,
+  .gf-pond-shadow {
+    width: 41px;
+    height: 58px;
+  }
+
+  .gf-ask-panel {
+    padding-top: 9px;
+    padding-bottom: calc(8px + env(safe-area-inset-bottom));
+  }
+
+  .gf-rank-chip {
+    height: 38px;
+    flex-basis: 38px;
+  }
+
+  .gf-ask-btn {
+    min-height: 44px;
+  }
+
+  .gf-ask-hint {
+    display: none;
+  }
+}
+
+@media (min-width: 700px) {
+  .gf-table {
+    max-width: 620px;
+  }
+
+  .gf-ask-panel {
+    padding-bottom: calc(18px + env(safe-area-inset-bottom));
+  }
+}
+
+@media (orientation: landscape) and (max-height: 520px) {
+  .gf-game {
+    overflow-y: auto;
+    position: absolute;
+  }
+
+  .gf-table {
+    min-height: 430px;
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .gofish-turn-pill.mine,
-  .gofish-event-banner.show,
-  .gofish-book-chip,
-  .gofish-celebrate {
+  .gf-event-banner.show,
+  .gf-book-pop,
+  .gf-table.gf-celebrate {
     animation: none !important;
   }
 
-  .gofish-card {
+  .gf-card,
+  .gf-ask-btn,
+  .gf-turn-pill {
     transition: none !important;
   }
 }
