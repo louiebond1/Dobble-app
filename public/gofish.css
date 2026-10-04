@@ -144,6 +144,11 @@ button.gofish-card.asking {
   z-index: 8;
 }
 
+.gofish-card.departing {
+  opacity: 0 !important;
+  transition: opacity 0.12s ease;
+}
+
 /* Temporary physical card used by the turn sequencer. It lives above the
    fixed duel stage so transfers and pond draws read as actual card movement,
    not an instant DOM redraw. */
