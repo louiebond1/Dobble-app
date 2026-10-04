@@ -825,16 +825,39 @@ function goFishOpponentId(room, socketId) {
 // player's face-up "books" pile — this is checked after every hand change
 // (a successful ask, a draw from the pond, even the initial deal) since a
 // book can complete at any of those moments, not just on a player's turn.
-function goFishCheckBooks(code, player) {
+function goFishCheckBooks(player) {
+  const completed = [];
   const counts = new Map();
   for (const card of player.hand) counts.set(card.rank, (counts.get(card.rank) || 0) + 1);
   for (const [rank, count] of counts) {
     if (count >= 4) {
       player.hand = player.hand.filter((c) => c.rank !== rank);
       player.books.push(rank);
-      io.to(`gofish:${code}`).emit('gofish:book', { name: player.name, rank });
+      completed.push(rank);
     }
   }
+  return completed;
+}
+
+let goFishActionSeq = 0;
+
+function goFishEmitAction(code, action, privateBySocket = null) {
+  const room = goFishRooms.get(code);
+  if (!room) return;
+  const actionId = ++goFishActionSeq;
+  for (const socketId of room.players.keys()) {
+    const privatePayload = privateBySocket && privateBySocket[socketId] ? privateBySocket[socketId] : {};
+    io.to(socketId).emit('gofish:action', { id: actionId, ...action, ...privatePayload });
+  }
+}
+
+function goFishUnlockAfter(code, delayMs = 1350) {
+  setTimeout(() => {
+    const room = goFishRooms.get(code);
+    if (!room || !room.gameActive) return;
+    room.actionLocked = false;
+    goFishBroadcastState(code);
+  }, delayMs);
 }
 
 function goFishTotalBooks(room) {
@@ -851,7 +874,7 @@ function goFishBeginTurn(code) {
   if (player.hand.length === 0) {
     if (room.pond.length > 0) {
       player.hand.push(room.pond.pop());
-      goFishCheckBooks(code, player);
+      goFishCheckBooks(player);
       if (goFishTotalBooks(room) >= GOFISH_BOOK_COUNT) return goFishEndDeal(code);
     } else {
       return goFishEndDeal(code);
@@ -881,6 +904,7 @@ function goFishBroadcastState(code) {
       isMyTurn: room.turn === socketId,
       turnName: turnPlayer ? turnPlayer.name : null,
       askableRanks: [...new Set(player.hand.map((c) => c.rank))],
+      actionLocked: !!room.actionLocked,
     });
   }
 }
@@ -907,15 +931,20 @@ function goFishDealGame(code) {
     const player = room.players.get(id);
     player.hand = deck.splice(0, GOFISH_DEAL_SIZE);
     player.books = [];
-    goFishCheckBooks(code, player);
+    goFishCheckBooks(player);
   }
   room.pond = deck;
+  room.actionLocked = false;
   // Alternate who asks first each deal, same convention as Tic-Tac-Toe.
   const firstIdx = (room.roundNumber - 1) % 2;
   room.turn = room.playerOrder[firstIdx];
   room.gameActive = true;
 
-  io.to(`gofish:${code}`).emit('gofish:round:start', { roundNumber: room.roundNumber, totalRounds: room.totalRounds });
+  io.to(`gofish:${code}`).emit('gofish:round:start', {
+    roundNumber: room.roundNumber,
+    totalRounds: room.totalRounds,
+    players: room.playerOrder.map((id) => goFishPlayerPublic(room.players.get(id))),
+  });
   goFishFeed(code, `🎴 New deal — ${room.players.get(room.turn).name} goes first.`);
   goFishBeginTurn(code);
 }
@@ -924,6 +953,10 @@ function goFishEndDeal(code) {
   const room = goFishRooms.get(code);
   if (!room) return;
   room.gameActive = false;
+  // The last move may have completed the 13th book. Send that final hand /
+  // books snapshot before scoring so the clients can animate into the real
+  // end position instead of jumping straight to the next-deal result.
+  goFishBroadcastState(code);
 
   const [idA, idB] = room.playerOrder;
   const a = room.players.get(idA);
@@ -1950,6 +1983,7 @@ io.on('connection', (socket) => {
           oSocketId: null,
           turn: null,
           gameActive: false,
+          actionLocked: false,
           createdAt: Date.now(),
         };
         tttRooms.set(code, room);
@@ -2052,6 +2086,7 @@ io.on('connection', (socket) => {
         room.started = false;
         room.roundNumber = 0;
         room.gameActive = false;
+        room.actionLocked = false;
         room.pond = [];
       }
       room.hostToken = hostToken;
@@ -2092,39 +2127,65 @@ io.on('connection', (socket) => {
     const code = String((payload && payload.code) || '').toUpperCase();
     const rank = String((payload && payload.rank) || '');
     const room = goFishRooms.get(code);
-    if (!room || !room.gameActive || socket.id !== room.turn || !CARD_RANKS.includes(rank)) return;
+    if (!room || !room.gameActive || room.actionLocked || socket.id !== room.turn || !CARD_RANKS.includes(rank)) return;
 
     const asker = room.players.get(socket.id);
     const opponentId = goFishOpponentId(room, socket.id);
     const opponent = opponentId ? room.players.get(opponentId) : null;
     if (!opponent || !asker.hand.some((c) => c.rank === rank)) return;
 
+    room.actionLocked = true;
     const matches = opponent.hand.filter((c) => c.rank === rank);
     if (matches.length > 0) {
       opponent.hand = opponent.hand.filter((c) => c.rank !== rank);
       asker.hand.push(...matches);
-      goFishFeed(code, `🎣 ${asker.name} asked ${opponent.name} for ${rank}s — got ${matches.length}!`);
-      goFishCheckBooks(code, asker);
+      const completedBooks = goFishCheckBooks(asker);
+      goFishEmitAction(code, {
+        kind: 'take',
+        askerName: asker.name,
+        opponentName: opponent.name,
+        rank,
+        count: matches.length,
+        books: completedBooks,
+        keepsTurn: true,
+      });
       if (goFishTotalBooks(room) >= GOFISH_BOOK_COUNT) return goFishEndDeal(code);
-      // Asker goes again — room.turn is unchanged.
+      // Asker goes again — room.turn is unchanged. Broadcast the correct
+      // resulting state now; clients hold it until the physical card
+      // animation has finished.
       goFishBeginTurn(code);
+      goFishUnlockAfter(code);
       return;
     }
 
-    goFishFeed(code, `🎣 ${asker.name} asked ${opponent.name} for ${rank}s — Go Fish!`);
+    let drawn = null;
+    let completedBooks = [];
     if (room.pond.length > 0) {
-      const drawn = room.pond.pop();
+      drawn = room.pond.pop();
       asker.hand.push(drawn);
-      goFishCheckBooks(code, asker);
-      if (goFishTotalBooks(room) >= GOFISH_BOOK_COUNT) return goFishEndDeal(code);
-      if (drawn.rank === rank) {
-        goFishFeed(code, `🐟 Drew a ${rank} — go again!`);
-        goFishBeginTurn(code);
-        return;
-      }
+      completedBooks = goFishCheckBooks(asker);
     }
-    room.turn = opponentId;
+
+    const matchedAskedRank = !!drawn && drawn.rank === rank;
+    goFishEmitAction(
+      code,
+      {
+        kind: 'fish',
+        askerName: asker.name,
+        opponentName: opponent.name,
+        rank,
+        matched: matchedAskedRank,
+        pondEmpty: !drawn,
+        books: completedBooks,
+        keepsTurn: matchedAskedRank,
+      },
+      drawn ? { [socket.id]: { drawnCard: drawn } } : null
+    );
+
+    if (goFishTotalBooks(room) >= GOFISH_BOOK_COUNT) return goFishEndDeal(code);
+    if (!matchedAskedRank) room.turn = opponentId;
     goFishBeginTurn(code);
+    goFishUnlockAfter(code);
   });
 
   // --- Sliding Puzzle Race -------------------------------------------------------
