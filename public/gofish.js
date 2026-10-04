@@ -139,9 +139,10 @@ function renderMyHand(hand, { interactive = false, askableRanks = [] } = {}) {
   const sorted = sortHand(hand);
   setHandOverlap(container, sorted.length, false);
   sorted.forEach((card, i) => {
-    // The hand is visual. Rank chips below it are the deliberate controls,
-    // which means the cards can overlap like a real hand without bad taps.
-    const node = cardEl(card, { interactive: false });
+    // The visible card is a real tap target. The rank chips below are a
+    // second way to select, not a displaced substitute for the card.
+    const canSelect = interactive && askableRanks.includes(card.rank);
+    const node = cardEl(card, { interactive: canSelect });
     const isSelected = selectedRank === card.rank;
     node.style.transform = fanTransform(i, sorted.length, false) + (isSelected ? ' translateY(-10px)' : '');
     node.style.zIndex = String(i + 1 + (isSelected ? 30 : 0));
