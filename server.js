@@ -953,6 +953,10 @@ function goFishEndDeal(code) {
   const room = goFishRooms.get(code);
   if (!room) return;
   room.gameActive = false;
+  // The last move may have completed the 13th book. Send that final hand /
+  // books snapshot before scoring so the clients can animate into the real
+  // end position instead of jumping straight to the next-deal result.
+  goFishBroadcastState(code);
 
   const [idA, idB] = room.playerOrder;
   const a = room.players.get(idA);
