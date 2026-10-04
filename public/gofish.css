@@ -352,7 +352,7 @@
 
 .gf-topbar {
   display: grid;
-  grid-template-columns: 76px 1fr auto;
+  grid-template-columns: minmax(76px, 1fr) auto minmax(76px, 1fr);
   align-items: center;
   min-height: 58px;
   padding: 8px 16px 7px;
@@ -395,6 +395,7 @@
   gap: 5px;
   min-width: 76px;
   justify-content: flex-end;
+  justify-self: end;
   color: var(--gf-muted);
   font-size: 0.67rem;
   white-space: nowrap;
