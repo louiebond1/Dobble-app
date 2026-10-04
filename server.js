@@ -13,6 +13,7 @@ const { DECK: DRAW_WORDS } = require('./lib/drawWords');
 const { TRIVIA_QUESTIONS, TRIVIA_CATEGORIES, TRIVIA_DIFFICULTIES } = require('./lib/triviaQuestions');
 const { SCRAMBLE_WORDS } = require('./lib/scrambleWords');
 const { COUNTRIES } = require('./lib/countries');
+const { RANKS: CARD_RANKS, buildDeck, shuffle: shuffleDeck } = require('./lib/cards');
 
 const app = express();
 const server = http.createServer(app);
@@ -52,6 +53,11 @@ const TTT_LINES = [
   [0, 3, 6], [1, 4, 7], [2, 5, 8],
   [0, 4, 8], [2, 4, 6],
 ];
+
+/** @type {Map<string, any>} */
+const goFishRooms = new Map();
+const GOFISH_DEAL_SIZE = 7;
+const GOFISH_BOOK_COUNT = CARD_RANKS.length; // all 13 ranks claimed as books ends the deal
 
 /** @type {Map<string, any>} */
 const puzzleRooms = new Map();
@@ -807,6 +813,131 @@ function endTttGame(code, { winnerSocketId = null, draw = false, line = null } =
   });
 
   setTimeout(() => startTttGame(code), 2800);
+}
+
+// --- Go Fish helpers ----------------------------------------------------
+
+function goFishOpponentId(room, socketId) {
+  return room.playerOrder.find((id) => id !== socketId) || null;
+}
+
+// A completed set of all 4 of a rank is pulled out of the hand into that
+// player's face-up "books" pile — this is checked after every hand change
+// (a successful ask, a draw from the pond, even the initial deal) since a
+// book can complete at any of those moments, not just on a player's turn.
+function goFishCheckBooks(player) {
+  const counts = new Map();
+  for (const card of player.hand) counts.set(card.rank, (counts.get(card.rank) || 0) + 1);
+  for (const [rank, count] of counts) {
+    if (count >= 4) {
+      player.hand = player.hand.filter((c) => c.rank !== rank);
+      player.books.push(rank);
+    }
+  }
+}
+
+function goFishTotalBooks(room) {
+  return Array.from(room.players.values()).reduce((sum, p) => sum + p.books.length, 0);
+}
+
+// Standard Go Fish rule: a player with an empty hand draws back up to one
+// card from the pond before their turn begins. If the pond is also empty,
+// there's no legal move left for anyone — the deal is over.
+function goFishBeginTurn(code) {
+  const room = goFishRooms.get(code);
+  if (!room || !room.gameActive) return;
+  const player = room.players.get(room.turn);
+  if (player.hand.length === 0) {
+    if (room.pond.length > 0) {
+      player.hand.push(room.pond.pop());
+      goFishCheckBooks(player);
+      if (goFishTotalBooks(room) >= GOFISH_BOOK_COUNT) return goFishEndDeal(code);
+    } else {
+      return goFishEndDeal(code);
+    }
+  }
+  goFishBroadcastState(code);
+}
+
+function goFishPlayerPublic(p) {
+  return { name: p.name, score: p.score, handCount: p.hand.length, books: p.books.slice() };
+}
+
+function goFishBroadcastState(code) {
+  const room = goFishRooms.get(code);
+  if (!room) return;
+  const turnPlayer = room.players.get(room.turn);
+  for (const [socketId, player] of room.players) {
+    const opponentId = goFishOpponentId(room, socketId);
+    const opponent = opponentId ? room.players.get(opponentId) : null;
+    io.to(socketId).emit('gofish:state', {
+      roundNumber: room.roundNumber,
+      totalRounds: room.totalRounds,
+      myHand: player.hand,
+      myBooks: player.books,
+      opponent: opponent ? goFishPlayerPublic(opponent) : null,
+      pondCount: room.pond.length,
+      isMyTurn: room.turn === socketId,
+      turnName: turnPlayer ? turnPlayer.name : null,
+      askableRanks: [...new Set(player.hand.map((c) => c.rank))],
+    });
+  }
+}
+
+function goFishFeed(code, text) {
+  io.to(`gofish:${code}`).emit('gofish:feed', { text });
+}
+
+function goFishDealGame(code) {
+  const room = goFishRooms.get(code);
+  if (!room) return;
+
+  if (room.roundNumber >= room.totalRounds) {
+    room.started = false;
+    io.to(`gofish:${code}`).emit('gofish:game:over', {
+      players: room.playerOrder.map((id) => goFishPlayerPublic(room.players.get(id))),
+    });
+    return;
+  }
+
+  room.roundNumber += 1;
+  const deck = shuffleDeck(buildDeck());
+  for (const id of room.playerOrder) {
+    const player = room.players.get(id);
+    player.hand = deck.splice(0, GOFISH_DEAL_SIZE);
+    player.books = [];
+    goFishCheckBooks(player);
+  }
+  room.pond = deck;
+  // Alternate who asks first each deal, same convention as Tic-Tac-Toe.
+  const firstIdx = (room.roundNumber - 1) % 2;
+  room.turn = room.playerOrder[firstIdx];
+  room.gameActive = true;
+
+  io.to(`gofish:${code}`).emit('gofish:round:start', { roundNumber: room.roundNumber, totalRounds: room.totalRounds });
+  goFishFeed(code, `🎴 New deal — ${room.players.get(room.turn).name} goes first.`);
+  goFishBeginTurn(code);
+}
+
+function goFishEndDeal(code) {
+  const room = goFishRooms.get(code);
+  if (!room) return;
+  room.gameActive = false;
+
+  const [idA, idB] = room.playerOrder;
+  const a = room.players.get(idA);
+  const b = room.players.get(idB);
+  let winnerName = null;
+  if (a.books.length > b.books.length) { a.score += 1; winnerName = a.name; }
+  else if (b.books.length > a.books.length) { b.score += 1; winnerName = b.name; }
+
+  io.to(`gofish:${code}`).emit('gofish:round:result', {
+    players: room.playerOrder.map((id) => goFishPlayerPublic(room.players.get(id))),
+    winnerName,
+  });
+  goFishFeed(code, winnerName ? `🏆 ${winnerName} took this deal!` : "🤝 This deal's a tie!");
+
+  setTimeout(() => goFishDealGame(code), 3200);
 }
 
 // --- Sliding Puzzle Race helpers ---------------------------------------------
@@ -1886,6 +2017,115 @@ io.on('connection', (socket) => {
     });
   });
 
+  // --- Go Fish --------------------------------------------------------------
+
+  socket.on('gofish:quickplay:join', (payload, ack) => {
+    const name = String((payload && payload.name) || '').trim().slice(0, 20) || 'Player';
+    const code = 'OURS';
+    let room = goFishRooms.get(code);
+    if (room) {
+      for (const pid of room.players.keys()) {
+        if (!io.sockets.sockets.has(pid)) room.players.delete(pid);
+      }
+    }
+    let isHost = false;
+    let hostToken = null;
+    if (!room || room.players.size === 0 || !io.sockets.sockets.has(room.hostSocketId)) {
+      isHost = true;
+      hostToken = crypto.randomUUID();
+      if (!room) {
+        room = {
+          code,
+          players: new Map(),
+          playerOrder: [],
+          started: false,
+          totalRounds: 5,
+          roundNumber: 0,
+          pond: [],
+          turn: null,
+          gameActive: false,
+          createdAt: Date.now(),
+        };
+        goFishRooms.set(code, room);
+      } else {
+        room.started = false;
+        room.roundNumber = 0;
+        room.gameActive = false;
+        room.pond = [];
+      }
+      room.hostToken = hostToken;
+      room.hostSocketId = socket.id;
+    }
+    room.players.set(socket.id, { name, score: 0, hand: [], books: [] });
+    socket.join(`gofish:${code}`);
+    socket.data.goFishRole = isHost ? 'host' : 'player';
+    socket.data.goFishCode = code;
+    if (typeof ack === 'function') {
+      ack({ ok: true, code, name, isHost, hostToken, started: room.started });
+    }
+    io.to(`gofish:${code}`).emit('gofish:players:update',
+      Array.from(room.players.values()).map((p) => ({ name: p.name, score: p.score })));
+  });
+
+  socket.on('gofish:host:cancel', (payload) => {
+    const code = String((payload && payload.code) || '').toUpperCase();
+    const room = goFishRooms.get(code);
+    if (!room || room.hostSocketId !== socket.id) return;
+    io.to(`gofish:${code}`).emit('gofish:room:cancelled');
+    goFishRooms.delete(code);
+  });
+
+  socket.on('gofish:host:start', (payload) => {
+    const code = String((payload && payload.code) || '').toUpperCase();
+    const room = goFishRooms.get(code);
+    if (!room || room.hostSocketId !== socket.id || room.players.size < 2) return;
+    room.totalRounds = Math.max(1, Math.min(15, Number(payload && payload.rounds) || 5));
+    room.roundNumber = 0;
+    room.playerOrder = Array.from(room.players.keys());
+    room.started = true;
+    for (const p of room.players.values()) p.score = 0;
+    goFishDealGame(code);
+  });
+
+  socket.on('gofish:ask', (payload) => {
+    const code = String((payload && payload.code) || '').toUpperCase();
+    const rank = String((payload && payload.rank) || '');
+    const room = goFishRooms.get(code);
+    if (!room || !room.gameActive || socket.id !== room.turn || !CARD_RANKS.includes(rank)) return;
+
+    const asker = room.players.get(socket.id);
+    const opponentId = goFishOpponentId(room, socket.id);
+    const opponent = opponentId ? room.players.get(opponentId) : null;
+    if (!opponent || !asker.hand.some((c) => c.rank === rank)) return;
+
+    const matches = opponent.hand.filter((c) => c.rank === rank);
+    if (matches.length > 0) {
+      opponent.hand = opponent.hand.filter((c) => c.rank !== rank);
+      asker.hand.push(...matches);
+      goFishFeed(code, `🎣 ${asker.name} asked ${opponent.name} for ${rank}s — got ${matches.length}!`);
+      goFishCheckBooks(asker);
+      if (goFishTotalBooks(room) >= GOFISH_BOOK_COUNT) return goFishEndDeal(code);
+      // Asker goes again — room.turn is unchanged.
+      goFishBeginTurn(code);
+      return;
+    }
+
+    goFishFeed(code, `🎣 ${asker.name} asked ${opponent.name} for ${rank}s — Go Fish!`);
+    if (room.pond.length > 0) {
+      const drawn = room.pond.pop();
+      asker.hand.push(drawn);
+      goFishCheckBooks(asker);
+      if (goFishTotalBooks(room) >= GOFISH_BOOK_COUNT) return goFishEndDeal(code);
+      if (drawn.rank === rank) {
+        goFishFeed(code, `🐟 Drew a ${rank} — go again!`);
+        goFishBeginTurn(code);
+        return;
+      }
+    }
+    room.turn = opponentId;
+    goFishBeginTurn(code);
+  });
+
   // --- Sliding Puzzle Race -------------------------------------------------------
 
   socket.on('puzzle:quickplay:join', (payload, ack) => {
@@ -2275,6 +2515,14 @@ io.on('connection', (socket) => {
         io.to(`ttt:${tttCode}`).emit('ttt:players:update', tttRoomPlayers(room));
       }
     }
+    const goFishCode = socket.data.goFishCode;
+    if (goFishCode) {
+      const room = goFishRooms.get(goFishCode);
+      if (room && socket.data.goFishRole === 'player' && room.players.delete(socket.id)) {
+        io.to(`gofish:${goFishCode}`).emit('gofish:players:update',
+          Array.from(room.players.values()).map((p) => ({ name: p.name, score: p.score })));
+      }
+    }
     const puzzleCode = socket.data.puzzleCode;
     if (puzzleCode) {
       const room = puzzleRooms.get(puzzleCode);
@@ -2531,6 +2779,9 @@ setInterval(() => {
   for (const [code, room] of tttRooms) {
     if (now - room.createdAt > ROOM_TTL_MS) tttRooms.delete(code);
   }
+  for (const [code, room] of goFishRooms) {
+    if (now - room.createdAt > ROOM_TTL_MS) goFishRooms.delete(code);
+  }
   for (const [code, room] of puzzleRooms) {
     if (now - room.createdAt > ROOM_TTL_MS) {
       clearTimeout(room.roundTimer);
@@ -2655,6 +2906,10 @@ app.get('/scramble', (req, res) => {
 
 app.get('/ttt', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'ttt.html'));
+});
+
+app.get('/gofish', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'gofish.html'));
 });
 
 app.get('/puzzle', (req, res) => {

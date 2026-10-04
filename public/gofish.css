@@ -1,0 +1,207 @@
+/* Go Fish — self-contained styling. Reuses duel.css's stage shell
+   (topbar/HUD/end-screen) and style.css's shared setup-panel classes; only
+   what's unique to this game lives here. */
+
+.gofish-middle {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 0 14px 10px;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.gofish-table {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 0;
+  flex: 1;
+}
+
+.gofish-opponent-row,
+.gofish-my-row {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.gofish-pile-label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.75);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.gofish-facedown-hand,
+.gofish-hand {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px;
+  max-width: 100%;
+}
+
+/* A generic playing-card face: rounded rectangle, white, rank top-left,
+   suit centered — red suits get red text via .red, everything else
+   (black suits, card backs) stays dark ink. */
+.gofish-card {
+  width: 38px;
+  height: 54px;
+  border-radius: 7px;
+  background: white;
+  box-shadow: 0 2px 6px rgba(20, 8, 40, 0.3);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  font-weight: 800;
+  color: var(--ink);
+  line-height: 1;
+  flex-shrink: 0;
+  user-select: none;
+}
+
+.gofish-card .rank {
+  font-size: 0.72rem;
+}
+
+.gofish-card .suit {
+  font-size: 1.1rem;
+  margin-top: 2px;
+}
+
+.gofish-card.red {
+  color: #d1335b;
+}
+
+.gofish-card.back {
+  background: linear-gradient(135deg, var(--accent), var(--accent-dark));
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 1.3rem;
+}
+
+/* My own cards are real buttons — tapping one asks for that rank. */
+button.gofish-card {
+  appearance: none;
+  border: none;
+  cursor: pointer;
+  transition: transform 0.12s ease;
+}
+
+button.gofish-card:active {
+  transform: translateY(2px) scale(0.96);
+}
+
+button.gofish-card:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.gofish-pond-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  flex-shrink: 0;
+}
+
+.gofish-pond {
+  position: relative;
+  width: 38px;
+  height: 54px;
+  flex-shrink: 0;
+}
+
+.gofish-pond-card {
+  width: 100%;
+  height: 100%;
+  border-radius: 7px;
+  background: linear-gradient(135deg, var(--accent), var(--accent-dark));
+  color: rgba(255, 255, 255, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.3rem;
+  box-shadow: 0 2px 6px rgba(20, 8, 40, 0.3);
+}
+
+.gofish-pond-count {
+  position: absolute;
+  bottom: -6px;
+  right: -6px;
+  background: white;
+  color: var(--ink);
+  font-size: 0.68rem;
+  font-weight: 800;
+  border-radius: 999px;
+  padding: 1px 6px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+}
+
+.gofish-status {
+  margin: 0;
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: white;
+  text-align: center;
+}
+
+.gofish-feed {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column-reverse;
+  gap: 4px;
+  padding: 2px 0;
+}
+
+.gofish-feed-item {
+  font-size: 0.78rem;
+  color: rgba(255, 255, 255, 0.85);
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+  padding: 4px 10px;
+  align-self: center;
+  text-align: center;
+}
+
+.gofish-books {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 4px;
+  min-height: 20px;
+}
+
+.gofish-book-chip {
+  font-size: 0.68rem;
+  font-weight: 800;
+  color: var(--ink);
+  background: #ffd166;
+  border-radius: 999px;
+  padding: 2px 8px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+}
+
+@media (orientation: landscape) {
+  .gofish-table {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+
+  .gofish-opponent-row,
+  .gofish-my-row {
+    flex: 1 1 40%;
+  }
+
+  .gofish-pond-row,
+  .gofish-feed {
+    flex: 1 1 100%;
+  }
+}
