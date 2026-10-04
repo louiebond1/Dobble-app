@@ -2146,6 +2146,10 @@ io.on('connection', (socket) => {
         opponentName: opponent.name,
         rank,
         count: matches.length,
+        // Once a player hands these cards over, both players know exactly
+        // which physical cards moved. Sending them lets the clients animate
+        // the real cards instead of a generic placeholder.
+        cards: matches.map((card) => ({ rank: card.rank, suit: card.suit })),
         books: completedBooks,
         keepsTurn: true,
       });
