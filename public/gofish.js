@@ -36,6 +36,261 @@ const TURN_TIMING = {
 
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+const GF_STORAGE = {
+  tutorial: 'gofish:tutorial:v2',
+  soundMuted: 'gofish:sound-muted:v1',
+  soloRecord: 'gofish:solo-record:v1',
+  duoRecord: 'gofish:duo-record:v1',
+};
+
+function gfStorageGet(key, fallback = null) {
+  try {
+    const raw = localStorage.getItem(key);
+    return raw == null ? fallback : JSON.parse(raw);
+  } catch (e) {
+    return fallback;
+  }
+}
+
+function gfStorageSet(key, value) {
+  try { localStorage.setItem(key, JSON.stringify(value)); } catch (e) {}
+}
+
+let gfSoundMuted = !!gfStorageGet(GF_STORAGE.soundMuted, false);
+let gfAudioContext = null;
+
+function ensureGfAudio() {
+  if (gfSoundMuted) return null;
+  try {
+    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+    if (!AudioCtx) return null;
+    if (!gfAudioContext) gfAudioContext = new AudioCtx();
+    if (gfAudioContext.state === 'suspended') gfAudioContext.resume().catch(() => {});
+    return gfAudioContext;
+  } catch (e) {
+    return null;
+  }
+}
+
+function gfNote(freq, duration = .08, {
+  type = 'sine',
+  gain = .025,
+  delay = 0,
+  endFreq = null,
+} = {}) {
+  const ctx = ensureGfAudio();
+  if (!ctx) return;
+  const start = ctx.currentTime + delay;
+  const osc = ctx.createOscillator();
+  const amp = ctx.createGain();
+  osc.type = type;
+  osc.frequency.setValueAtTime(freq, start);
+  if (endFreq) osc.frequency.exponentialRampToValueAtTime(Math.max(1, endFreq), start + duration);
+  amp.gain.setValueAtTime(.0001, start);
+  amp.gain.exponentialRampToValueAtTime(gain, start + .012);
+  amp.gain.exponentialRampToValueAtTime(.0001, start + duration);
+  osc.connect(amp);
+  amp.connect(ctx.destination);
+  osc.start(start);
+  osc.stop(start + duration + .02);
+}
+
+function gfSound(kind) {
+  if (gfSoundMuted) return;
+  if (kind === 'slide') gfNote(260, .10, { type: 'triangle', gain: .014, endFreq: 175 });
+  else if (kind === 'flip') gfNote(860, .055, { type: 'sine', gain: .020, endFreq: 1120 });
+  else if (kind === 'land') gfNote(165, .075, { type: 'triangle', gain: .018, endFreq: 125 });
+  else if (kind === 'fish') gfNote(185, .18, { type: 'sine', gain: .020, endFreq: 145 });
+  else if (kind === 'turn') gfNote(440, .06, { type: 'sine', gain: .012, endFreq: 520 });
+  else if (kind === 'book') {
+    gfNote(520, .13, { type: 'sine', gain: .022 });
+    gfNote(780, .14, { type: 'sine', gain: .020, delay: .08 });
+    gfNote(1040, .18, { type: 'sine', gain: .018, delay: .16 });
+  } else if (kind === 'lucky') {
+    gfNote(720, .10, { type: 'triangle', gain: .020 });
+    gfNote(1080, .16, { type: 'sine', gain: .020, delay: .09 });
+  } else if (kind === 'final') {
+    gfNote(196, .20, { type: 'triangle', gain: .022 });
+    gfNote(294, .22, { type: 'triangle', gain: .020, delay: .15 });
+    gfNote(392, .32, { type: 'sine', gain: .018, delay: .31 });
+  }
+}
+
+document.addEventListener('pointerdown', () => ensureGfAudio(), { once: true, capture: true });
+
+let cpuBubbleTimer = null;
+function showCpuBubble(text, { memory = false, duration = 1300 } = {}) {
+  if (mode !== 'solo') return;
+  const bubble = el('cpuBubble');
+  if (!bubble) return;
+  clearTimeout(cpuBubbleTimer);
+  bubble.textContent = text;
+  bubble.classList.remove('hidden', 'show', 'memory');
+  bubble.classList.toggle('memory', memory);
+  void bubble.offsetWidth;
+  bubble.classList.add('show');
+  cpuBubbleTimer = setTimeout(() => bubble.classList.add('hidden'), duration);
+}
+
+function cpuLine(lines) {
+  return lines[Math.floor(Math.random() * lines.length)];
+}
+
+let tutorialMode = false;
+let coachStep = null;
+const tutorialSeen = new Set();
+let coachTimer = null;
+
+function startTutorialIfNeeded() {
+  tutorialMode = !gfStorageGet(GF_STORAGE.tutorial, false);
+  tutorialSeen.clear();
+  coachStep = null;
+  const coach = el('coachCard');
+  if (coach) coach.classList.add('hidden');
+}
+
+function finishTutorial() {
+  if (!tutorialMode) return;
+  gfStorageSet(GF_STORAGE.tutorial, true);
+  tutorialMode = false;
+  const coach = el('coachCard');
+  if (coach) coach.classList.add('hidden');
+}
+
+function showCoach(step, text, { kicker = 'FIRST GAME', autoHide = 0 } = {}) {
+  if (!tutorialMode || tutorialSeen.has(step)) return;
+  tutorialSeen.add(step);
+  coachStep = step;
+  clearTimeout(coachTimer);
+  el('coachKicker').textContent = kicker;
+  el('coachText').textContent = text;
+  el('coachCard').classList.remove('hidden');
+  if (autoHide) coachTimer = setTimeout(() => el('coachCard').classList.add('hidden'), autoHide);
+}
+
+function hideCoach() {
+  clearTimeout(coachTimer);
+  el('coachCard').classList.add('hidden');
+}
+
+el('coachDismiss').addEventListener('click', hideCoach);
+
+function emptySoloRecord() {
+  return { games: 0, wins: 0, losses: 0, draws: 0, streak: 0, bestStreak: 0 };
+}
+
+function loadSoloRecord() {
+  return { ...emptySoloRecord(), ...(gfStorageGet(GF_STORAGE.soloRecord, {}) || {}) };
+}
+
+function updateSoloRecord(result) {
+  const record = loadSoloRecord();
+  record.games += 1;
+  if (result.winner === 'me') {
+    record.wins += 1;
+    record.streak += 1;
+    record.bestStreak = Math.max(record.bestStreak, record.streak);
+  } else if (result.winner === 'cpu') {
+    record.losses += 1;
+    record.streak = 0;
+  } else {
+    record.draws += 1;
+    record.streak = 0;
+  }
+  gfStorageSet(GF_STORAGE.soloRecord, record);
+  return record;
+}
+
+function soloRecordText(record = loadSoloRecord()) {
+  if (!record.games) return '';
+  return `On this phone · <strong>You ${record.wins}</strong> – ${record.losses} CPU${record.draws ? ` · ${record.draws} draw${record.draws === 1 ? '' : 's'}` : ''}${record.bestStreak > 1 ? ` · best streak ${record.bestStreak}` : ''}`;
+}
+
+function renderSetupRecord() {
+  const strip = el('setupRecordStrip');
+  if (!strip) return;
+  const text = soloRecordText();
+  strip.classList.toggle('hidden', !text);
+  strip.innerHTML = text;
+}
+
+function loadDuoRecord() {
+  return { louie: 0, ariel: 0, draws: 0, games: 0, ...(gfStorageGet(GF_STORAGE.duoRecord, {}) || {}) };
+}
+
+function updateDuoRecord(winnerName) {
+  const record = loadDuoRecord();
+  record.games += 1;
+  if (winnerName === 'Louie') record.louie += 1;
+  else if (winnerName === 'Ariel') record.ariel += 1;
+  else record.draws += 1;
+  gfStorageSet(GF_STORAGE.duoRecord, record);
+  return record;
+}
+
+function duoRecordText(record = loadDuoRecord()) {
+  if (!record.games) return '';
+  return `On this phone · <strong>Louie ${record.louie}</strong> – ${record.ariel} Ariel${record.draws ? ` · ${record.draws} draw${record.draws === 1 ? '' : 's'}` : ''}`;
+}
+
+let activeFinalOrder = [];
+function displayFinalName(name) {
+  if (name === 'me' || name === currentPlayerName() || name === myName) return 'You';
+  if (name === 'cpu') return 'CPU';
+  return name || 'Opponent';
+}
+
+function renderFinalOrder(order = activeFinalOrder, currentIndex = 0) {
+  activeFinalOrder = (order || []).map(displayFinalName);
+  const markup = activeFinalOrder.map((name, index) => {
+    const cls = index < currentIndex ? ' done' : index === currentIndex ? ' current' : '';
+    return `<span class="gf-final-order-step${cls}"><b>${index + 1}</b>${escapeResultText(name)}</span>`;
+  }).join('');
+  const overlay = el('finalRoundOrder');
+  if (overlay) overlay.innerHTML = markup;
+
+  const progress = el('finalProgress');
+  if (!progress) return;
+  if (!activeFinalOrder.length) {
+    progress.classList.add('hidden');
+    progress.innerHTML = '';
+    return;
+  }
+  progress.classList.remove('hidden');
+  progress.innerHTML = activeFinalOrder.map((name, index) => {
+    const cls = index < currentIndex ? ' done' : index === currentIndex ? ' current' : '';
+    return `<span class="gf-final-progress-step${cls}"><b>${index + 1}</b>${escapeResultText(name)}</span>`;
+  }).join('');
+}
+
+let lastTurnFocus = null;
+function updateTurnFocus(data) {
+  if (!data) return;
+  gameArea.classList.toggle('gf-turn-me', !!data.isMyTurn);
+  gameArea.classList.toggle('gf-turn-them', !data.isMyTurn);
+  const focus = data.turnName || (data.isMyTurn ? currentPlayerName() : 'opponent');
+  if (focus && lastTurnFocus && focus !== lastTurnFocus && !actionAnimating) gfSound('turn');
+  lastTurnFocus = focus;
+}
+
+function updatePondPressure(count) {
+  gameArea.classList.toggle('gf-pond-low', count > 0 && count <= 5);
+  gameArea.classList.toggle('gf-pond-critical', count > 0 && count <= 3);
+  gameArea.classList.toggle('gf-last-card', count === 1);
+
+  const warning = el('pondWarning');
+  const title = el('pondTitle');
+  if (!warning || !title) return;
+  warning.classList.toggle('hidden', count > 5);
+  title.textContent = count === 0 ? 'Pond empty' : 'Fish pond';
+  if (count === 1) warning.textContent = 'LAST CARD';
+  else if (count > 1 && count <= 3) warning.textContent = `${count} LEFT`;
+  else if (count > 3 && count <= 5) warning.textContent = 'GETTING LOW';
+  else if (count === 0) warning.textContent = 'FINAL ROUND';
+  else warning.textContent = '';
+}
+
+
 const GF_PHASES = Object.freeze({
   SETUP: 'SETUP',
   PLAYER_SELECTING: 'PLAYER_SELECTING',
