@@ -1043,84 +1043,92 @@ el('playAgainBtn').addEventListener('click', () => {
   socket.emit('gofish:host:start', { code: roomCode, rounds: totalRounds });
 });
 
-// --- Solo vs CPU (local) ---------------------------------------------------
+// --- Solo vs CPU (authoritative local state machine) ----------------------
 
 let soloName = 'You';
-let soloTotalRounds = 5;
 let soloHands = { me: [], cpu: [] };
 let soloBooks = { me: [], cpu: [] };
-let soloScore = { me: 0, cpu: 0 };
 let soloPond = [];
 let soloTurn = 'me';
 let soloGameActive = false;
+let soloFinal = { active: false, order: [], index: 0 };
+let soloLastBookOwner = null;
+let soloCpuMemory = new Map();
+let soloMemoryClock = 0;
+let soloStats = null;
 
-function soloCheckBooks(who) {
-  const completed = [];
-  const hand = soloHands[who];
-  const counts = new Map();
-  for (const c of hand) counts.set(c.rank, (counts.get(c.rank) || 0) + 1);
-  for (const [rank, count] of counts) {
-    if (count >= 4) {
-      soloHands[who] = soloHands[who].filter((c) => c.rank !== rank);
-      soloBooks[who].push(rank);
-      completed.push(rank);
-    }
+function freshSoloStats() {
+  return {
+    me: { successfulAsks: 0, luckyCatches: 0, booksCompleted: 0, currentStreak: 0, longestTurnStreak: 0 },
+    cpu: { successfulAsks: 0, luckyCatches: 0, booksCompleted: 0, currentStreak: 0, longestTurnStreak: 0 },
+  };
+}
+
+function syncSoloHud() {
+  players = [
+    { name: soloName, score: soloBooks.me.length },
+    { name: 'CPU', score: soloBooks.cpu.length },
+  ];
+  updateDuelHud();
+}
+
+function rememberHumanRank(rank, confidence = 3) {
+  soloMemoryClock += 1;
+  const existing = soloCpuMemory.get(rank);
+  soloCpuMemory.set(rank, {
+    confidence: Math.max(confidence, existing ? existing.confidence : 0),
+    seenAt: soloMemoryClock,
+  });
+}
+
+function forgetHumanRank(rank) {
+  soloCpuMemory.delete(rank);
+}
+
+function decayCpuMemory() {
+  for (const [rank, info] of soloCpuMemory) {
+    const next = info.confidence * 0.92;
+    if (next < 0.55) soloCpuMemory.delete(rank);
+    else soloCpuMemory.set(rank, { ...info, confidence: next });
   }
+}
+
+function noteSoloAsk(who) {
+  soloStats[who].currentStreak += 1;
+  soloStats[who].longestTurnStreak = Math.max(
+    soloStats[who].longestTurnStreak,
+    soloStats[who].currentStreak
+  );
+}
+
+function endSoloTurnStreak(who) {
+  soloStats[who].currentStreak = 0;
+}
+
+function soloCheckBooks(who, { recordRecent = true } = {}) {
+  const completed = [];
+  const counts = new Map();
+  for (const card of soloHands[who]) counts.set(card.rank, (counts.get(card.rank) || 0) + 1);
+
+  for (const [rank, count] of counts) {
+    if (count < 4) continue;
+    soloHands[who] = soloHands[who].filter((card) => card.rank !== rank);
+    soloBooks[who].push(rank);
+    soloStats[who].booksCompleted += 1;
+    completed.push(rank);
+
+    // A completed human book is public information and removes that rank
+    // from play, so CPU memory for it is no longer useful.
+    if (who === 'me') forgetHumanRank(rank);
+    if (recordRecent) soloLastBookOwner = who;
+  }
+
+  if (completed.length) syncSoloHud();
   return completed;
 }
 
 function soloTotalBooks() {
   return soloBooks.me.length + soloBooks.cpu.length;
-}
-
-el('soloStartBtn').addEventListener('click', () => {
-  soloName = el('soloNameInput').value.trim() || 'You';
-  soloTotalRounds = parseInt(el('roundsInput').value, 10) || 5;
-  startSoloGame();
-});
-
-function startSoloGame() {
-  mode = 'solo';
-  actionQueue.length = 0;
-  actionAnimating = false;
-  askPending = false;
-  pendingGameState = null;
-  lastGameState = null;
-  roundNumber = 0;
-  totalRounds = soloTotalRounds;
-  soloScore = { me: 0, cpu: 0 };
-  players = [{ name: soloName, score: 0 }, { name: 'CPU', score: 0 }];
-
-  setupWrap.classList.add('hidden');
-  lobby.classList.add('hidden');
-  gameOver.classList.add('hidden');
-  gameArea.classList.remove('hidden');
-  el('hudP2').classList.remove('hidden');
-  updateDuelHud();
-
-  startSoloRound();
-}
-
-function startSoloRound() {
-  if (roundNumber >= totalRounds) return endSoloGame();
-  roundNumber += 1;
-  el('roundNum').textContent = roundNumber;
-  el('totalRounds').textContent = totalRounds;
-  el('eventBanner').textContent = '';
-
-  const deck = shuffle(buildDeck());
-  soloHands = { me: deck.splice(0, 7), cpu: deck.splice(0, 7) };
-  soloBooks = { me: [], cpu: [] };
-  soloPond = deck;
-  // Alternate who asks first each deal, same convention as duo mode.
-  soloTurn = (roundNumber - 1) % 2 === 0 ? 'me' : 'cpu';
-  soloGameActive = true;
-
-  selectedRank = null;
-  soloCheckBooks('me');
-  soloCheckBooks('cpu');
-  soloBeginTurn();
-  showEventBanner(`${soloTurn === 'me' ? 'You go' : 'CPU goes'} first`);
 }
 
 function getSoloStateSnapshot() {
@@ -1135,8 +1143,11 @@ function getSoloStateSnapshot() {
     pondCount: soloPond.length,
     isMyTurn: soloGameActive && soloTurn === 'me',
     turnName: soloTurn === 'me' ? soloName : 'CPU',
-    askableRanks: [...new Set(soloHands.me.map((c) => c.rank))],
-    actionLocked: actionAnimating || askPending,
+    askableRanks: [...new Set(soloHands.me.map((card) => card.rank))],
+    actionLocked: actionAnimating || askPending ||
+      ![GF_PHASES.PLAYER_SELECTING, GF_PHASES.FINAL_ROUND_PLAYER].includes(gamePhase),
+    phase: gamePhase,
+    finalRound: soloFinal.active,
   };
 }
 
@@ -1144,58 +1155,218 @@ function soloRenderState() {
   applyGameState(getSoloStateSnapshot());
 }
 
-function soloBeginTurn() {
-  if (!soloGameActive) return;
+el('soloStartBtn').addEventListener('click', () => {
+  soloName = el('soloNameInput').value.trim() || 'You';
+  startSoloGame();
+});
+
+function startSoloGame() {
+  mode = 'solo';
+  actionQueue.length = 0;
+  actionAnimating = false;
+  askPending = false;
+  pendingGameState = null;
+  pendingRoundResult = null;
+  pendingFinalRoundIntro = null;
+  lastGameState = null;
+  selectedRank = null;
+
+  totalRounds = 1;
+  roundNumber = 1;
+  el('roundNum').textContent = '1';
+  el('totalRounds').textContent = '1';
+  el('eventBanner').textContent = '';
+
+  const deck = shuffle(buildDeck());
+  soloHands = { me: deck.splice(0, 7), cpu: deck.splice(0, 7) };
+  soloBooks = { me: [], cpu: [] };
+  soloPond = deck;
+  soloTurn = Math.random() < 0.5 ? 'me' : 'cpu';
+  soloGameActive = true;
+  soloFinal = { active: false, order: [], index: 0 };
+  soloLastBookOwner = null;
+  soloCpuMemory = new Map();
+  soloMemoryClock = 0;
+  soloStats = freshSoloStats();
+
+  // Setup books are automatic. They count, but because setup is simultaneous
+  // they do not decide the "most recent book" tiebreak.
+  soloCheckBooks('me', { recordRecent: false });
+  soloCheckBooks('cpu', { recordRecent: false });
+  syncSoloHud();
+
+  setupWrap.classList.add('hidden');
+  lobby.classList.add('hidden');
+  gameOver.classList.add('hidden');
+  gameArea.classList.remove('hidden');
+  el('finalRoundOverlay').classList.add('hidden');
+  el('hudP2').classList.remove('hidden');
+  el('finalBoard').classList.add('hidden');
+
+  soloBeginTurn();
+  showEventBanner(soloTurn === 'me' ? 'You start' : 'CPU starts');
+}
+
+function chooseCpuRank() {
+  // Deliberately only reads CPU cards + public memory. It never inspects
+  // soloHands.me, so the CPU cannot cheat.
+  decayCpuMemory();
+  const counts = new Map();
+  for (const card of soloHands.cpu) counts.set(card.rank, (counts.get(card.rank) || 0) + 1);
+  const options = [...counts.entries()];
+  if (!options.length) return null;
+
+  const weighted = options.map(([rank, count]) => {
+    const memory = soloCpuMemory.get(rank);
+    let weight = 1 + count * 3;
+    if (count >= 2) weight += 2;
+    if (count >= 3) weight += 4;
+    if (memory) weight += memory.confidence * 7;
+    // Small noise keeps identical positions from feeling scripted.
+    weight += Math.random() * 2.5;
+    return { rank, weight };
+  });
+
+  const total = weighted.reduce((sum, item) => sum + item.weight, 0);
+  let roll = Math.random() * total;
+  for (const item of weighted) {
+    roll -= item.weight;
+    if (roll <= 0) return item.rank;
+  }
+  return weighted[weighted.length - 1].rank;
+}
+
+async function soloBeginTurn() {
+  if (!soloGameActive || soloFinal.active || actionAnimating) return;
+
   const hand = soloHands[soloTurn];
   if (hand.length === 0) {
     if (soloPond.length > 0) {
-      hand.push(soloPond.pop());
-      soloCheckBooks(soloTurn);
-      if (soloTotalBooks() >= RANKS.length) return soloEndDeal();
-    } else {
-      return soloEndDeal();
+      await soloReplenish(soloTurn);
+      return;
     }
+    // No hand and no pond means the normal phase is over.
+    await soloEnterFinalRound(soloTurn);
+    return;
   }
-  soloRenderState();
-  if (soloTurn === 'cpu') setTimeout(runCpuTurn, 900);
+
+  selectedRank = null;
+  if (soloTurn === 'me') {
+    setGamePhase(GF_PHASES.PLAYER_SELECTING);
+    soloRenderState();
+  } else {
+    setGamePhase(GF_PHASES.CPU_THINKING);
+    soloRenderState();
+    const delay = 750 + Math.floor(Math.random() * 450);
+    setTimeout(runCpuTurn, delay);
+  }
+}
+
+async function soloReplenish(who) {
+  if (!soloGameActive || soloFinal.active || actionAnimating || soloPond.length === 0) return;
+  actionAnimating = true;
+  askPending = false;
+
+  const drawn = soloPond.pop();
+  soloHands[who].push(drawn);
+  const books = soloCheckBooks(who);
+  const emptiedPond = soloPond.length === 0;
+  const action = {
+    kind: 'replenish',
+    askerName: who === 'me' ? soloName : 'CPU',
+    opponentName: who === 'me' ? 'CPU' : soloName,
+    drawnCard: who === 'me' ? drawn : null,
+    books,
+    pondEmpty: false,
+    emptiedPond,
+    keepsTurn: true,
+  };
+
+  try {
+    await playTurnAction(action);
+    applyPendingAfterAction(action);
+    if (books.length) await wait(TURN_TIMING.book);
+  } finally {
+    actionAnimating = false;
+    askPending = false;
+    gameArea.classList.remove('gf-resolving');
+  }
+
+  if (emptiedPond) {
+    await soloEnterFinalRound(who);
+    return;
+  }
+  await soloBeginTurn();
 }
 
 function soloAsk(rank) {
-  if (actionAnimating || askPending || !soloGameActive || soloTurn !== 'me' || !soloHands.me.some((c) => c.rank === rank)) return;
+  if (
+    actionAnimating ||
+    askPending ||
+    !soloGameActive ||
+    soloTurn !== 'me' ||
+    !humanSelectionPhase() ||
+    !soloHands.me.some((card) => card.rank === rank)
+  ) return;
+
   lockVisibleHand();
+  setGamePhase(GF_PHASES.PLAYER_ASKING);
   showEventBanner(`You ask CPU for ${rankPlural(rank)}…`, { persist: true });
   soloResolveAsk('me', 'cpu', rank, soloName, 'CPU');
 }
 
 function runCpuTurn() {
-  if (actionAnimating || !soloGameActive || soloTurn !== 'cpu') return;
-  // Prefer the rank it holds the most copies of — a decent, not perfect, heuristic.
-  const counts = new Map();
-  for (const c of soloHands.cpu) counts.set(c.rank, (counts.get(c.rank) || 0) + 1);
-  let bestRank = null;
-  let bestCount = 0;
-  for (const [rank, count] of counts) {
-    if (count > bestCount || (count === bestCount && Math.random() < 0.5)) {
-      bestRank = rank;
-      bestCount = count;
+  if (
+    actionAnimating ||
+    !soloGameActive ||
+    soloTurn !== 'cpu' ||
+    ![GF_PHASES.CPU_THINKING, GF_PHASES.FINAL_ROUND_CPU].includes(gamePhase)
+  ) return;
+
+  const rank = chooseCpuRank();
+  if (!rank) {
+    if (soloFinal.active) {
+      soloSkipFinalTurn('cpu');
+    } else {
+      soloBeginTurn();
     }
+    return;
   }
-  if (!bestRank) return soloBeginTurn();
-  soloResolveAsk('cpu', 'me', bestRank, 'CPU', soloName);
+
+  setGamePhase(GF_PHASES.CPU_ASKING);
+  soloResolveAsk('cpu', 'me', rank, 'CPU', soloName);
 }
 
 async function soloResolveAsk(askerKey, targetKey, rank, askerName, targetName) {
-  if (actionAnimating) return;
+  if (actionAnimating || !soloGameActive) return;
+  const finalRound = soloFinal.active;
+  if (finalRound) {
+    const expected = soloFinal.order[soloFinal.index];
+    if (expected !== askerKey) return;
+  }
+
   actionAnimating = true;
+  noteSoloAsk(askerKey);
+
+  // A human asking for a rank publicly proves they hold that rank right now.
+  if (askerKey === 'me') rememberHumanRank(rank, 3.5);
 
   const asker = soloHands[askerKey];
   const target = soloHands[targetKey];
-  const matches = target.filter((c) => c.rank === rank);
+  const matches = target.filter((card) => card.rank === rank);
   let action;
+  let nextNormalTurn = targetKey;
+  let emptiedPond = false;
 
   if (matches.length > 0) {
-    soloHands[targetKey] = target.filter((c) => c.rank !== rank);
+    soloHands[targetKey] = target.filter((card) => card.rank !== rank);
     soloHands[askerKey] = asker.concat(matches);
+    soloStats[askerKey].successfulAsks += 1;
+
+    // These are public transfers, so CPU memory can update without cheating.
+    if (askerKey === 'me') rememberHumanRank(rank, 5);
+    else forgetHumanRank(rank);
+
     const books = soloCheckBooks(askerKey);
     action = {
       kind: 'take',
@@ -1205,7 +1376,22 @@ async function soloResolveAsk(askerKey, targetKey, rank, askerName, targetName) 
       count: matches.length,
       cards: matches.map((card) => ({ rank: card.rank, suit: card.suit })),
       books,
-      keepsTurn: true,
+      keepsTurn: !finalRound,
+      finalRound,
+    };
+    nextNormalTurn = askerKey;
+  } else if (finalRound) {
+    if (askerKey === 'cpu') forgetHumanRank(rank);
+    action = {
+      kind: 'final-miss',
+      askerName,
+      opponentName: targetName,
+      rank,
+      count: 0,
+      books: [],
+      keepsTurn: false,
+      finalRound: true,
+      pondEmpty: true,
     };
   } else {
     let drawn = null;
@@ -1213,8 +1399,14 @@ async function soloResolveAsk(askerKey, targetKey, rank, askerName, targetName) 
       drawn = soloPond.pop();
       soloHands[askerKey].push(drawn);
     }
+
     const books = soloCheckBooks(askerKey);
     const matched = !!drawn && drawn.rank === rank;
+    if (matched) soloStats[askerKey].luckyCatches += 1;
+    if (askerKey === 'cpu' && !matches.length) forgetHumanRank(rank);
+
+    nextNormalTurn = matched ? askerKey : targetKey;
+    emptiedPond = !!drawn && soloPond.length === 0;
     action = {
       kind: 'fish',
       askerName,
@@ -1222,76 +1414,210 @@ async function soloResolveAsk(askerKey, targetKey, rank, askerName, targetName) 
       rank,
       matched,
       pondEmpty: !drawn,
+      emptiedPond,
       drawnCard: askerKey === 'me' ? drawn : null,
       books,
       keepsTurn: matched,
+      finalRound: false,
     };
-    if (!matched) soloTurn = targetKey;
   }
+
+  // State may already know who would normally act next, but the UI keeps the
+  // visible turn frozen until the physical action has completed.
+  if (!finalRound) soloTurn = nextNormalTurn;
 
   try {
     await playTurnAction(action);
     applyPendingAfterAction(action);
-    if (action.books.length) await wait(TURN_TIMING.book);
+    if (action.books && action.books.length) {
+      await wait(TURN_TIMING.book);
+      if (action.matched && !finalRound) showEventBanner('LUCKY CATCH — your turn again', { emphasis: true });
+    }
   } finally {
     actionAnimating = false;
     askPending = false;
     gameArea.classList.remove('gf-resolving');
   }
 
-  if (soloTotalBooks() >= RANKS.length) return soloEndDeal();
-  soloBeginTurn();
+  if (finalRound) {
+    endSoloTurnStreak(askerKey);
+    soloFinal.index += 1;
+    await wait(260);
+    await soloBeginFinalTurn();
+    return;
+  }
+
+  if (!action.keepsTurn) endSoloTurnStreak(askerKey);
+
+  if (emptiedPond) {
+    // Per the final rules, the player who would normally act next gets the
+    // first Final Round ask. The move that emptied the pond is already done.
+    await soloEnterFinalRound(nextNormalTurn);
+    return;
+  }
+
+  if (soloTotalBooks() >= RANKS.length) {
+    // All 52 cards are already in books. There are no legal final asks to
+    // make, so the final-round skipper will close the game cleanly.
+    await soloEnterFinalRound(nextNormalTurn);
+    return;
+  }
+
+  await soloBeginTurn();
 }
 
-function soloEndDeal() {
-  soloGameActive = false;
+async function soloEnterFinalRound(starterKey) {
+  if (!soloGameActive || soloFinal.active) return;
+  soloFinal = {
+    active: true,
+    order: [starterKey, starterKey === 'me' ? 'cpu' : 'me'],
+    index: 0,
+  };
+  selectedRank = null;
+  pendingFinalRoundIntro = { starter: starterKey };
   soloRenderState();
-
-  let winnerName = null;
-  if (soloBooks.me.length > soloBooks.cpu.length) { soloScore.me += 1; winnerName = soloName; }
-  else if (soloBooks.cpu.length > soloBooks.me.length) { soloScore.cpu += 1; winnerName = 'CPU'; }
-  players[0].score = soloScore.me;
-  players[1].score = soloScore.cpu;
-  updateDuelHud();
-
-  showEventBanner(winnerName ? `${winnerName} took this deal` : 'This deal is a tie');
-  if (winnerName === soloName) { hapticSuccess(); playSuccess(); }
-
-  setTimeout(startSoloRound, 3200);
+  await showFinalRoundIntro();
+  pendingFinalRoundIntro = null;
+  await soloBeginFinalTurn();
 }
 
-function soloBestKey(name) {
-  return `gofish-solo-best-${name.trim().toLowerCase()}-${totalRounds}`;
+async function soloSkipFinalTurn(who) {
+  if (!soloFinal.active || soloFinal.order[soloFinal.index] !== who) return;
+  soloTurn = who;
+  setGamePhase(who === 'me' ? GF_PHASES.FINAL_ROUND_PLAYER : GF_PHASES.FINAL_ROUND_CPU);
+  soloRenderState();
+  showEventBanner(who === 'me' ? 'No cards — your final ask is skipped' : 'CPU has no cards — final ask skipped');
+  await wait(950);
+  soloFinal.index += 1;
+  await soloBeginFinalTurn();
 }
 
-function endSoloGame() {
+async function soloBeginFinalTurn() {
+  if (!soloGameActive || !soloFinal.active || actionAnimating) return;
+  if (soloFinal.index >= soloFinal.order.length) {
+    soloFinishGame();
+    return;
+  }
+
+  const who = soloFinal.order[soloFinal.index];
+  soloTurn = who;
+  selectedRank = null;
+
+  if (soloHands[who].length === 0) {
+    await soloSkipFinalTurn(who);
+    return;
+  }
+
+  if (who === 'me') {
+    setGamePhase(GF_PHASES.FINAL_ROUND_PLAYER);
+    soloRenderState();
+    showEventBanner('Your final ask — choose carefully');
+  } else {
+    setGamePhase(GF_PHASES.FINAL_ROUND_CPU);
+    soloRenderState();
+    showEventBanner('CPU has one final ask');
+    const delay = 850 + Math.floor(Math.random() * 350);
+    setTimeout(runCpuTurn, delay);
+  }
+}
+
+function soloDetermineWinner() {
+  const myBooks = soloBooks.me.length;
+  const cpuBooks = soloBooks.cpu.length;
+  if (myBooks !== cpuBooks) {
+    return { winner: myBooks > cpuBooks ? 'me' : 'cpu', reason: 'books' };
+  }
+
+  if (soloHands.me.length !== soloHands.cpu.length) {
+    return { winner: soloHands.me.length > soloHands.cpu.length ? 'me' : 'cpu', reason: 'cards' };
+  }
+
+  if (soloLastBookOwner) {
+    return { winner: soloLastBookOwner, reason: 'recent-book' };
+  }
+
+  return { winner: null, reason: 'draw' };
+}
+
+function escapeResultText(value) {
+  return String(value)
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#039;');
+}
+
+function resultBooksMarkup(books) {
+  if (!books.length) return '<span class="gf-player-meta">None</span>';
+  return books
+    .slice()
+    .sort((a, b) => RANKS.indexOf(a) - RANKS.indexOf(b))
+    .map((rank) => `<span class="gf-mini-book">${rank}</span>`)
+    .join('');
+}
+
+function resultHandMarkup(hand) {
+  if (!hand.length) return '<span class="gf-player-meta">No cards left</span>';
+  return sortHand(hand).map((card) => {
+    const red = RED_SUITS.has(card.suit) ? ' red' : '';
+    return `<span class="gf-mini-card${red}">${card.rank}${card.suit}</span>`;
+  }).join('');
+}
+
+function soloFinishGame() {
+  if (!soloGameActive) return;
+  soloGameActive = false;
+  setGamePhase(GF_PHASES.GAME_OVER);
+  syncSoloHud();
+
+  const result = soloDetermineWinner();
   gameArea.classList.add('hidden');
   gameOver.classList.remove('hidden');
   el('playAgainBtn').classList.remove('hidden');
-  el('finalBoard').classList.remove('hidden');
-  renderLeaderboard('finalBoard', [...players].sort((a, b) => b.score - a.score));
+  el('finalBoard').classList.add('hidden');
 
-  const wins = soloScore.me;
-  el('overTitle').textContent = wins > soloScore.cpu ? '🏆 You beat the CPU!' : wins === soloScore.cpu ? "🤝 Tied with the CPU!" : '🤖 The CPU got you this time.';
-
-  const key = soloBestKey(soloName);
-  let bestEver = null;
-  try {
-    bestEver = JSON.parse(localStorage.getItem(key) || 'null');
-  } catch (e) {
-    bestEver = null;
-  }
-  const improved = !bestEver || wins > bestEver.wins;
-  if (improved) {
-    try {
-      localStorage.setItem(key, JSON.stringify({ wins, total: totalRounds }));
-    } catch (e) {
-      // localStorage unavailable — best-tracking just won't persist
-    }
-    el('soloSummary').textContent = `${wins} / ${totalRounds} deals won — ${bestEver ? '🏆 New personal best!' : '🏆 First run in the books!'}`;
+  if (result.winner === 'me') {
+    el('overTitle').textContent = 'YOU WIN';
+    hapticSuccess();
+    playSuccess();
+  } else if (result.winner === 'cpu') {
+    el('overTitle').textContent = 'YOU LOSE';
   } else {
-    el('soloSummary').textContent = `${wins} / ${totalRounds} deals won · Personal best: ${bestEver.wins} / ${bestEver.total}`;
+    el('overTitle').textContent = 'DRAW';
   }
+
+  const reasonText = {
+    books: 'Most completed books',
+    cards: 'Tiebreak: more cards left in hand',
+    'recent-book': 'Tiebreak: most recent book',
+    draw: 'Still level after every tiebreak',
+  }[result.reason];
+  el('soloSummary').textContent = reasonText;
+
+  el('finalScore').classList.remove('hidden');
+  el('finalScore').innerHTML = `
+    <div class="gf-final-score-side"><strong>${soloBooks.me.length}</strong><span>You · books</span></div>
+    <div class="gf-final-score-vs">vs</div>
+    <div class="gf-final-score-side"><strong>${soloBooks.cpu.length}</strong><span>CPU · books</span></div>`;
+
+  el('finalBooks').classList.remove('hidden');
+  el('finalBooks').innerHTML = `
+    <div class="gf-final-section-title">Completed books</div>
+    <div class="gf-result-row"><span class="gf-result-row-name">You</span><div class="gf-result-mini-cards">${resultBooksMarkup(soloBooks.me)}</div></div>
+    <div class="gf-result-row"><span class="gf-result-row-name">CPU</span><div class="gf-result-mini-cards">${resultBooksMarkup(soloBooks.cpu)}</div></div>`;
+
+  el('finalHands').classList.remove('hidden');
+  el('finalHands').innerHTML = `
+    <div class="gf-final-section-title">Cards left in hand</div>
+    <div class="gf-result-row"><span class="gf-result-row-name">You</span><div class="gf-result-mini-cards">${resultHandMarkup(soloHands.me)}</div></div>
+    <div class="gf-result-row"><span class="gf-result-row-name">CPU</span><div class="gf-result-mini-cards">${resultHandMarkup(soloHands.cpu)}</div></div>`;
+
+  el('finalStats').classList.remove('hidden');
+  el('finalStats').innerHTML = `
+    <div class="gf-stat"><strong>${soloStats.me.luckyCatches}</strong><span>Lucky catches</span></div>
+    <div class="gf-stat"><strong>${soloStats.me.successfulAsks}</strong><span>Successful asks</span></div>
+    <div class="gf-stat"><strong>${soloStats.me.longestTurnStreak}</strong><span>Longest streak</span></div>`;
 }
 
 // --- Party Mashup: auto-join and auto-start a single-round leg ------------
