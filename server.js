@@ -14,7 +14,13 @@ const { TRIVIA_QUESTIONS, TRIVIA_CATEGORIES, TRIVIA_DIFFICULTIES } = require('./
 const { SCRAMBLE_WORDS } = require('./lib/scrambleWords');
 const { COUNTRIES } = require('./lib/countries');
 const { RANKS: CARD_RANKS, buildDeck, shuffle: shuffleDeck } = require('./lib/cards');
-const { buildFinalOrder, determineGoFishWinner } = require('./lib/gofishRules');
+const {
+  buildFinalOrder,
+  legalAskRanks,
+  isLuckyCatch,
+  shouldKeepTurn,
+  determineGoFishWinner,
+} = require('./lib/gofishRules');
 
 const app = express();
 const server = http.createServer(app);
@@ -907,7 +913,7 @@ function goFishBroadcastState(code) {
       pondCount: room.pond.length,
       isMyTurn: room.turn === socketId && room.gameActive,
       turnName: turnPlayer ? turnPlayer.name : null,
-      askableRanks: [...new Set(player.hand.map((card) => card.rank))],
+      askableRanks: legalAskRanks(player.hand),
       actionLocked: !!room.actionLocked,
       phase: room.phase,
       gamePhase: room.phase,
@@ -1056,7 +1062,7 @@ function goFishBeginTurn(code) {
         books: completedBooks,
         pondEmpty: false,
         emptiedPond,
-        keepsTurn: true,
+        keepsTurn: shouldKeepTurn({ successfulAsk: true }),
         finalRound: false,
       },
       { [room.turn]: { drawnCard: drawn } }
@@ -2337,7 +2343,7 @@ io.on('connection', (socket) => {
     const opponentId = goFishOpponentId(room, askerId);
     const opponent = opponentId ? room.players.get(opponentId) : null;
 
-    if (!asker || !opponent || !asker.hand.some((card) => card.rank === rank)) {
+    if (!asker || !opponent || !legalAskRanks(asker.hand).includes(rank)) {
       if (typeof ack === 'function') ack({ ok: false });
       return;
     }
@@ -2414,7 +2420,7 @@ io.on('connection', (socket) => {
     const drawn = room.pond.pop();
     asker.hand.push(drawn);
     const completedBooks = goFishCheckBooks(room, askerId);
-    const luckyCatch = drawn.rank === rank;
+    const luckyCatch = isLuckyCatch(rank, drawn);
     if (luckyCatch) asker.stats.luckyCatches += 1;
 
     const nextPlayerId = luckyCatch ? askerId : opponentId;
@@ -2434,7 +2440,7 @@ io.on('connection', (socket) => {
         pondEmpty: false,
         emptiedPond,
         books: completedBooks,
-        keepsTurn: luckyCatch,
+        keepsTurn: shouldKeepTurn({ askedRank: rank, drawnCard: drawn }),
         finalRound: false,
       },
       { [askerId]: { drawnCard: drawn } }
