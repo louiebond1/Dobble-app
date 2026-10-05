@@ -712,9 +712,17 @@ async function playTurnAction(action) {
   const targetName = action.opponentName || 'your opponent';
   gameArea.classList.add('gf-resolving');
 
-  if (action.kind === 'replenish') {
+  if (action.kind === 'skip') {
+    setGamePhase(GF_PHASES.FINAL_ROUND_INTRO);
+    showEventBanner(
+      mine ? 'No cards left — your final ask is skipped' : `${action.askerName} has no cards — final ask skipped`,
+      { persist: true }
+    );
+    await wait(650);
+  } else if (action.kind === 'replenish') {
     setGamePhase(GF_PHASES.DRAWING);
-    showEventBanner(mine ? 'Your hand is empty — draw one' : `${action.askerName} draws back in`, { persist: true });
+    showEventBanner(mine ? 'Your hand is empty — drawing one' : `${action.askerName} draws back in`, { persist: true });
+    await wait(180);
   } else {
     setGamePhase(mine ? GF_PHASES.PLAYER_ASKING : GF_PHASES.CPU_ASKING);
     showEventBanner(
@@ -735,10 +743,11 @@ async function playTurnAction(action) {
       );
     } else if (action.kind === 'final-miss') {
       showEventBanner(mine ? 'Nothing there' : 'You have none', { persist: true, emphasis: true });
+      await wait(260);
     } else {
       setGamePhase(GF_PHASES.GO_FISH);
       showEventBanner(mine ? 'GO FISH' : `${action.askerName} goes fishing`, { persist: true, emphasis: true });
-      await wait(220);
+      await wait(260);
       setGamePhase(GF_PHASES.DRAWING);
     }
   }
@@ -753,26 +762,31 @@ async function playTurnAction(action) {
 
   if (nextState) await animateStateTransition(action, nextState);
 
-  if (action.books && action.books.length) {
-    setGamePhase(GF_PHASES.BOOK_COMPLETING);
-  }
+  if (action.books && action.books.length) setGamePhase(GF_PHASES.BOOK_COMPLETING);
   await wait(TURN_TIMING.settle);
 }
 
-function applyPendingAfterAction(action) {
+async function applyPendingAfterAction(action) {
   const mine = action.askerName === currentPlayerName();
 
   if (action.books && action.books.length) {
     const who = mine ? 'You' : action.askerName;
     showEventBanner(`${who} completed the book of ${rankPlural(action.books[0])}`, { book: true });
+    await wait(TURN_TIMING.book);
+  }
+
+  if (action.finalRoundStarts) {
+    await showFinalRoundIntro();
     return;
   }
 
   if (action.finalRound) {
-    if (action.kind === 'take') {
-      showEventBanner(mine ? 'Got them — final ask complete' : `${action.askerName} got them`);
+    if (action.kind === 'skip') {
+      showEventBanner(mine ? 'Your final turn is skipped' : `${action.askerName}’s final turn is skipped`);
+    } else if (action.kind === 'take') {
+      showEventBanner(mine ? 'Got them — final ask complete' : `${action.askerName} got them — final ask complete`);
     } else {
-      showEventBanner(mine ? 'Nothing there — final ask complete' : `${action.askerName} found nothing`);
+      showEventBanner(mine ? 'Nothing there — final ask complete' : `${action.askerName} found nothing — final ask complete`);
     }
     return;
   }
@@ -785,8 +799,8 @@ function applyPendingAfterAction(action) {
     }
   } else if (action.kind === 'take') {
     showEventBanner(mine ? 'Got them — your turn again' : `${action.askerName} goes again`);
-  } else if (action.matched) {
-    showEventBanner('LUCKY CATCH', { emphasis: true });
+  } else if (action.luckyCatch || action.matched) {
+    showEventBanner('LUCKY CATCH — go again', { emphasis: true });
   } else if (mine && action.drawnCard) {
     showEventBanner(`You drew ${action.drawnCard.rank}${action.drawnCard.suit} — ${action.opponentName}’s turn`);
   } else {
@@ -799,14 +813,15 @@ async function drainActionQueue() {
   actionAnimating = true;
   askPending = false;
   const action = actionQueue.shift();
+
   try {
     await playTurnAction(action);
-    applyPendingAfterAction(action);
-    if (action.books && action.books.length) await wait(TURN_TIMING.book);
+    await applyPendingAfterAction(action);
   } finally {
     actionAnimating = false;
     askPending = false;
     gameArea.classList.remove('gf-resolving');
+
     if (pendingGameState) {
       const state = pendingGameState;
       pendingGameState = null;
@@ -814,13 +829,16 @@ async function drainActionQueue() {
     } else if (lastGameState) {
       applyGameState(lastGameState);
     }
-    if (pendingRoundResult) {
-      const result = pendingRoundResult;
-      players = result.players;
-      pendingRoundResult = null;
-      updateDuelHud();
-      showEventBanner(result.winnerName ? `${result.winnerName} took this deal` : 'This deal is a tie');
+
+    pendingRoundResult = null;
+
+    if (!actionQueue.length && pendingGameOver) {
+      const over = pendingGameOver;
+      pendingGameOver = null;
+      handleDuoGameOver(over);
+      return;
     }
+
     drainActionQueue();
   }
 }
