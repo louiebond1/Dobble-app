@@ -1158,6 +1158,10 @@ button.gf-card:focus-visible {
 
 .gf-over-card {
   width: min(100%, 390px);
+  max-height: calc(100dvh - 32px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
   padding: 28px 22px 22px;
   border: 1px solid var(--gf-line);
   border-radius: 28px;
