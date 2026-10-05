@@ -14,6 +14,7 @@ const { TRIVIA_QUESTIONS, TRIVIA_CATEGORIES, TRIVIA_DIFFICULTIES } = require('./
 const { SCRAMBLE_WORDS } = require('./lib/scrambleWords');
 const { COUNTRIES } = require('./lib/countries');
 const { RANKS: CARD_RANKS, buildDeck, shuffle: shuffleDeck } = require('./lib/cards');
+const { buildFinalOrder, determineGoFishWinner } = require('./lib/gofishRules');
 
 const app = express();
 const server = http.createServer(app);
@@ -921,21 +922,13 @@ function goFishFeed(code, text) {
 }
 
 function goFishDetermineWinner(room) {
-  const [idA, idB] = room.playerOrder;
-  const a = room.players.get(idA);
-  const b = room.players.get(idB);
-  if (!a || !b) return { winnerId: null, reason: 'draw' };
-
-  if (a.books.length !== b.books.length) {
-    return { winnerId: a.books.length > b.books.length ? idA : idB, reason: 'books' };
-  }
-  if (a.hand.length !== b.hand.length) {
-    return { winnerId: a.hand.length > b.hand.length ? idA : idB, reason: 'cards' };
-  }
-  if (room.lastBookOwnerId && room.players.has(room.lastBookOwnerId)) {
-    return { winnerId: room.lastBookOwnerId, reason: 'recent-book' };
-  }
-  return { winnerId: null, reason: 'draw' };
+  return determineGoFishWinner(
+    room.playerOrder.map((id) => {
+      const player = room.players.get(id);
+      return { id, books: player.books, hand: player.hand };
+    }),
+    room.lastBookOwnerId
+  );
 }
 
 function goFishFinishGame(code) {
@@ -975,9 +968,8 @@ function goFishEnterFinalRound(code, starterId) {
   const room = goFishRooms.get(code);
   if (!room || !room.gameActive || room.phase === 'FINAL_ROUND' || room.phase === 'GAME_OVER') return;
 
-  const otherId = goFishOpponentId(room, starterId);
   room.phase = 'FINAL_ROUND';
-  room.finalRound = { order: [starterId, otherId].filter(Boolean), index: 0 };
+  room.finalRound = { order: buildFinalOrder(room.playerOrder, starterId), index: 0 };
   room.turn = starterId;
   room.actionLocked = true;
 
