@@ -67,11 +67,11 @@ function setGamePhase(phase) {
     [GF_PHASES.GO_FISH]: 'Go Fish',
     [GF_PHASES.DRAWING]: 'Drawing…',
     [GF_PHASES.BOOK_COMPLETING]: 'Book complete',
-    [GF_PHASES.CPU_THINKING]: 'CPU thinking…',
-    [GF_PHASES.CPU_ASKING]: 'CPU asking…',
+    [GF_PHASES.CPU_THINKING]: mode === 'solo' ? 'CPU thinking…' : 'Their turn',
+    [GF_PHASES.CPU_ASKING]: mode === 'solo' ? 'CPU asking…' : 'They’re asking…',
     [GF_PHASES.FINAL_ROUND_INTRO]: 'Final Round',
     [GF_PHASES.FINAL_ROUND_PLAYER]: 'Final Round · Your ask',
-    [GF_PHASES.FINAL_ROUND_CPU]: 'Final Round · CPU ask',
+    [GF_PHASES.FINAL_ROUND_CPU]: mode === 'solo' ? 'Final Round · CPU ask' : 'Final Round · Their ask',
     [GF_PHASES.GAME_OVER]: 'Game over',
   };
   label.textContent = labels[phase] || 'Go Fish';
@@ -1003,6 +1003,7 @@ socket.on('gofish:round:start', (data) => {
   pendingGameState = null;
   pendingRoundResult = null;
   pendingGameOver = null;
+  pendingFinalRoundIntro = null;
   actionQueue.length = 0;
   actionAnimating = false;
   askPending = false;
@@ -1357,8 +1358,7 @@ async function soloReplenish(who) {
 
   try {
     await playTurnAction(action);
-    applyPendingAfterAction(action);
-    if (books.length) await wait(TURN_TIMING.book);
+    await applyPendingAfterAction(action);
   } finally {
     actionAnimating = false;
     askPending = false;
@@ -1501,11 +1501,7 @@ async function soloResolveAsk(askerKey, targetKey, rank, askerName, targetName) 
 
   try {
     await playTurnAction(action);
-    applyPendingAfterAction(action);
-    if (action.books && action.books.length) {
-      await wait(TURN_TIMING.book);
-      if (action.matched && !finalRound) showEventBanner('LUCKY CATCH — your turn again', { emphasis: true });
-    }
+    await applyPendingAfterAction(action);
   } finally {
     actionAnimating = false;
     askPending = false;
