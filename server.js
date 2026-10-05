@@ -909,6 +909,7 @@ function goFishBroadcastState(code) {
       askableRanks: [...new Set(player.hand.map((card) => card.rank))],
       actionLocked: !!room.actionLocked,
       phase: room.phase,
+      gamePhase: room.phase,
       finalRound: room.phase === 'FINAL_ROUND',
       finalRoundIndex: room.finalRound ? room.finalRound.index : null,
     });
@@ -1021,8 +1022,15 @@ function goFishBeginTurn(code) {
 
     if (player.hand.length === 0) {
       room.actionLocked = true;
+      goFishEmitAction(code, {
+        kind: 'skip',
+        askerName: player.name,
+        opponentName: (room.players.get(goFishOpponentId(room, room.turn)) || {}).name || 'Opponent',
+        books: [],
+        keepsTurn: false,
+        finalRound: true,
+      });
       goFishBroadcastState(code);
-      io.to(`gofish:${code}`).emit('gofish:final-skip', { name: player.name });
       setTimeout(() => goFishAdvanceFinalRound(code), 950);
       return;
     }
