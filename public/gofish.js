@@ -869,25 +869,7 @@ el('askBtn').addEventListener('click', () => {
   if (selectedRank) askForRank(selectedRank);
 });
 
-// --- Round-count picker ------------------------------------------------
-
-const ROUND_PRESETS = [3, 5, 7, 10];
-(function renderRoundChips() {
-  const container = el('roundChips');
-  ROUND_PRESETS.forEach((n) => {
-    const btn = document.createElement('button');
-    btn.type = 'button';
-    btn.className = 'chip';
-    btn.dataset.count = n;
-    btn.textContent = n;
-    if (n === 5) btn.classList.add('active');
-    btn.addEventListener('click', () => {
-      container.querySelectorAll('.chip').forEach((c) => c.classList.toggle('active', c === btn));
-      el('roundsInput').value = n;
-    });
-    container.appendChild(btn);
-  });
-})();
+// One shuffled deck is one complete Go Fish game.
 
 // --- Mode toggle ---------------------------------------------------------
 
@@ -981,8 +963,8 @@ function updateLobby() {
 
 el('startBtn').addEventListener('click', () => {
   if (!amHost() || !roomCode) return;
-  totalRounds = parseInt(el('roundsInput').value, 10) || 5;
-  socket.emit('gofish:host:start', { code: roomCode, rounds: totalRounds });
+  totalRounds = 1;
+  socket.emit('gofish:host:start', { code: roomCode, rounds: 1 });
 });
 
 socket.on('gofish:room:cancelled', () => {
@@ -993,13 +975,23 @@ socket.on('gofish:room:cancelled', () => {
   setup.classList.remove('hidden');
 });
 
-function updateDuelHud() {
+function updateDuelHud(state = null) {
+  if (state) {
+    const mine = currentPlayerName();
+    const opponentName = state.opponent ? state.opponent.name : 'Opponent';
+    el('hudP1Name').textContent = mine;
+    el('hudP1Score').textContent = (state.myBooks || []).length;
+    el('hudP2Name').textContent = opponentName;
+    el('hudP2Score').textContent = state.opponent ? (state.opponent.books || []).length : 0;
+    return;
+  }
+
   if (!players[0]) return;
   el('hudP1Name').textContent = players[0].name;
-  el('hudP1Score').textContent = players[0].score;
+  el('hudP1Score').textContent = players[0].score || 0;
   if (players[1]) {
     el('hudP2Name').textContent = players[1].name;
-    el('hudP2Score').textContent = players[1].score;
+    el('hudP2Score').textContent = players[1].score || 0;
   }
 }
 
@@ -1010,14 +1002,16 @@ socket.on('gofish:round:start', (data) => {
   selectedRank = null;
   pendingGameState = null;
   pendingRoundResult = null;
+  pendingGameOver = null;
   actionQueue.length = 0;
   actionAnimating = false;
   askPending = false;
-  roundNumber = data.roundNumber;
-  totalRounds = data.totalRounds;
+  roundNumber = 1;
+  totalRounds = 1;
   if (Array.isArray(data.players)) players = data.players;
-  el('roundNum').textContent = roundNumber;
-  el('totalRounds').textContent = totalRounds;
+  el('roundNum').textContent = '1';
+  el('totalRounds').textContent = '1';
+  setGamePhase(GF_PHASES.SETUP);
   el('eventBanner').textContent = '';
 
   setupWrap.classList.add('hidden');
@@ -1045,31 +1039,70 @@ socket.on('gofish:feed', (data) => {
   if (!actionAnimating) showEventBanner(data.text);
 });
 
-socket.on('gofish:round:result', (data) => {
-  if (mode !== 'duo') return;
-  if (actionAnimating || askPending) {
-    pendingRoundResult = data;
+function finalReasonText(reason) {
+  return {
+    books: 'Most completed books',
+    'hand-count': 'Tiebreak: more cards left in hand',
+    'last-book': 'Tiebreak: most recent book',
+    cards: 'Tiebreak: more cards left in hand',
+    'recent-book': 'Tiebreak: most recent book',
+    draw: 'Still level after every tiebreak',
+  }[reason] || '';
+}
+
+function handleDuoGameOver(data) {
+  if (mashupMode) {
+    reportMashupLegResult(socket, data.players);
     return;
   }
-  players = data.players;
-  updateDuelHud();
-});
-
-socket.on('gofish:game:over', (data) => {
-  if (mashupMode) return reportMashupLegResult(socket, data.players);
   if (mode !== 'duo') return;
+
+  setGamePhase(GF_PHASES.GAME_OVER);
   gameArea.classList.add('hidden');
   gameOver.classList.remove('hidden');
   el('playAgainBtn').classList.toggle('hidden', !amHost());
-  el('soloSummary').textContent = '';
+  el('finalBoard').classList.add('hidden');
+  el('finalStats').classList.add('hidden');
 
-  const [p1, p2] = data.players;
-  let title;
-  if (!p2 || p1.score === p2.score) title = "It's a tie! 🤝";
-  else title = `${p1.score > p2.score ? p1.name : p2.name} wins! 🏆`;
-  el('overTitle').textContent = title;
-  el('finalBoard').classList.remove('hidden');
-  renderLeaderboard('finalBoard', [...data.players].sort((a, b) => b.score - a.score));
+  const mine = data.players.find((p) => p.name === myName) || data.players[0];
+  const opponent = data.players.find((p) => p !== mine) || data.players[1];
+  const winnerName = data.winnerName || null;
+
+  if (!winnerName) el('overTitle').textContent = 'DRAW';
+  else if (winnerName === myName) {
+    el('overTitle').textContent = 'YOU WIN';
+    hapticSuccess();
+    playSuccess();
+  } else {
+    el('overTitle').textContent = 'YOU LOSE';
+  }
+  el('soloSummary').textContent = finalReasonText(data.winnerReason);
+
+  el('finalScore').classList.remove('hidden');
+  el('finalScore').innerHTML = `
+    <div class="gf-final-score-side"><strong>${mine ? mine.bookCount : 0}</strong><span>You · books</span></div>
+    <div class="gf-final-score-vs">vs</div>
+    <div class="gf-final-score-side"><strong>${opponent ? opponent.bookCount : 0}</strong><span>${escapeResultText(opponent ? opponent.name : 'Opponent')} · books</span></div>`;
+
+  el('finalBooks').classList.remove('hidden');
+  el('finalBooks').innerHTML = `
+    <div class="gf-final-section-title">Completed books</div>
+    <div class="gf-result-row"><span class="gf-result-row-name">You</span><div class="gf-result-mini-cards">${resultBooksMarkup(mine ? mine.books : [])}</div></div>
+    <div class="gf-result-row"><span class="gf-result-row-name">${escapeResultText(opponent ? opponent.name : 'Opponent')}</span><div class="gf-result-mini-cards">${resultBooksMarkup(opponent ? opponent.books : [])}</div></div>`;
+
+  el('finalHands').classList.remove('hidden');
+  el('finalHands').innerHTML = `
+    <div class="gf-final-section-title">Cards left in hand</div>
+    <div class="gf-result-row"><span class="gf-result-row-name">You</span><div class="gf-result-mini-cards">${resultHandMarkup(mine ? mine.hand : [])}</div></div>
+    <div class="gf-result-row"><span class="gf-result-row-name">${escapeResultText(opponent ? opponent.name : 'Opponent')}</span><div class="gf-result-mini-cards">${resultHandMarkup(opponent ? opponent.hand : [])}</div></div>`;
+}
+
+socket.on('gofish:game:over', (data) => {
+  if (actionAnimating || askPending || actionQueue.length) {
+    pendingGameOver = data;
+    return;
+  }
+  handleDuoGameOver(data);
 });
 
 el('playAgainBtn').addEventListener('click', () => {
@@ -1080,7 +1113,7 @@ el('playAgainBtn').addEventListener('click', () => {
   }
   if (!amHost() || !roomCode) return;
   gameOver.classList.add('hidden');
-  socket.emit('gofish:host:start', { code: roomCode, rounds: totalRounds });
+  socket.emit('gofish:host:start', { code: roomCode, rounds: 1 });
 });
 
 // --- Solo vs CPU (authoritative local state machine) ----------------------
