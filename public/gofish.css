@@ -1279,3 +1279,333 @@ button.gf-card:focus-visible {
     transition: none !important;
   }
 }
+
+
+/* ---------- Authored game feel: personality, tension, teaching ---------- */
+
+.gf-topbar-right {
+  display: flex;
+  align-items: center;
+  justify-self: end;
+  gap: 7px;
+  min-width: 0;
+}
+
+.gf-sound-btn {
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  padding: 0;
+  border: 1px solid var(--gf-line);
+  border-radius: 999px;
+  color: var(--gf-muted);
+  background: rgba(255,255,255,.70);
+  font-size: .78rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.gf-sound-btn[aria-pressed="true"] {
+  opacity: .48;
+}
+
+.gf-sound-btn:focus-visible,
+.gf-coach-dismiss:focus-visible {
+  outline: 3px solid rgba(216,111,116,.26);
+  outline-offset: 2px;
+}
+
+/* The table itself signals turn ownership. No extra badge soup: the inactive
+   half simply recedes while the active half feels a touch closer. */
+.gf-player-zone,
+.gf-ask-panel,
+.gf-action-stage {
+  transition: opacity 240ms ease, filter 240ms ease, transform 240ms ease;
+}
+
+.gf-game.gf-turn-me .gf-opponent-zone {
+  opacity: .68;
+  filter: saturate(.84);
+}
+
+.gf-game.gf-turn-them .gf-me-zone,
+.gf-game.gf-turn-them .gf-ask-panel {
+  opacity: .54;
+  filter: saturate(.76);
+}
+
+.gf-game.gf-turn-me .gf-me-zone {
+  transform: translateY(-1px);
+}
+
+.gf-game.gf-turn-them .gf-opponent-zone {
+  transform: translateY(1px);
+}
+
+.gf-game.gf-turn-me #myAvatar,
+.gf-game.gf-turn-them #opponentAvatar {
+  box-shadow:
+    inset 0 0 0 1px rgba(255,255,255,.72),
+    0 0 0 4px rgba(216,111,116,.10),
+    0 6px 18px rgba(92,69,80,.12);
+}
+
+/* CPU feels like somebody sitting opposite, not a log line. */
+.gf-opponent-zone {
+  position: relative;
+}
+
+.gf-cpu-bubble {
+  position: absolute;
+  z-index: 12;
+  left: 47px;
+  top: 40px;
+  max-width: min(230px, 67vw);
+  padding: 7px 10px;
+  border: 1px solid rgba(85,63,67,.08);
+  border-radius: 11px 11px 11px 4px;
+  color: #5d4e52;
+  background: rgba(255,253,250,.97);
+  box-shadow: 0 8px 20px rgba(74,52,56,.08);
+  font-size: .68rem;
+  font-weight: 690;
+  line-height: 1.25;
+  pointer-events: none;
+  transform-origin: left top;
+}
+
+.gf-cpu-bubble.show {
+  animation: gfCpuBubbleIn 220ms cubic-bezier(.2,.9,.2,1) both;
+}
+
+.gf-cpu-bubble.memory {
+  border-color: rgba(199,155,85,.22);
+  background: #fff9eb;
+}
+
+@keyframes gfCpuBubbleIn {
+  from { opacity: 0; transform: translateY(-3px) scale(.96); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* Pond pressure: the table itself gets tenser as the deck runs out. */
+.gf-pond-warning {
+  margin-top: 4px;
+  color: var(--gf-coral-dark);
+  font-size: .61rem;
+  font-weight: 840;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.gf-game.gf-pond-low .gf-pond-card {
+  box-shadow:
+    0 10px 24px rgba(117,63,67,.18),
+    0 0 0 4px rgba(216,111,116,.07);
+}
+
+.gf-game.gf-pond-critical .gf-pond-card {
+  animation: gfPondPulse 1.65s ease-in-out infinite;
+}
+
+.gf-game.gf-pond-critical .gf-pond-copy strong {
+  color: var(--gf-coral-dark);
+}
+
+.gf-game.gf-last-card .gf-pond-card {
+  animation: gfLastCard 1.2s ease-in-out infinite;
+}
+
+@keyframes gfPondPulse {
+  0%,100% { transform: translateY(0) rotate(0); }
+  50% { transform: translateY(-2px) rotate(.8deg); }
+}
+
+@keyframes gfLastCard {
+  0%,100% { transform: translateY(0) scale(1); box-shadow: 0 10px 24px rgba(117,63,67,.18); }
+  50% { transform: translateY(-3px) scale(1.035); box-shadow: 0 14px 30px rgba(185,81,89,.26); }
+}
+
+/* Cards land with weight rather than simply becoming visible. */
+.gf-card.gf-landed {
+  animation: gfCardLand 300ms cubic-bezier(.18,.88,.22,1.22);
+}
+
+.gf-hand.gf-hand-settle {
+  animation: gfHandSettle 340ms cubic-bezier(.2,.8,.2,1);
+}
+
+@keyframes gfCardLand {
+  0% { transform: translateY(-7px) scale(1.045); }
+  62% { transform: translateY(2px) scale(.985); }
+  100% { transform: none; }
+}
+
+@keyframes gfHandSettle {
+  0% { transform: translateY(-1px); }
+  50% { transform: translateY(2px); }
+  100% { transform: translateY(0); }
+}
+
+/* Book completion gets a real scoring beat. */
+.gf-book.gf-book-pop {
+  animation: gfBookScore 720ms cubic-bezier(.16,.9,.22,1.15) both;
+}
+
+@keyframes gfBookScore {
+  0% { opacity: 0; transform: translateY(8px) scale(.55) rotate(-7deg); }
+  48% { opacity: 1; transform: translateY(-4px) scale(1.14) rotate(2deg); }
+  72% { transform: translateY(1px) scale(.97) rotate(-1deg); }
+  100% { transform: translateY(0) scale(1) rotate(0); }
+}
+
+/* First-game coach: one small contextual card, never a modal walkthrough. */
+.gf-coach {
+  position: fixed;
+  z-index: 80;
+  left: max(14px, env(safe-area-inset-left));
+  right: max(14px, env(safe-area-inset-right));
+  bottom: calc(126px + env(safe-area-inset-bottom));
+  width: min(430px, calc(100vw - 28px));
+  margin: 0 auto;
+  padding: 12px 13px 11px;
+  border: 1px solid rgba(99,70,75,.10);
+  border-radius: 17px;
+  background: rgba(255,253,250,.98);
+  box-shadow: 0 16px 38px rgba(70,49,53,.15);
+  backdrop-filter: blur(18px);
+}
+
+.gf-coach::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: -7px;
+  width: 13px;
+  height: 13px;
+  background: rgba(255,253,250,.98);
+  border-right: 1px solid rgba(99,70,75,.10);
+  border-bottom: 1px solid rgba(99,70,75,.10);
+  transform: translateX(-50%) rotate(45deg);
+}
+
+.gf-coach-kicker {
+  margin-bottom: 4px;
+  color: var(--gf-coral-dark);
+  font-size: .58rem;
+  font-weight: 850;
+  letter-spacing: .12em;
+}
+
+.gf-coach-text {
+  padding-right: 58px;
+  color: var(--gf-ink);
+  font-size: .76rem;
+  font-weight: 650;
+  line-height: 1.35;
+}
+
+.gf-coach-dismiss {
+  position: absolute;
+  right: 9px;
+  top: 50%;
+  min-width: 48px;
+  min-height: 32px;
+  transform: translateY(-50%);
+  border: 0;
+  border-radius: 10px;
+  color: var(--gf-coral-dark);
+  background: var(--gf-blush-soft);
+  font-size: .66rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+/* Final Round is a ritual with visible order, not another toast. */
+.gf-final-round-card {
+  overflow: hidden;
+}
+
+.gf-final-order {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.gf-final-order-step {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  padding: 7px 10px;
+  border: 1px solid rgba(255,255,255,.22);
+  border-radius: 999px;
+  color: rgba(255,255,255,.80);
+  background: rgba(255,255,255,.08);
+  font-size: .66rem;
+  font-weight: 760;
+}
+
+.gf-final-order-step b {
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  color: #50333a;
+  background: #fff2ec;
+  font-size: .61rem;
+}
+
+.gf-final-order-step.current {
+  color: #fff;
+  border-color: rgba(255,255,255,.42);
+  background: rgba(255,255,255,.16);
+}
+
+.gf-final-order-step.done {
+  opacity: .50;
+  text-decoration: line-through;
+}
+
+/* Rematches become a little rivalry, without turning the result page into a dashboard. */
+.gf-record-strip {
+  margin-top: 12px;
+  padding: 9px 11px;
+  border: 1px solid var(--gf-line);
+  border-radius: 12px;
+  color: var(--gf-muted);
+  background: rgba(255,255,255,.54);
+  font-size: .69rem;
+  font-weight: 650;
+  text-align: center;
+}
+
+.gf-record-strip strong {
+  color: var(--gf-ink);
+  font-weight: 820;
+}
+
+@media (max-height: 720px) {
+  .gf-coach {
+    bottom: calc(112px + env(safe-area-inset-bottom));
+  }
+
+  .gf-cpu-bubble {
+    top: 36px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gf-cpu-bubble.show,
+  .gf-game.gf-pond-critical .gf-pond-card,
+  .gf-game.gf-last-card .gf-pond-card,
+  .gf-card.gf-landed,
+  .gf-hand.gf-hand-settle,
+  .gf-book.gf-book-pop {
+    animation: none !important;
+  }
+}
