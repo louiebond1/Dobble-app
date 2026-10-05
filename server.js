@@ -57,7 +57,13 @@ const TTT_LINES = [
 /** @type {Map<string, any>} */
 const goFishRooms = new Map();
 const GOFISH_DEAL_SIZE = 7;
-const GOFISH_BOOK_COUNT = CARD_RANKS.length; // all 13 ranks claimed as books ends the deal
+const GOFISH_PHASES = Object.freeze({
+  SETUP: 'SETUP',
+  NORMAL: 'NORMAL',
+  FINAL_ROUND_INTRO: 'FINAL_ROUND_INTRO',
+  FINAL_ROUND: 'FINAL_ROUND',
+  GAME_OVER: 'GAME_OVER',
+});
 
 /** @type {Map<string, any>} */
 const puzzleRooms = new Map();
@@ -821,18 +827,18 @@ function goFishOpponentId(room, socketId) {
   return room.playerOrder.find((id) => id !== socketId) || null;
 }
 
-// A completed set of all 4 of a rank is pulled out of the hand into that
-// player's face-up "books" pile — this is checked after every hand change
-// (a successful ask, a draw from the pond, even the initial deal) since a
-// book can complete at any of those moments, not just on a player's turn.
-function goFishCheckBooks(player) {
+function goFishCheckBooks(room, playerId) {
+  const player = room.players.get(playerId);
+  if (!player) return [];
   const completed = [];
   const counts = new Map();
   for (const card of player.hand) counts.set(card.rank, (counts.get(card.rank) || 0) + 1);
+
   for (const [rank, count] of counts) {
     if (count >= 4) {
-      player.hand = player.hand.filter((c) => c.rank !== rank);
+      player.hand = player.hand.filter((card) => card.rank !== rank);
       player.books.push(rank);
+      room.bookHistory.push({ playerId, rank, at: Date.now() });
       completed.push(rank);
     }
   }
@@ -851,60 +857,38 @@ function goFishEmitAction(code, action, privateBySocket = null) {
   }
 }
 
-function goFishUnlockAfter(code, delayMs = 1350) {
-  setTimeout(() => {
-    const room = goFishRooms.get(code);
-    if (!room || !room.gameActive) return;
-    room.actionLocked = false;
-    goFishBroadcastState(code);
-  }, delayMs);
-}
-
-function goFishTotalBooks(room) {
-  return Array.from(room.players.values()).reduce((sum, p) => sum + p.books.length, 0);
-}
-
-// Standard Go Fish rule: a player with an empty hand draws back up to one
-// card from the pond before their turn begins. If the pond is also empty,
-// there's no legal move left for anyone — the deal is over.
-function goFishBeginTurn(code) {
-  const room = goFishRooms.get(code);
-  if (!room || !room.gameActive) return;
-  const player = room.players.get(room.turn);
-  if (player.hand.length === 0) {
-    if (room.pond.length > 0) {
-      player.hand.push(room.pond.pop());
-      goFishCheckBooks(player);
-      if (goFishTotalBooks(room) >= GOFISH_BOOK_COUNT) return goFishEndDeal(code);
-    } else {
-      return goFishEndDeal(code);
-    }
-  }
-  goFishBroadcastState(code);
-}
-
 function goFishPlayerPublic(p) {
-  return { name: p.name, score: p.score, handCount: p.hand.length, books: p.books.slice() };
+  return {
+    name: p.name,
+    score: p.score || 0,
+    handCount: p.hand.length,
+    books: p.books.slice(),
+  };
 }
 
 function goFishBroadcastState(code) {
   const room = goFishRooms.get(code);
   if (!room) return;
-  const turnPlayer = room.players.get(room.turn);
+  const turnPlayer = room.turn ? room.players.get(room.turn) : null;
+
   for (const [socketId, player] of room.players) {
     const opponentId = goFishOpponentId(room, socketId);
     const opponent = opponentId ? room.players.get(opponentId) : null;
     io.to(socketId).emit('gofish:state', {
-      roundNumber: room.roundNumber,
-      totalRounds: room.totalRounds,
+      roundNumber: 1,
+      totalRounds: 1,
       myHand: player.hand,
       myBooks: player.books,
       opponent: opponent ? goFishPlayerPublic(opponent) : null,
       pondCount: room.pond.length,
-      isMyTurn: room.turn === socketId,
+      isMyTurn: room.turn === socketId && room.gameActive,
       turnName: turnPlayer ? turnPlayer.name : null,
-      askableRanks: [...new Set(player.hand.map((c) => c.rank))],
+      askableRanks: [...new Set(player.hand.map((card) => card.rank))],
       actionLocked: !!room.actionLocked,
+      gamePhase: room.phase,
+      finalRound: room.phase === GOFISH_PHASES.FINAL_ROUND || room.phase === GOFISH_PHASES.FINAL_ROUND_INTRO,
+      finalTurnIndex: room.finalIndex,
+      finalTurnTotal: room.finalOrder.length,
     });
   }
 }
@@ -913,65 +897,251 @@ function goFishFeed(code, text) {
   io.to(`gofish:${code}`).emit('gofish:feed', { text });
 }
 
-function goFishDealGame(code) {
-  const room = goFishRooms.get(code);
-  if (!room) return;
+function goFishSetFinalRoundIntro(room, firstPlayerId) {
+  const otherId = room.playerOrder.find((id) => id !== firstPlayerId);
+  room.phase = GOFISH_PHASES.FINAL_ROUND_INTRO;
+  room.finalOrder = otherId ? [firstPlayerId, otherId] : [firstPlayerId];
+  room.finalIndex = 0;
+  room.turn = firstPlayerId;
+  room.actionLocked = true;
+}
 
-  if (room.roundNumber >= room.totalRounds) {
-    room.started = false;
-    io.to(`gofish:${code}`).emit('gofish:game:over', {
-      players: room.playerOrder.map((id) => goFishPlayerPublic(room.players.get(id))),
-    });
+function goFishActivateFinalRound(code, delayMs = 2250) {
+  setTimeout(() => {
+    const room = goFishRooms.get(code);
+    if (!room || !room.gameActive || room.phase !== GOFISH_PHASES.FINAL_ROUND_INTRO) return;
+    room.phase = GOFISH_PHASES.FINAL_ROUND;
+    room.actionLocked = false;
+    goFishPrepareTurn(code);
+  }, delayMs);
+}
+
+function goFishDetermineWinner(room) {
+  const [idA, idB] = room.playerOrder;
+  const a = room.players.get(idA);
+  const b = room.players.get(idB);
+  if (!a || !b) return { winnerId: null, reason: 'draw' };
+
+  if (a.books.length !== b.books.length) {
+    return { winnerId: a.books.length > b.books.length ? idA : idB, reason: 'books' };
+  }
+
+  if (a.hand.length !== b.hand.length) {
+    return { winnerId: a.hand.length > b.hand.length ? idA : idB, reason: 'hand-count' };
+  }
+
+  const lastBook = room.bookHistory.length ? room.bookHistory[room.bookHistory.length - 1] : null;
+  if (lastBook && room.players.has(lastBook.playerId)) {
+    return { winnerId: lastBook.playerId, reason: 'last-book' };
+  }
+
+  return { winnerId: null, reason: 'draw' };
+}
+
+function goFishEndGame(code) {
+  const room = goFishRooms.get(code);
+  if (!room || room.phase === GOFISH_PHASES.GAME_OVER) return;
+
+  room.gameActive = false;
+  room.started = false;
+  room.actionLocked = true;
+  room.phase = GOFISH_PHASES.GAME_OVER;
+  room.turn = null;
+
+  const result = goFishDetermineWinner(room);
+  const winner = result.winnerId ? room.players.get(result.winnerId) : null;
+
+  goFishBroadcastState(code);
+
+  io.to(`gofish:${code}`).emit('gofish:game:over', {
+    winnerName: winner ? winner.name : null,
+    winnerReason: result.reason,
+    players: room.playerOrder.map((id) => {
+      const player = room.players.get(id);
+      return {
+        name: player.name,
+        score: result.winnerId === id ? 1 : 0,
+        bookCount: player.books.length,
+        books: player.books.slice(),
+        handCount: player.hand.length,
+        hand: player.hand.slice(),
+      };
+    }),
+  });
+}
+
+function goFishAdvanceFinalRound(code, delayMs = 1350) {
+  setTimeout(() => {
+    const room = goFishRooms.get(code);
+    if (!room || !room.gameActive || room.phase !== GOFISH_PHASES.FINAL_ROUND) return;
+    if (room.finalIndex >= room.finalOrder.length) {
+      goFishEndGame(code);
+      return;
+    }
+    room.actionLocked = false;
+    goFishPrepareTurn(code);
+  }, delayMs);
+}
+
+function goFishPrepareFinalTurn(code) {
+  const room = goFishRooms.get(code);
+  if (!room || !room.gameActive || room.phase !== GOFISH_PHASES.FINAL_ROUND) return;
+
+  if (room.finalIndex >= room.finalOrder.length) {
+    goFishEndGame(code);
     return;
   }
 
-  room.roundNumber += 1;
+  const playerId = room.finalOrder[room.finalIndex];
+  room.turn = playerId;
+  const player = room.players.get(playerId);
+  const opponentId = goFishOpponentId(room, playerId);
+  const opponent = opponentId ? room.players.get(opponentId) : null;
+
+  if (!player || player.hand.length === 0) {
+    room.actionLocked = true;
+    goFishEmitAction(code, {
+      kind: 'skip',
+      askerName: player ? player.name : 'Player',
+      opponentName: opponent ? opponent.name : 'Opponent',
+      books: [],
+      finalRound: true,
+      keepsTurn: false,
+      reason: 'empty-hand',
+    });
+    room.finalIndex += 1;
+    room.turn = room.finalOrder[room.finalIndex] || null;
+    goFishBroadcastState(code);
+    goFishAdvanceFinalRound(code, 900);
+    return;
+  }
+
+  room.actionLocked = false;
+  goFishBroadcastState(code);
+}
+
+function goFishDrawReplacement(code) {
+  const room = goFishRooms.get(code);
+  if (!room || !room.gameActive || room.phase !== GOFISH_PHASES.NORMAL) return;
+
+  const playerId = room.turn;
+  const player = room.players.get(playerId);
+  const opponentId = goFishOpponentId(room, playerId);
+  const opponent = opponentId ? room.players.get(opponentId) : null;
+
+  if (!player || player.hand.length > 0 || room.pond.length === 0) return;
+
+  room.actionLocked = true;
+  const drawn = room.pond.pop();
+  player.hand.push(drawn);
+  const completedBooks = goFishCheckBooks(room, playerId);
+  const emptiedPond = room.pond.length === 0;
+
+  if (emptiedPond) goFishSetFinalRoundIntro(room, playerId);
+
+  goFishEmitAction(
+    code,
+    {
+      kind: 'replenish',
+      askerName: player.name,
+      opponentName: opponent ? opponent.name : 'Opponent',
+      books: completedBooks,
+      keepsTurn: true,
+      pondEmpty: false,
+      finalRoundStarts: emptiedPond,
+      finalRoundFirstName: player.name,
+    },
+    { [playerId]: { drawnCard: drawn } }
+  );
+  goFishBroadcastState(code);
+
+  if (emptiedPond) {
+    goFishActivateFinalRound(code);
+  } else {
+    setTimeout(() => {
+      const fresh = goFishRooms.get(code);
+      if (!fresh || !fresh.gameActive || fresh.phase !== GOFISH_PHASES.NORMAL) return;
+      fresh.actionLocked = false;
+      goFishPrepareTurn(code);
+    }, 1350);
+  }
+}
+
+function goFishPrepareTurn(code) {
+  const room = goFishRooms.get(code);
+  if (!room || !room.gameActive) return;
+
+  if (room.phase === GOFISH_PHASES.FINAL_ROUND_INTRO) {
+    goFishBroadcastState(code);
+    return;
+  }
+
+  if (room.phase === GOFISH_PHASES.FINAL_ROUND) {
+    goFishPrepareFinalTurn(code);
+    return;
+  }
+
+  if (room.phase !== GOFISH_PHASES.NORMAL) return;
+
+  const player = room.players.get(room.turn);
+  if (!player) return;
+
+  if (player.hand.length === 0) {
+    if (room.pond.length > 0) {
+      goFishDrawReplacement(code);
+      return;
+    }
+
+    // Defensive fallback: reaching a normal turn with an empty pond means the
+    // final-round transition was missed. Start it with the player who would
+    // otherwise act now.
+    goFishSetFinalRoundIntro(room, room.turn);
+    goFishBroadcastState(code);
+    goFishActivateFinalRound(code, 1700);
+    return;
+  }
+
+  room.actionLocked = false;
+  goFishBroadcastState(code);
+}
+
+function goFishDealGame(code) {
+  const room = goFishRooms.get(code);
+  if (!room || room.playerOrder.length !== 2) return;
+
   const deck = shuffleDeck(buildDeck());
+  room.bookHistory = [];
+  room.finalOrder = [];
+  room.finalIndex = 0;
+  room.phase = GOFISH_PHASES.NORMAL;
+  room.gameActive = true;
+  room.started = true;
+  room.actionLocked = false;
+  room.roundNumber = 1;
+  room.totalRounds = 1;
+
   for (const id of room.playerOrder) {
     const player = room.players.get(id);
     player.hand = deck.splice(0, GOFISH_DEAL_SIZE);
     player.books = [];
-    goFishCheckBooks(player);
+    player.score = 0;
   }
+
   room.pond = deck;
-  room.actionLocked = false;
-  // Alternate who asks first each deal, same convention as Tic-Tac-Toe.
-  const firstIdx = (room.roundNumber - 1) % 2;
-  room.turn = room.playerOrder[firstIdx];
-  room.gameActive = true;
+
+  // Initial four-of-a-kind is always converted before the first turn.
+  for (const id of room.playerOrder) goFishCheckBooks(room, id);
+
+  room.turn = room.playerOrder[Math.floor(Math.random() * room.playerOrder.length)];
 
   io.to(`gofish:${code}`).emit('gofish:round:start', {
-    roundNumber: room.roundNumber,
-    totalRounds: room.totalRounds,
+    roundNumber: 1,
+    totalRounds: 1,
     players: room.playerOrder.map((id) => goFishPlayerPublic(room.players.get(id))),
   });
-  goFishFeed(code, `🎴 New deal — ${room.players.get(room.turn).name} goes first.`);
-  goFishBeginTurn(code);
-}
 
-function goFishEndDeal(code) {
-  const room = goFishRooms.get(code);
-  if (!room) return;
-  room.gameActive = false;
-  // The last move may have completed the 13th book. Send that final hand /
-  // books snapshot before scoring so the clients can animate into the real
-  // end position instead of jumping straight to the next-deal result.
-  goFishBroadcastState(code);
-
-  const [idA, idB] = room.playerOrder;
-  const a = room.players.get(idA);
-  const b = room.players.get(idB);
-  let winnerName = null;
-  if (a.books.length > b.books.length) { a.score += 1; winnerName = a.name; }
-  else if (b.books.length > a.books.length) { b.score += 1; winnerName = b.name; }
-
-  io.to(`gofish:${code}`).emit('gofish:round:result', {
-    players: room.playerOrder.map((id) => goFishPlayerPublic(room.players.get(id))),
-    winnerName,
-  });
-  goFishFeed(code, winnerName ? `🏆 ${winnerName} took this deal!` : "🤝 This deal's a tie!");
-
-  setTimeout(() => goFishDealGame(code), 3200);
+  goFishFeed(code, `${room.players.get(room.turn).name} goes first`);
+  goFishPrepareTurn(code);
 }
 
 // --- Sliding Puzzle Race helpers ---------------------------------------------
