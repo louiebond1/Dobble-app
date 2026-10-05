@@ -910,7 +910,7 @@ function goFishBroadcastState(code) {
       actionLocked: !!room.actionLocked,
       phase: room.phase,
       gamePhase: room.phase,
-      finalRound: room.phase === 'FINAL_ROUND' || room.phase === 'FINAL_ROUND_INTRO',
+      finalRound: room.phase === GOFISH_PHASES.FINAL_ROUND || room.phase === GOFISH_PHASES.FINAL_ROUND_INTRO,
       finalRoundIndex: room.finalRound ? room.finalRound.index : null,
     });
   }
@@ -932,10 +932,10 @@ function goFishDetermineWinner(room) {
 
 function goFishFinishGame(code) {
   const room = goFishRooms.get(code);
-  if (!room || room.phase === 'GAME_OVER') return;
+  if (!room || room.phase === GOFISH_PHASES.GAME_OVER) return;
   room.gameActive = false;
   room.actionLocked = true;
-  room.phase = 'GAME_OVER';
+  room.phase = GOFISH_PHASES.GAME_OVER;
 
   const result = goFishDetermineWinner(room);
   const winner = result.winnerId ? room.players.get(result.winnerId) : null;
@@ -957,7 +957,7 @@ function goFishFinishGame(code) {
 function goFishUnlockAndBegin(code, delayMs = 1550) {
   setTimeout(() => {
     const room = goFishRooms.get(code);
-    if (!room || !room.gameActive || room.phase === 'GAME_OVER') return;
+    if (!room || !room.gameActive || room.phase === GOFISH_PHASES.GAME_OVER) return;
     room.actionLocked = false;
     goFishBeginTurn(code);
   }, delayMs);
@@ -968,12 +968,12 @@ function goFishEnterFinalRound(code, starterId) {
   if (
     !room ||
     !room.gameActive ||
-    room.phase === 'FINAL_ROUND_INTRO' ||
-    room.phase === 'FINAL_ROUND' ||
-    room.phase === 'GAME_OVER'
+    room.phase === GOFISH_PHASES.FINAL_ROUND_INTRO ||
+    room.phase === GOFISH_PHASES.FINAL_ROUND ||
+    room.phase === GOFISH_PHASES.GAME_OVER
   ) return;
 
-  room.phase = 'FINAL_ROUND_INTRO';
+  room.phase = GOFISH_PHASES.FINAL_ROUND_INTRO;
   room.finalRound = { order: buildFinalOrder(room.playerOrder, starterId), index: 0 };
   room.turn = starterId;
   room.actionLocked = true;
@@ -997,7 +997,7 @@ function goFishEnterFinalRound(code, starterId) {
 
 function goFishAdvanceFinalRound(code) {
   const room = goFishRooms.get(code);
-  if (!room || room.phase !== 'FINAL_ROUND' || !room.finalRound) return;
+  if (!room || room.phase !== GOFISH_PHASES.FINAL_ROUND || !room.finalRound) return;
   room.finalRound.index += 1;
   if (room.finalRound.index >= room.finalRound.order.length) {
     goFishFinishGame(code);
@@ -1011,15 +1011,15 @@ function goFishAdvanceFinalRound(code) {
 
 function goFishBeginTurn(code) {
   const room = goFishRooms.get(code);
-  if (!room || !room.gameActive || room.phase === 'GAME_OVER') return;
+  if (!room || !room.gameActive || room.phase === GOFISH_PHASES.GAME_OVER) return;
 
-  if (room.phase === 'FINAL_ROUND_INTRO') {
+  if (room.phase === GOFISH_PHASES.FINAL_ROUND_INTRO) {
     room.actionLocked = true;
     goFishBroadcastState(code);
     return;
   }
 
-  if (room.phase === 'FINAL_ROUND') {
+  if (room.phase === GOFISH_PHASES.FINAL_ROUND) {
     if (!room.finalRound || room.finalRound.index >= room.finalRound.order.length) {
       goFishFinishGame(code);
       return;
@@ -1095,7 +1095,7 @@ function goFishDealGame(code) {
   const deck = shuffleDeck(buildDeck());
   room.roundNumber = 1;
   room.totalRounds = 1;
-  room.phase = 'NORMAL';
+  room.phase = GOFISH_PHASES.NORMAL;
   room.finalRound = null;
   room.lastBookOwnerId = null;
   room.actionLocked = false;
@@ -2256,7 +2256,7 @@ io.on('connection', (socket) => {
         room.roundNumber = 0;
         room.gameActive = false;
         room.actionLocked = false;
-        room.phase = 'SETUP';
+        room.phase = GOFISH_PHASES.SETUP;
         room.finalRound = null;
         room.lastBookOwnerId = null;
         room.pond = [];
@@ -2342,7 +2342,7 @@ io.on('connection', (socket) => {
       room.actionLocked ||
       socket.id !== room.turn ||
       !CARD_RANKS.includes(rank) ||
-      (room.phase !== 'NORMAL' && room.phase !== 'FINAL_ROUND')
+      (room.phase !== 'NORMAL' && room.phase !== GOFISH_PHASES.FINAL_ROUND)
     ) {
       if (typeof ack === 'function') ack({ ok: false });
       return;
@@ -2364,7 +2364,7 @@ io.on('connection', (socket) => {
 
     const matches = opponent.hand.filter((card) => card.rank === rank);
 
-    if (room.phase === 'FINAL_ROUND') {
+    if (room.phase === GOFISH_PHASES.FINAL_ROUND) {
       let completedBooks = [];
       if (matches.length > 0) {
         opponent.hand = opponent.hand.filter((card) => card.rank !== rank);
