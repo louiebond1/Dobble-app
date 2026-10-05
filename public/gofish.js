@@ -1053,7 +1053,11 @@ function finalReasonText(reason) {
 
 function handleDuoGameOver(data) {
   if (mashupMode) {
-    reportMashupLegResult(socket, data.players);
+    const legPlayers = (data.players || []).map((player) => ({
+      ...player,
+      score: data.winnerName ? (player.name === data.winnerName ? 1 : 0) : 0,
+    }));
+    reportMashupLegResult(socket, legPlayers);
     return;
   }
   if (mode !== 'duo') return;
@@ -1063,39 +1067,53 @@ function handleDuoGameOver(data) {
   gameOver.classList.remove('hidden');
   el('playAgainBtn').classList.toggle('hidden', !amHost());
   el('finalBoard').classList.add('hidden');
-  el('finalStats').classList.add('hidden');
 
-  const mine = data.players.find((p) => p.name === myName) || data.players[0];
-  const opponent = data.players.find((p) => p !== mine) || data.players[1];
-  const winnerName = data.winnerName || null;
+  const publicPlayers = Array.isArray(data.players) ? data.players : [];
+  const revealed = Array.isArray(data.hands) ? data.hands : [];
+  const minePublic = publicPlayers.find((player) => player.name === myName) || publicPlayers[0] || null;
+  const opponentPublic = publicPlayers.find((player) => !minePublic || player.name !== minePublic.name) || publicPlayers[1] || null;
+  const mineReveal = revealed.find((entry) => entry.name === myName) || revealed[0] || { name: myName, hand: [], books: [] };
+  const opponentReveal = revealed.find((entry) => entry.name !== mineReveal.name) || revealed[1] || { name: opponentPublic ? opponentPublic.name : 'Opponent', hand: [], books: [] };
 
-  if (!winnerName) el('overTitle').textContent = 'DRAW';
-  else if (winnerName === myName) {
+  if (!data.winnerName) {
+    el('overTitle').textContent = 'DRAW';
+  } else if (data.winnerName === myName) {
     el('overTitle').textContent = 'YOU WIN';
     hapticSuccess();
     playSuccess();
   } else {
     el('overTitle').textContent = 'YOU LOSE';
   }
-  el('soloSummary').textContent = finalReasonText(data.winnerReason);
+  el('soloSummary').textContent = finalReasonText(data.reason);
+
+  const myBookCount = (mineReveal.books || []).length;
+  const opponentBookCount = (opponentReveal.books || []).length;
+  const opponentName = opponentPublic ? opponentPublic.name : (opponentReveal.name || 'Opponent');
 
   el('finalScore').classList.remove('hidden');
   el('finalScore').innerHTML = `
-    <div class="gf-final-score-side"><strong>${mine ? mine.bookCount : 0}</strong><span>You · books</span></div>
+    <div class="gf-final-score-side"><strong>${myBookCount}</strong><span>You · books</span></div>
     <div class="gf-final-score-vs">vs</div>
-    <div class="gf-final-score-side"><strong>${opponent ? opponent.bookCount : 0}</strong><span>${escapeResultText(opponent ? opponent.name : 'Opponent')} · books</span></div>`;
+    <div class="gf-final-score-side"><strong>${opponentBookCount}</strong><span>${escapeResultText(opponentName)} · books</span></div>`;
 
   el('finalBooks').classList.remove('hidden');
   el('finalBooks').innerHTML = `
     <div class="gf-final-section-title">Completed books</div>
-    <div class="gf-result-row"><span class="gf-result-row-name">You</span><div class="gf-result-mini-cards">${resultBooksMarkup(mine ? mine.books : [])}</div></div>
-    <div class="gf-result-row"><span class="gf-result-row-name">${escapeResultText(opponent ? opponent.name : 'Opponent')}</span><div class="gf-result-mini-cards">${resultBooksMarkup(opponent ? opponent.books : [])}</div></div>`;
+    <div class="gf-result-row"><span class="gf-result-row-name">You</span><div class="gf-result-mini-cards">${resultBooksMarkup(mineReveal.books || [])}</div></div>
+    <div class="gf-result-row"><span class="gf-result-row-name">${escapeResultText(opponentName)}</span><div class="gf-result-mini-cards">${resultBooksMarkup(opponentReveal.books || [])}</div></div>`;
 
   el('finalHands').classList.remove('hidden');
   el('finalHands').innerHTML = `
     <div class="gf-final-section-title">Cards left in hand</div>
-    <div class="gf-result-row"><span class="gf-result-row-name">You</span><div class="gf-result-mini-cards">${resultHandMarkup(mine ? mine.hand : [])}</div></div>
-    <div class="gf-result-row"><span class="gf-result-row-name">${escapeResultText(opponent ? opponent.name : 'Opponent')}</span><div class="gf-result-mini-cards">${resultHandMarkup(opponent ? opponent.hand : [])}</div></div>`;
+    <div class="gf-result-row"><span class="gf-result-row-name">You</span><div class="gf-result-mini-cards">${resultHandMarkup(mineReveal.hand || [])}</div></div>
+    <div class="gf-result-row"><span class="gf-result-row-name">${escapeResultText(opponentName)}</span><div class="gf-result-mini-cards">${resultHandMarkup(opponentReveal.hand || [])}</div></div>`;
+
+  const myStats = minePublic && minePublic.stats ? minePublic.stats : {};
+  el('finalStats').classList.remove('hidden');
+  el('finalStats').innerHTML = `
+    <div class="gf-stat"><strong>${myStats.luckyCatches || 0}</strong><span>Lucky catches</span></div>
+    <div class="gf-stat"><strong>${myStats.successfulAsks || 0}</strong><span>Successful asks</span></div>
+    <div class="gf-stat"><strong>${myStats.longestTurnStreak || 0}</strong><span>Longest streak</span></div>`;
 }
 
 socket.on('gofish:game:over', (data) => {
