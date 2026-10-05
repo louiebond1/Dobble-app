@@ -917,7 +917,7 @@ function goFishBroadcastState(code) {
       actionLocked: !!room.actionLocked,
       phase: room.phase,
       gamePhase: room.phase,
-      finalRound: room.phase === 'FINAL_ROUND',
+      finalRound: room.phase === 'FINAL_ROUND' || room.phase === 'FINAL_ROUND_INTRO',
       finalRoundIndex: room.finalRound ? room.finalRound.index : null,
     });
   }
@@ -972,9 +972,15 @@ function goFishUnlockAndBegin(code, delayMs = 1550) {
 
 function goFishEnterFinalRound(code, starterId) {
   const room = goFishRooms.get(code);
-  if (!room || !room.gameActive || room.phase === 'FINAL_ROUND' || room.phase === 'GAME_OVER') return;
+  if (
+    !room ||
+    !room.gameActive ||
+    room.phase === 'FINAL_ROUND_INTRO' ||
+    room.phase === 'FINAL_ROUND' ||
+    room.phase === 'GAME_OVER'
+  ) return;
 
-  room.phase = 'FINAL_ROUND';
+  room.phase = 'FINAL_ROUND_INTRO';
   room.finalRound = { order: buildFinalOrder(room.playerOrder, starterId), index: 0 };
   room.turn = starterId;
   room.actionLocked = true;
@@ -985,10 +991,15 @@ function goFishEnterFinalRound(code, starterId) {
     order: room.finalRound.order.map((id) => (room.players.get(id) || {}).name).filter(Boolean),
   });
 
-  // Client queues the intro until the move that emptied the pond has visually
-  // finished. Keep the server locked long enough that no phone can submit an
-  // early final ask behind that animation.
-  goFishUnlockAndBegin(code, 3200);
+  // The normal move that emptied the pond must finish visually before either
+  // player can make their one final ask.
+  setTimeout(() => {
+    const fresh = goFishRooms.get(code);
+    if (!fresh || !fresh.gameActive || fresh.phase !== 'FINAL_ROUND_INTRO') return;
+    fresh.phase = 'FINAL_ROUND';
+    fresh.actionLocked = false;
+    goFishBeginTurn(code);
+  }, 3200);
 }
 
 function goFishAdvanceFinalRound(code) {
@@ -1008,6 +1019,12 @@ function goFishAdvanceFinalRound(code) {
 function goFishBeginTurn(code) {
   const room = goFishRooms.get(code);
   if (!room || !room.gameActive || room.phase === 'GAME_OVER') return;
+
+  if (room.phase === 'FINAL_ROUND_INTRO') {
+    room.actionLocked = true;
+    goFishBroadcastState(code);
+    return;
+  }
 
   if (room.phase === 'FINAL_ROUND') {
     if (!room.finalRound || room.finalRound.index >= room.finalRound.order.length) {
