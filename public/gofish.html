@@ -24,27 +24,24 @@
     </div>
 
     <section class="gf-setup-card" id="setup">
-      <div class="gf-field">
-        <div class="gf-field-label">Deals</div>
-        <div class="pair-chips" id="roundChips"></div>
-        <input type="number" id="roundsInput" min="1" max="15" value="5" class="hidden" />
-      </div>
+      <input type="hidden" id="roundsInput" value="1" />
+      <div id="roundChips" class="hidden" aria-hidden="true"></div>
 
       <div class="gf-field">
         <div class="gf-field-label">Play</div>
         <div class="mode-toggle" id="modeToggle">
-          <button type="button" class="mode-btn" id="modeSoloBtn" data-mode="solo">Vs CPU</button>
-          <button type="button" class="mode-btn active" id="modeDuoBtn" data-mode="duo">Louie vs Ariel</button>
+          <button type="button" class="mode-btn active" id="modeSoloBtn" data-mode="solo">Vs CPU</button>
+          <button type="button" class="mode-btn" id="modeDuoBtn" data-mode="duo">Louie vs Ariel</button>
         </div>
       </div>
 
-      <div id="soloFields" class="hidden">
+      <div id="soloFields">
         <label for="soloNameInput">Your name</label>
         <input type="text" id="soloNameInput" maxlength="20" placeholder="Louie" />
         <button class="gf-primary-btn" id="soloStartBtn">Play CPU</button>
       </div>
 
-      <div id="duoFields">
+      <div id="duoFields" class="hidden">
         <div class="gf-seat-grid">
           <button type="button" class="gf-seat" id="joinLouieBtn">
             <span class="gf-seat-avatar gf-avatar-louie">L</span>
@@ -73,11 +70,18 @@
   </main>
 
   <main class="gf-game hidden" id="gameArea">
+    <div class="gf-final-round-overlay hidden" id="finalRoundOverlay" role="status" aria-live="assertive">
+      <div class="gf-final-round-card">
+        <span class="gf-final-eyebrow">THE POND IS EMPTY</span>
+        <strong>FINAL ROUND</strong>
+        <p>No more fishing. One last turn each.</p>
+      </div>
+    </div>
     <header class="gf-topbar">
       <a href="/gofish" class="gf-topbar-back duel-quit">‹ Games</a>
       <div class="gf-topbar-title">
         <strong>Go Fish</strong>
-        <span>Deal <span id="roundNum"></span> of <span id="totalRounds"></span></span>
+        <span id="phaseLabel">Classic · 52 cards</span><span id="roundNum" class="hidden"></span><span id="totalRounds" class="hidden"></span>
       </div>
       <div class="gf-match-score" id="duelHud" aria-label="Match score">
         <div id="hudP1"><span id="hudP1Name">Louie</span> <b id="hudP1Score">0</b></div>
@@ -141,7 +145,11 @@
       <div class="gf-over-mark">♥</div>
       <h2 id="overTitle">Game complete</h2>
       <p id="soloSummary"></p>
-      <div class="leaderboard" id="finalBoard"></div>
+      <div class="gf-final-score hidden" id="finalScore"></div>
+      <div class="gf-final-books hidden" id="finalBooks"></div>
+      <div class="gf-final-hands hidden" id="finalHands"></div>
+      <div class="gf-final-stats hidden" id="finalStats"></div>
+      <div class="leaderboard hidden" id="finalBoard"></div>
       <button class="gf-primary-btn hidden" id="playAgainBtn">Play again</button>
       <a href="/" class="gf-secondary-btn">Back to games</a>
     </div>
