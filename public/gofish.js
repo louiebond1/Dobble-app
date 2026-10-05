@@ -54,6 +54,7 @@ const GF_PHASES = Object.freeze({
 
 let gamePhase = GF_PHASES.SETUP;
 let pendingFinalRoundIntro = null;
+let finalRoundIntroShowing = false;
 
 function setGamePhase(phase) {
   gamePhase = phase;
@@ -109,6 +110,18 @@ async function showFinalRoundIntro() {
   await wait(1550);
   overlay.classList.add('hidden');
   gameArea.classList.remove('gf-resolving');
+}
+
+async function presentPendingFinalRoundIntro() {
+  if (mode !== 'duo' || finalRoundIntroShowing || !pendingFinalRoundIntro) return;
+  finalRoundIntroShowing = true;
+  pendingFinalRoundIntro = null;
+  try {
+    await showFinalRoundIntro();
+    if (lastGameState) applyGameState(lastGameState);
+  } finally {
+    finalRoundIntroShowing = false;
+  }
 }
 
 const RANKS = ['A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K'];
@@ -832,6 +845,10 @@ async function drainActionQueue() {
 
     pendingRoundResult = null;
 
+    if (!actionQueue.length && pendingFinalRoundIntro) {
+      await presentPendingFinalRoundIntro();
+    }
+
     if (!actionQueue.length && pendingGameOver) {
       const over = pendingGameOver;
       pendingGameOver = null;
@@ -1034,6 +1051,14 @@ socket.on('gofish:state', (data) => {
 socket.on('gofish:action', (data) => {
   if (mode !== 'duo') return;
   queueTurnAction(data);
+});
+
+socket.on('gofish:final-round', (data) => {
+  if (mode !== 'duo') return;
+  pendingFinalRoundIntro = data || {};
+  if (!actionAnimating && !askPending && !actionQueue.length) {
+    presentPendingFinalRoundIntro();
+  }
 });
 
 socket.on('gofish:feed', (data) => {
