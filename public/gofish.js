@@ -23,6 +23,7 @@ let roundNumber = 0;
 let lastGameState = null;
 let pendingGameState = null;
 let pendingRoundResult = null;
+let pendingGameOver = null;
 let actionAnimating = false;
 let askPending = false;
 const actionQueue = [];
@@ -78,6 +79,25 @@ function setGamePhase(phase) {
 
 function humanSelectionPhase() {
   return gamePhase === GF_PHASES.PLAYER_SELECTING || gamePhase === GF_PHASES.FINAL_ROUND_PLAYER;
+}
+
+function syncPhaseFromState(data) {
+  if (!data || mode !== 'duo' || actionAnimating) return;
+  if (data.gamePhase === 'FINAL_ROUND_INTRO') {
+    setGamePhase(GF_PHASES.FINAL_ROUND_INTRO);
+  } else if (data.gamePhase === 'FINAL_ROUND') {
+    setGamePhase(data.isMyTurn ? GF_PHASES.FINAL_ROUND_PLAYER : GF_PHASES.FINAL_ROUND_CPU);
+  } else if (data.gamePhase === 'GAME_OVER') {
+    setGamePhase(GF_PHASES.GAME_OVER);
+  } else {
+    setGamePhase(data.isMyTurn ? GF_PHASES.PLAYER_SELECTING : GF_PHASES.CPU_THINKING);
+  }
+}
+
+function stateAllowsSelection(data) {
+  if (!data || !data.isMyTurn || data.actionLocked) return false;
+  if (mode === 'solo') return humanSelectionPhase();
+  return data.gamePhase === 'NORMAL' || data.gamePhase === 'FINAL_ROUND';
 }
 
 async function showFinalRoundIntro() {
@@ -271,8 +291,7 @@ function renderRankChoices(data) {
   const ranks = (data.askableRanks || [])
     .filter((rank, index, arr) => arr.indexOf(rank) === index)
     .sort((a, b) => RANKS.indexOf(a) - RANKS.indexOf(b));
-  const enabled = data.isMyTurn && !data.actionLocked && !actionAnimating && !askPending &&
-    (mode !== 'solo' || humanSelectionPhase());
+  const enabled = stateAllowsSelection(data) && !actionAnimating && !askPending;
 
   ranks.forEach((rank) => {
     const button = document.createElement('button');
@@ -291,8 +310,7 @@ function updateAskControls(data) {
   const askButton = el('askBtn');
   const hint = el('askHint');
   const opponentName = data.opponent ? data.opponent.name : 'your opponent';
-  const canAct = data.isMyTurn && !data.actionLocked && !actionAnimating && !askPending &&
-    (mode !== 'solo' || humanSelectionPhase());
+  const canAct = stateAllowsSelection(data) && !actionAnimating && !askPending;
   const rankStillValid = selectedRank && (data.askableRanks || []).includes(selectedRank);
 
   if (!rankStillValid) selectedRank = null;
@@ -331,7 +349,7 @@ function updateAskControls(data) {
 
 function selectRank(rank) {
   if (!lastGameState || !lastGameState.isMyTurn || lastGameState.actionLocked || actionAnimating || askPending) return;
-  if (mode === 'solo' && !humanSelectionPhase()) return;
+  if (!stateAllowsSelection(lastGameState)) return;
   if (!(lastGameState.askableRanks || []).includes(rank)) return;
   selectedRank = selectedRank === rank ? null : rank;
   updateAskControls(lastGameState);
@@ -339,7 +357,7 @@ function selectRank(rank) {
 
 function applyGameState(data, { freezeTurn = false } = {}) {
   lastGameState = data;
-  const interactive = data.isMyTurn && !data.actionLocked && !actionAnimating && !askPending;
+  const interactive = stateAllowsSelection(data) && !actionAnimating && !askPending;
   if (!data.isMyTurn || !(data.askableRanks || []).includes(selectedRank)) selectedRank = null;
 
   renderMyHand(data.myHand, { interactive, askableRanks: data.askableRanks || [] });
@@ -350,7 +368,11 @@ function applyGameState(data, { freezeTurn = false } = {}) {
   }
   el('pondCount').textContent = data.pondCount;
   updateIdentity(data);
-  if (!freezeTurn) updateTurnPill(data.isMyTurn, data.turnName);
+  updateDuelHud(data);
+  if (!freezeTurn) {
+    syncPhaseFromState(data);
+    updateTurnPill(data.isMyTurn, data.turnName);
+  }
   renderRankChoices(data);
   updateAskControls(data);
   gameArea.classList.toggle('gf-resolving', !!data.actionLocked || actionAnimating || askPending);
