@@ -7,13 +7,13 @@ const gameOver = el('gameOver');
 
 const socket = io();
 
-let mode = 'duo'; // 'solo' | 'duo'
+let mode = 'solo'; // 'solo' | 'duo'
 let roomCode = null;
 let hostToken = null;
 let isHost = false;
 let myName = null;
 let players = [];
-let totalRounds = 5;
+let totalRounds = 1;
 let roundNumber = 0;
 
 // A Go Fish move is deliberately presented as a short story rather than an
@@ -34,6 +34,62 @@ const TURN_TIMING = {
 };
 
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+const GF_PHASES = Object.freeze({
+  SETUP: 'SETUP',
+  PLAYER_SELECTING: 'PLAYER_SELECTING',
+  PLAYER_ASKING: 'PLAYER_ASKING',
+  CARD_TRANSFER: 'CARD_TRANSFER',
+  GO_FISH: 'GO_FISH',
+  DRAWING: 'DRAWING',
+  BOOK_COMPLETING: 'BOOK_COMPLETING',
+  CPU_THINKING: 'CPU_THINKING',
+  CPU_ASKING: 'CPU_ASKING',
+  FINAL_ROUND_INTRO: 'FINAL_ROUND_INTRO',
+  FINAL_ROUND_PLAYER: 'FINAL_ROUND_PLAYER',
+  FINAL_ROUND_CPU: 'FINAL_ROUND_CPU',
+  GAME_OVER: 'GAME_OVER',
+});
+
+let gamePhase = GF_PHASES.SETUP;
+let pendingFinalRoundIntro = null;
+
+function setGamePhase(phase) {
+  gamePhase = phase;
+  const label = el('phaseLabel');
+  if (!label) return;
+  const labels = {
+    [GF_PHASES.SETUP]: 'Classic · 52 cards',
+    [GF_PHASES.PLAYER_SELECTING]: 'Your turn',
+    [GF_PHASES.PLAYER_ASKING]: 'Asking…',
+    [GF_PHASES.CARD_TRANSFER]: 'Cards moving…',
+    [GF_PHASES.GO_FISH]: 'Go Fish',
+    [GF_PHASES.DRAWING]: 'Drawing…',
+    [GF_PHASES.BOOK_COMPLETING]: 'Book complete',
+    [GF_PHASES.CPU_THINKING]: 'CPU thinking…',
+    [GF_PHASES.CPU_ASKING]: 'CPU asking…',
+    [GF_PHASES.FINAL_ROUND_INTRO]: 'Final Round',
+    [GF_PHASES.FINAL_ROUND_PLAYER]: 'Final Round · Your ask',
+    [GF_PHASES.FINAL_ROUND_CPU]: 'Final Round · CPU ask',
+    [GF_PHASES.GAME_OVER]: 'Game over',
+  };
+  label.textContent = labels[phase] || 'Go Fish';
+}
+
+function humanSelectionPhase() {
+  return gamePhase === GF_PHASES.PLAYER_SELECTING || gamePhase === GF_PHASES.FINAL_ROUND_PLAYER;
+}
+
+async function showFinalRoundIntro() {
+  setGamePhase(GF_PHASES.FINAL_ROUND_INTRO);
+  gameArea.classList.add('gf-resolving');
+  const overlay = el('finalRoundOverlay');
+  overlay.classList.remove('hidden');
+  hapticSuccess();
+  await wait(1550);
+  overlay.classList.add('hidden');
+  gameArea.classList.remove('gf-resolving');
+}
 
 const RANKS = ['A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K'];
 const SUITS = ['♠', '♥', '♦', '♣'];
@@ -215,7 +271,8 @@ function renderRankChoices(data) {
   const ranks = (data.askableRanks || [])
     .filter((rank, index, arr) => arr.indexOf(rank) === index)
     .sort((a, b) => RANKS.indexOf(a) - RANKS.indexOf(b));
-  const enabled = data.isMyTurn && !data.actionLocked && !actionAnimating && !askPending;
+  const enabled = data.isMyTurn && !data.actionLocked && !actionAnimating && !askPending &&
+    (mode !== 'solo' || humanSelectionPhase());
 
   ranks.forEach((rank) => {
     const button = document.createElement('button');
@@ -234,7 +291,8 @@ function updateAskControls(data) {
   const askButton = el('askBtn');
   const hint = el('askHint');
   const opponentName = data.opponent ? data.opponent.name : 'your opponent';
-  const canAct = data.isMyTurn && !data.actionLocked && !actionAnimating && !askPending;
+  const canAct = data.isMyTurn && !data.actionLocked && !actionAnimating && !askPending &&
+    (mode !== 'solo' || humanSelectionPhase());
   const rankStillValid = selectedRank && (data.askableRanks || []).includes(selectedRank);
 
   if (!rankStillValid) selectedRank = null;
@@ -273,6 +331,7 @@ function updateAskControls(data) {
 
 function selectRank(rank) {
   if (!lastGameState || !lastGameState.isMyTurn || lastGameState.actionLocked || actionAnimating || askPending) return;
+  if (mode === 'solo' && !humanSelectionPhase()) return;
   if (!(lastGameState.askableRanks || []).includes(rank)) return;
   selectedRank = selectedRank === rank ? null : rank;
   updateAskControls(lastGameState);
