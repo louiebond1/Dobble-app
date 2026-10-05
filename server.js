@@ -15,6 +15,7 @@ const { SCRAMBLE_WORDS } = require('./lib/scrambleWords');
 const { COUNTRIES } = require('./lib/countries');
 const { RANKS: CARD_RANKS, buildDeck, shuffle: shuffleDeck } = require('./lib/cards');
 const {
+  GO_FISH_PHASES: GOFISH_PHASES,
   buildFinalOrder,
   legalAskRanks,
   isLuckyCatch,
@@ -64,14 +65,6 @@ const TTT_LINES = [
 /** @type {Map<string, any>} */
 const goFishRooms = new Map();
 const GOFISH_DEAL_SIZE = 7;
-const GOFISH_PHASES = Object.freeze({
-  SETUP: 'SETUP',
-  NORMAL: 'NORMAL',
-  FINAL_ROUND_INTRO: 'FINAL_ROUND_INTRO',
-  FINAL_ROUND: 'FINAL_ROUND',
-  GAME_OVER: 'GAME_OVER',
-});
-
 /** @type {Map<string, any>} */
 const puzzleRooms = new Map();
 const PUZZLE_ROUND_MS = 90000;
