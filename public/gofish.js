@@ -7,13 +7,13 @@ const gameOver = el('gameOver');
 
 const socket = io();
 
-let mode = 'duo'; // 'solo' | 'duo'
+let mode = 'solo'; // 'solo' | 'duo'
 let roomCode = null;
 let hostToken = null;
 let isHost = false;
 let myName = null;
 let players = [];
-let totalRounds = 5;
+let totalRounds = 1;
 let roundNumber = 0;
 
 // A Go Fish move is deliberately presented as a short story rather than an
@@ -23,6 +23,7 @@ let roundNumber = 0;
 let lastGameState = null;
 let pendingGameState = null;
 let pendingRoundResult = null;
+let pendingGameOver = null;
 let actionAnimating = false;
 let askPending = false;
 const actionQueue = [];
@@ -34,6 +35,94 @@ const TURN_TIMING = {
 };
 
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+const GF_PHASES = Object.freeze({
+  SETUP: 'SETUP',
+  PLAYER_SELECTING: 'PLAYER_SELECTING',
+  PLAYER_ASKING: 'PLAYER_ASKING',
+  CARD_TRANSFER: 'CARD_TRANSFER',
+  GO_FISH: 'GO_FISH',
+  DRAWING: 'DRAWING',
+  BOOK_COMPLETING: 'BOOK_COMPLETING',
+  CPU_THINKING: 'CPU_THINKING',
+  CPU_ASKING: 'CPU_ASKING',
+  FINAL_ROUND_INTRO: 'FINAL_ROUND_INTRO',
+  FINAL_ROUND_PLAYER: 'FINAL_ROUND_PLAYER',
+  FINAL_ROUND_CPU: 'FINAL_ROUND_CPU',
+  GAME_OVER: 'GAME_OVER',
+});
+
+let gamePhase = GF_PHASES.SETUP;
+let pendingFinalRoundIntro = null;
+let finalRoundIntroShowing = false;
+
+function setGamePhase(phase) {
+  gamePhase = phase;
+  const label = el('phaseLabel');
+  if (!label) return;
+  const labels = {
+    [GF_PHASES.SETUP]: 'Classic · 52 cards',
+    [GF_PHASES.PLAYER_SELECTING]: 'Your turn',
+    [GF_PHASES.PLAYER_ASKING]: 'Asking…',
+    [GF_PHASES.CARD_TRANSFER]: 'Cards moving…',
+    [GF_PHASES.GO_FISH]: 'Go Fish',
+    [GF_PHASES.DRAWING]: 'Drawing…',
+    [GF_PHASES.BOOK_COMPLETING]: 'Book complete',
+    [GF_PHASES.CPU_THINKING]: mode === 'solo' ? 'CPU thinking…' : 'Their turn',
+    [GF_PHASES.CPU_ASKING]: mode === 'solo' ? 'CPU asking…' : 'They’re asking…',
+    [GF_PHASES.FINAL_ROUND_INTRO]: 'Final Round',
+    [GF_PHASES.FINAL_ROUND_PLAYER]: 'Final Round · Your ask',
+    [GF_PHASES.FINAL_ROUND_CPU]: mode === 'solo' ? 'Final Round · CPU ask' : 'Final Round · Their ask',
+    [GF_PHASES.GAME_OVER]: 'Game over',
+  };
+  label.textContent = labels[phase] || 'Go Fish';
+}
+
+function humanSelectionPhase() {
+  return gamePhase === GF_PHASES.PLAYER_SELECTING || gamePhase === GF_PHASES.FINAL_ROUND_PLAYER;
+}
+
+function syncPhaseFromState(data) {
+  if (!data || mode !== 'duo' || actionAnimating) return;
+  if (data.gamePhase === 'FINAL_ROUND_INTRO') {
+    setGamePhase(GF_PHASES.FINAL_ROUND_INTRO);
+  } else if (data.gamePhase === 'FINAL_ROUND') {
+    setGamePhase(data.isMyTurn ? GF_PHASES.FINAL_ROUND_PLAYER : GF_PHASES.FINAL_ROUND_CPU);
+  } else if (data.gamePhase === 'GAME_OVER') {
+    setGamePhase(GF_PHASES.GAME_OVER);
+  } else {
+    setGamePhase(data.isMyTurn ? GF_PHASES.PLAYER_SELECTING : GF_PHASES.CPU_THINKING);
+  }
+}
+
+function stateAllowsSelection(data) {
+  if (!data || !data.isMyTurn || data.actionLocked) return false;
+  if (mode === 'solo') return humanSelectionPhase();
+  return data.gamePhase === 'NORMAL' || data.gamePhase === 'FINAL_ROUND';
+}
+
+async function showFinalRoundIntro() {
+  setGamePhase(GF_PHASES.FINAL_ROUND_INTRO);
+  gameArea.classList.add('gf-resolving');
+  const overlay = el('finalRoundOverlay');
+  overlay.classList.remove('hidden');
+  hapticSuccess();
+  await wait(1550);
+  overlay.classList.add('hidden');
+  gameArea.classList.remove('gf-resolving');
+}
+
+async function presentPendingFinalRoundIntro() {
+  if (mode !== 'duo' || finalRoundIntroShowing || !pendingFinalRoundIntro) return;
+  finalRoundIntroShowing = true;
+  pendingFinalRoundIntro = null;
+  try {
+    await showFinalRoundIntro();
+    if (lastGameState) applyGameState(lastGameState);
+  } finally {
+    finalRoundIntroShowing = false;
+  }
+}
 
 const RANKS = ['A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K'];
 const SUITS = ['♠', '♥', '♦', '♣'];
@@ -215,7 +304,7 @@ function renderRankChoices(data) {
   const ranks = (data.askableRanks || [])
     .filter((rank, index, arr) => arr.indexOf(rank) === index)
     .sort((a, b) => RANKS.indexOf(a) - RANKS.indexOf(b));
-  const enabled = data.isMyTurn && !data.actionLocked && !actionAnimating && !askPending;
+  const enabled = stateAllowsSelection(data) && !actionAnimating && !askPending;
 
   ranks.forEach((rank) => {
     const button = document.createElement('button');
@@ -234,7 +323,7 @@ function updateAskControls(data) {
   const askButton = el('askBtn');
   const hint = el('askHint');
   const opponentName = data.opponent ? data.opponent.name : 'your opponent';
-  const canAct = data.isMyTurn && !data.actionLocked && !actionAnimating && !askPending;
+  const canAct = stateAllowsSelection(data) && !actionAnimating && !askPending;
   const rankStillValid = selectedRank && (data.askableRanks || []).includes(selectedRank);
 
   if (!rankStillValid) selectedRank = null;
@@ -248,9 +337,16 @@ function updateAskControls(data) {
     askButton.textContent = 'Resolving…';
     hint.textContent = 'Watch the cards — the result is playing out.';
   } else if (selectedRank) {
+    const finalAsk = mode === 'solo'
+      ? soloFinal.active
+      : data.gamePhase === 'FINAL_ROUND';
     askButton.disabled = !canAct;
-    askButton.textContent = `Ask ${opponentName} for ${rankPlural(selectedRank)}`;
-    hint.textContent = `Your ${rankPlural(selectedRank)} are highlighted. Nothing happens until you ask.`;
+    askButton.textContent = finalAsk
+      ? `Final ask · ${rankPlural(selectedRank)}`
+      : `Ask ${opponentName} for ${rankPlural(selectedRank)}`;
+    hint.textContent = finalAsk
+      ? 'One ask only. No fishing and no extra turn.'
+      : `Your ${rankPlural(selectedRank)} are highlighted. Nothing happens until you ask.`;
   } else {
     askButton.disabled = true;
     askButton.textContent = 'Choose a rank';
@@ -273,6 +369,7 @@ function updateAskControls(data) {
 
 function selectRank(rank) {
   if (!lastGameState || !lastGameState.isMyTurn || lastGameState.actionLocked || actionAnimating || askPending) return;
+  if (!stateAllowsSelection(lastGameState)) return;
   if (!(lastGameState.askableRanks || []).includes(rank)) return;
   selectedRank = selectedRank === rank ? null : rank;
   updateAskControls(lastGameState);
@@ -280,7 +377,7 @@ function selectRank(rank) {
 
 function applyGameState(data, { freezeTurn = false } = {}) {
   lastGameState = data;
-  const interactive = data.isMyTurn && !data.actionLocked && !actionAnimating && !askPending;
+  const interactive = stateAllowsSelection(data) && !actionAnimating && !askPending;
   if (!data.isMyTurn || !(data.askableRanks || []).includes(selectedRank)) selectedRank = null;
 
   renderMyHand(data.myHand, { interactive, askableRanks: data.askableRanks || [] });
@@ -291,7 +388,11 @@ function applyGameState(data, { freezeTurn = false } = {}) {
   }
   el('pondCount').textContent = data.pondCount;
   updateIdentity(data);
-  if (!freezeTurn) updateTurnPill(data.isMyTurn, data.turnName);
+  updateDuelHud(data);
+  if (!freezeTurn) {
+    syncPhaseFromState(data);
+    updateTurnPill(data.isMyTurn, data.turnName);
+  }
   renderRankChoices(data);
   updateAskControls(data);
   gameArea.classList.toggle('gf-resolving', !!data.actionLocked || actionAnimating || askPending);
@@ -544,7 +645,7 @@ async function animateStateTransition(action, nextState) {
         }
       });
     }
-  } else if (action.kind === 'fish' && !action.pondEmpty) {
+  } else if ((action.kind === 'fish' || action.kind === 'replenish') && !action.pondEmpty) {
     if (mine) {
       const drawn = action.drawnCard;
       if (bookRank) {
@@ -631,24 +732,44 @@ async function playTurnAction(action) {
   const targetName = action.opponentName || 'your opponent';
   gameArea.classList.add('gf-resolving');
 
-  showEventBanner(
-    mine
-      ? `You ask ${targetName} for ${rankPlural(action.rank)}…`
-      : `${action.askerName} asks you for ${rankPlural(action.rank)}…`,
-    { persist: true }
-  );
-  await wait(TURN_TIMING.anticipation);
-
-  if (action.kind === 'take') {
+  if (action.kind === 'skip') {
+    setGamePhase(GF_PHASES.FINAL_ROUND_INTRO);
     showEventBanner(
-      mine
-        ? `${targetName} has ${humanCount(action.count)} ${action.count === 1 ? rankSingular(action.rank) : rankPlural(action.rank)}`
-        : `You hand over ${humanCount(action.count)} ${action.count === 1 ? rankSingular(action.rank) : rankPlural(action.rank)}`,
+      mine ? 'No cards left — your final ask is skipped' : `${action.askerName} has no cards — final ask skipped`,
       { persist: true }
     );
+    await wait(650);
+  } else if (action.kind === 'replenish') {
+    setGamePhase(GF_PHASES.DRAWING);
+    showEventBanner(mine ? 'Your hand is empty — drawing one' : `${action.askerName} draws back in`, { persist: true });
+    await wait(180);
   } else {
-    showEventBanner(mine ? 'Go Fish' : `${action.askerName} goes fishing`, { persist: true, emphasis: true });
-    await wait(160);
+    setGamePhase(mine ? GF_PHASES.PLAYER_ASKING : GF_PHASES.CPU_ASKING);
+    showEventBanner(
+      mine
+        ? `You ask ${targetName} for ${rankPlural(action.rank)}…`
+        : `${action.askerName} asks you for ${rankPlural(action.rank)}…`,
+      { persist: true }
+    );
+    await wait(TURN_TIMING.anticipation);
+
+    if (action.kind === 'take') {
+      setGamePhase(GF_PHASES.CARD_TRANSFER);
+      showEventBanner(
+        mine
+          ? `${targetName} had ${humanCount(action.count)}`
+          : `You hand over ${humanCount(action.count)} ${action.count === 1 ? rankSingular(action.rank) : rankPlural(action.rank)}`,
+        { persist: true }
+      );
+    } else if (action.kind === 'final-miss') {
+      showEventBanner(mine ? 'Nothing there' : 'You have none', { persist: true, emphasis: true });
+      await wait(260);
+    } else {
+      setGamePhase(GF_PHASES.GO_FISH);
+      showEventBanner(mine ? 'GO FISH' : `${action.askerName} goes fishing`, { persist: true, emphasis: true });
+      await wait(260);
+      setGamePhase(GF_PHASES.DRAWING);
+    }
   }
 
   let nextState = null;
@@ -660,23 +781,46 @@ async function playTurnAction(action) {
   }
 
   if (nextState) await animateStateTransition(action, nextState);
+
+  if (action.books && action.books.length) setGamePhase(GF_PHASES.BOOK_COMPLETING);
   await wait(TURN_TIMING.settle);
 }
 
-function applyPendingAfterAction(action) {
+async function applyPendingAfterAction(action) {
   const mine = action.askerName === currentPlayerName();
 
   if (action.books && action.books.length) {
     const who = mine ? 'You' : action.askerName;
     showEventBanner(`${who} completed the book of ${rankPlural(action.books[0])}`, { book: true });
+    await wait(TURN_TIMING.book);
+  }
+
+  if (action.finalRoundStarts) {
+    await showFinalRoundIntro();
+    return;
+  }
+
+  if (action.finalRound) {
+    if (action.kind === 'skip') {
+      showEventBanner(mine ? 'Your final turn is skipped' : `${action.askerName}’s final turn is skipped`);
+    } else if (action.kind === 'take') {
+      showEventBanner(mine ? 'Got them — final ask complete' : `${action.askerName} got them — final ask complete`);
+    } else {
+      showEventBanner(mine ? 'Nothing there — final ask complete' : `${action.askerName} found nothing — final ask complete`);
+    }
+    return;
+  }
+
+  if (action.kind === 'replenish') {
+    if (mine && action.drawnCard) {
+      showEventBanner(`You draw ${action.drawnCard.rank}${action.drawnCard.suit} — keep playing`);
+    } else {
+      showEventBanner(`${action.askerName} is back in`);
+    }
   } else if (action.kind === 'take') {
-    showEventBanner(mine ? 'They’re yours — go again' : `${action.askerName} gets another go`);
-  } else if (action.pondEmpty) {
-    showEventBanner('The pond is empty');
-  } else if (action.matched) {
-    showEventBanner(mine
-      ? `You fished the ${action.rank} — go again`
-      : `${action.askerName} found the ${action.rank} — they go again`);
+    showEventBanner(mine ? 'Got them — your turn again' : `${action.askerName} goes again`);
+  } else if (action.luckyCatch || action.matched) {
+    showEventBanner('LUCKY CATCH — go again', { emphasis: true });
   } else if (mine && action.drawnCard) {
     showEventBanner(`You drew ${action.drawnCard.rank}${action.drawnCard.suit} — ${action.opponentName}’s turn`);
   } else {
@@ -689,14 +833,15 @@ async function drainActionQueue() {
   actionAnimating = true;
   askPending = false;
   const action = actionQueue.shift();
+
   try {
     await playTurnAction(action);
-    applyPendingAfterAction(action);
-    if (action.books && action.books.length) await wait(TURN_TIMING.book);
+    await applyPendingAfterAction(action);
   } finally {
     actionAnimating = false;
     askPending = false;
     gameArea.classList.remove('gf-resolving');
+
     if (pendingGameState) {
       const state = pendingGameState;
       pendingGameState = null;
@@ -704,13 +849,20 @@ async function drainActionQueue() {
     } else if (lastGameState) {
       applyGameState(lastGameState);
     }
-    if (pendingRoundResult) {
-      const result = pendingRoundResult;
-      players = result.players;
-      pendingRoundResult = null;
-      updateDuelHud();
-      showEventBanner(result.winnerName ? `${result.winnerName} took this deal` : 'This deal is a tie');
+
+    pendingRoundResult = null;
+
+    if (!actionQueue.length && pendingFinalRoundIntro) {
+      await presentPendingFinalRoundIntro();
     }
+
+    if (!actionQueue.length && pendingGameOver) {
+      const over = pendingGameOver;
+      pendingGameOver = null;
+      handleDuoGameOver(over);
+      return;
+    }
+
     drainActionQueue();
   }
 }
@@ -741,25 +893,7 @@ el('askBtn').addEventListener('click', () => {
   if (selectedRank) askForRank(selectedRank);
 });
 
-// --- Round-count picker ------------------------------------------------
-
-const ROUND_PRESETS = [3, 5, 7, 10];
-(function renderRoundChips() {
-  const container = el('roundChips');
-  ROUND_PRESETS.forEach((n) => {
-    const btn = document.createElement('button');
-    btn.type = 'button';
-    btn.className = 'chip';
-    btn.dataset.count = n;
-    btn.textContent = n;
-    if (n === 5) btn.classList.add('active');
-    btn.addEventListener('click', () => {
-      container.querySelectorAll('.chip').forEach((c) => c.classList.toggle('active', c === btn));
-      el('roundsInput').value = n;
-    });
-    container.appendChild(btn);
-  });
-})();
+// One shuffled deck is one complete Go Fish game.
 
 // --- Mode toggle ---------------------------------------------------------
 
@@ -853,8 +987,8 @@ function updateLobby() {
 
 el('startBtn').addEventListener('click', () => {
   if (!amHost() || !roomCode) return;
-  totalRounds = parseInt(el('roundsInput').value, 10) || 5;
-  socket.emit('gofish:host:start', { code: roomCode, rounds: totalRounds });
+  totalRounds = 1;
+  socket.emit('gofish:host:start', { code: roomCode, rounds: 1 });
 });
 
 socket.on('gofish:room:cancelled', () => {
@@ -865,13 +999,23 @@ socket.on('gofish:room:cancelled', () => {
   setup.classList.remove('hidden');
 });
 
-function updateDuelHud() {
+function updateDuelHud(state = null) {
+  if (state) {
+    const mine = currentPlayerName();
+    const opponentName = state.opponent ? state.opponent.name : 'Opponent';
+    el('hudP1Name').textContent = mine;
+    el('hudP1Score').textContent = (state.myBooks || []).length;
+    el('hudP2Name').textContent = opponentName;
+    el('hudP2Score').textContent = state.opponent ? (state.opponent.books || []).length : 0;
+    return;
+  }
+
   if (!players[0]) return;
   el('hudP1Name').textContent = players[0].name;
-  el('hudP1Score').textContent = players[0].score;
+  el('hudP1Score').textContent = players[0].score || 0;
   if (players[1]) {
     el('hudP2Name').textContent = players[1].name;
-    el('hudP2Score').textContent = players[1].score;
+    el('hudP2Score').textContent = players[1].score || 0;
   }
 }
 
@@ -882,14 +1026,17 @@ socket.on('gofish:round:start', (data) => {
   selectedRank = null;
   pendingGameState = null;
   pendingRoundResult = null;
+  pendingGameOver = null;
+  pendingFinalRoundIntro = null;
   actionQueue.length = 0;
   actionAnimating = false;
   askPending = false;
-  roundNumber = data.roundNumber;
-  totalRounds = data.totalRounds;
+  roundNumber = 1;
+  totalRounds = 1;
   if (Array.isArray(data.players)) players = data.players;
-  el('roundNum').textContent = roundNumber;
-  el('totalRounds').textContent = totalRounds;
+  el('roundNum').textContent = '1';
+  el('totalRounds').textContent = '1';
+  setGamePhase(GF_PHASES.SETUP);
   el('eventBanner').textContent = '';
 
   setupWrap.classList.add('hidden');
@@ -913,35 +1060,100 @@ socket.on('gofish:action', (data) => {
   queueTurnAction(data);
 });
 
+socket.on('gofish:final-round', (data) => {
+  if (mode !== 'duo') return;
+  pendingFinalRoundIntro = data || {};
+  if (!actionAnimating && !askPending && !actionQueue.length) {
+    presentPendingFinalRoundIntro();
+  }
+});
+
 socket.on('gofish:feed', (data) => {
   if (!actionAnimating) showEventBanner(data.text);
 });
 
-socket.on('gofish:round:result', (data) => {
-  if (mode !== 'duo') return;
-  if (actionAnimating || askPending) {
-    pendingRoundResult = data;
+function finalReasonText(reason) {
+  return {
+    books: 'Most completed books',
+    'hand-count': 'Tiebreak: more cards left in hand',
+    'last-book': 'Tiebreak: most recent book',
+    cards: 'Tiebreak: more cards left in hand',
+    'recent-book': 'Tiebreak: most recent book',
+    draw: 'Still level after every tiebreak',
+  }[reason] || '';
+}
+
+function handleDuoGameOver(data) {
+  if (mashupMode) {
+    const legPlayers = (data.players || []).map((player) => ({
+      ...player,
+      score: data.winnerName ? (player.name === data.winnerName ? 1 : 0) : 0,
+    }));
+    reportMashupLegResult(socket, legPlayers);
     return;
   }
-  players = data.players;
-  updateDuelHud();
-});
-
-socket.on('gofish:game:over', (data) => {
-  if (mashupMode) return reportMashupLegResult(socket, data.players);
   if (mode !== 'duo') return;
+
+  setGamePhase(GF_PHASES.GAME_OVER);
   gameArea.classList.add('hidden');
   gameOver.classList.remove('hidden');
   el('playAgainBtn').classList.toggle('hidden', !amHost());
-  el('soloSummary').textContent = '';
+  el('finalBoard').classList.add('hidden');
 
-  const [p1, p2] = data.players;
-  let title;
-  if (!p2 || p1.score === p2.score) title = "It's a tie! 🤝";
-  else title = `${p1.score > p2.score ? p1.name : p2.name} wins! 🏆`;
-  el('overTitle').textContent = title;
-  el('finalBoard').classList.remove('hidden');
-  renderLeaderboard('finalBoard', [...data.players].sort((a, b) => b.score - a.score));
+  const publicPlayers = Array.isArray(data.players) ? data.players : [];
+  const revealed = Array.isArray(data.hands) ? data.hands : [];
+  const minePublic = publicPlayers.find((player) => player.name === myName) || publicPlayers[0] || null;
+  const opponentPublic = publicPlayers.find((player) => !minePublic || player.name !== minePublic.name) || publicPlayers[1] || null;
+  const mineReveal = revealed.find((entry) => entry.name === myName) || revealed[0] || { name: myName, hand: [], books: [] };
+  const opponentReveal = revealed.find((entry) => entry.name !== mineReveal.name) || revealed[1] || { name: opponentPublic ? opponentPublic.name : 'Opponent', hand: [], books: [] };
+
+  if (!data.winnerName) {
+    el('overTitle').textContent = 'DRAW';
+  } else if (data.winnerName === myName) {
+    el('overTitle').textContent = 'YOU WIN';
+    hapticSuccess();
+    playSuccess();
+  } else {
+    el('overTitle').textContent = 'YOU LOSE';
+  }
+  el('soloSummary').textContent = finalReasonText(data.reason);
+
+  const myBookCount = (mineReveal.books || []).length;
+  const opponentBookCount = (opponentReveal.books || []).length;
+  const opponentName = opponentPublic ? opponentPublic.name : (opponentReveal.name || 'Opponent');
+
+  el('finalScore').classList.remove('hidden');
+  el('finalScore').innerHTML = `
+    <div class="gf-final-score-side"><strong>${myBookCount}</strong><span>You · books</span></div>
+    <div class="gf-final-score-vs">vs</div>
+    <div class="gf-final-score-side"><strong>${opponentBookCount}</strong><span>${escapeResultText(opponentName)} · books</span></div>`;
+
+  el('finalBooks').classList.remove('hidden');
+  el('finalBooks').innerHTML = `
+    <div class="gf-final-section-title">Completed books</div>
+    <div class="gf-result-row"><span class="gf-result-row-name">You</span><div class="gf-result-mini-cards">${resultBooksMarkup(mineReveal.books || [])}</div></div>
+    <div class="gf-result-row"><span class="gf-result-row-name">${escapeResultText(opponentName)}</span><div class="gf-result-mini-cards">${resultBooksMarkup(opponentReveal.books || [])}</div></div>`;
+
+  el('finalHands').classList.remove('hidden');
+  el('finalHands').innerHTML = `
+    <div class="gf-final-section-title">Cards left in hand</div>
+    <div class="gf-result-row"><span class="gf-result-row-name">You</span><div class="gf-result-mini-cards">${resultHandMarkup(mineReveal.hand || [])}</div></div>
+    <div class="gf-result-row"><span class="gf-result-row-name">${escapeResultText(opponentName)}</span><div class="gf-result-mini-cards">${resultHandMarkup(opponentReveal.hand || [])}</div></div>`;
+
+  const myStats = minePublic && minePublic.stats ? minePublic.stats : {};
+  el('finalStats').classList.remove('hidden');
+  el('finalStats').innerHTML = `
+    <div class="gf-stat"><strong>${myStats.luckyCatches || 0}</strong><span>Lucky catches</span></div>
+    <div class="gf-stat"><strong>${myStats.successfulAsks || 0}</strong><span>Successful asks</span></div>
+    <div class="gf-stat"><strong>${myStats.longestTurnStreak || 0}</strong><span>Longest streak</span></div>`;
+}
+
+socket.on('gofish:game:over', (data) => {
+  if (actionAnimating || askPending || actionQueue.length) {
+    pendingGameOver = data;
+    return;
+  }
+  handleDuoGameOver(data);
 });
 
 el('playAgainBtn').addEventListener('click', () => {
@@ -952,87 +1164,95 @@ el('playAgainBtn').addEventListener('click', () => {
   }
   if (!amHost() || !roomCode) return;
   gameOver.classList.add('hidden');
-  socket.emit('gofish:host:start', { code: roomCode, rounds: totalRounds });
+  socket.emit('gofish:host:start', { code: roomCode, rounds: 1 });
 });
 
-// --- Solo vs CPU (local) ---------------------------------------------------
+// --- Solo vs CPU (authoritative local state machine) ----------------------
 
 let soloName = 'You';
-let soloTotalRounds = 5;
 let soloHands = { me: [], cpu: [] };
 let soloBooks = { me: [], cpu: [] };
-let soloScore = { me: 0, cpu: 0 };
 let soloPond = [];
 let soloTurn = 'me';
 let soloGameActive = false;
+let soloFinal = { active: false, order: [], index: 0 };
+let soloLastBookOwner = null;
+let soloCpuMemory = new Map();
+let soloMemoryClock = 0;
+let soloStats = null;
 
-function soloCheckBooks(who) {
-  const completed = [];
-  const hand = soloHands[who];
-  const counts = new Map();
-  for (const c of hand) counts.set(c.rank, (counts.get(c.rank) || 0) + 1);
-  for (const [rank, count] of counts) {
-    if (count >= 4) {
-      soloHands[who] = soloHands[who].filter((c) => c.rank !== rank);
-      soloBooks[who].push(rank);
-      completed.push(rank);
-    }
+function freshSoloStats() {
+  return {
+    me: { successfulAsks: 0, luckyCatches: 0, booksCompleted: 0, currentStreak: 0, longestTurnStreak: 0 },
+    cpu: { successfulAsks: 0, luckyCatches: 0, booksCompleted: 0, currentStreak: 0, longestTurnStreak: 0 },
+  };
+}
+
+function syncSoloHud() {
+  players = [
+    { name: soloName, score: soloBooks.me.length },
+    { name: 'CPU', score: soloBooks.cpu.length },
+  ];
+  updateDuelHud();
+}
+
+function rememberHumanRank(rank, confidence = 3) {
+  soloMemoryClock += 1;
+  const existing = soloCpuMemory.get(rank);
+  soloCpuMemory.set(rank, {
+    confidence: Math.max(confidence, existing ? existing.confidence : 0),
+    seenAt: soloMemoryClock,
+  });
+}
+
+function forgetHumanRank(rank) {
+  soloCpuMemory.delete(rank);
+}
+
+function decayCpuMemory() {
+  for (const [rank, info] of soloCpuMemory) {
+    const next = info.confidence * 0.92;
+    if (next < 0.55) soloCpuMemory.delete(rank);
+    else soloCpuMemory.set(rank, { ...info, confidence: next });
   }
+}
+
+function noteSoloAsk(who) {
+  soloStats[who].currentStreak += 1;
+  soloStats[who].longestTurnStreak = Math.max(
+    soloStats[who].longestTurnStreak,
+    soloStats[who].currentStreak
+  );
+}
+
+function endSoloTurnStreak(who) {
+  soloStats[who].currentStreak = 0;
+}
+
+function soloCheckBooks(who, { recordRecent = true } = {}) {
+  const completed = [];
+  const counts = new Map();
+  for (const card of soloHands[who]) counts.set(card.rank, (counts.get(card.rank) || 0) + 1);
+
+  for (const [rank, count] of counts) {
+    if (count < 4) continue;
+    soloHands[who] = soloHands[who].filter((card) => card.rank !== rank);
+    soloBooks[who].push(rank);
+    soloStats[who].booksCompleted += 1;
+    completed.push(rank);
+
+    // A completed human book is public information and removes that rank
+    // from play, so CPU memory for it is no longer useful.
+    if (who === 'me') forgetHumanRank(rank);
+    if (recordRecent) soloLastBookOwner = who;
+  }
+
+  if (completed.length) syncSoloHud();
   return completed;
 }
 
 function soloTotalBooks() {
   return soloBooks.me.length + soloBooks.cpu.length;
-}
-
-el('soloStartBtn').addEventListener('click', () => {
-  soloName = el('soloNameInput').value.trim() || 'You';
-  soloTotalRounds = parseInt(el('roundsInput').value, 10) || 5;
-  startSoloGame();
-});
-
-function startSoloGame() {
-  mode = 'solo';
-  actionQueue.length = 0;
-  actionAnimating = false;
-  askPending = false;
-  pendingGameState = null;
-  lastGameState = null;
-  roundNumber = 0;
-  totalRounds = soloTotalRounds;
-  soloScore = { me: 0, cpu: 0 };
-  players = [{ name: soloName, score: 0 }, { name: 'CPU', score: 0 }];
-
-  setupWrap.classList.add('hidden');
-  lobby.classList.add('hidden');
-  gameOver.classList.add('hidden');
-  gameArea.classList.remove('hidden');
-  el('hudP2').classList.remove('hidden');
-  updateDuelHud();
-
-  startSoloRound();
-}
-
-function startSoloRound() {
-  if (roundNumber >= totalRounds) return endSoloGame();
-  roundNumber += 1;
-  el('roundNum').textContent = roundNumber;
-  el('totalRounds').textContent = totalRounds;
-  el('eventBanner').textContent = '';
-
-  const deck = shuffle(buildDeck());
-  soloHands = { me: deck.splice(0, 7), cpu: deck.splice(0, 7) };
-  soloBooks = { me: [], cpu: [] };
-  soloPond = deck;
-  // Alternate who asks first each deal, same convention as duo mode.
-  soloTurn = (roundNumber - 1) % 2 === 0 ? 'me' : 'cpu';
-  soloGameActive = true;
-
-  selectedRank = null;
-  soloCheckBooks('me');
-  soloCheckBooks('cpu');
-  soloBeginTurn();
-  showEventBanner(`${soloTurn === 'me' ? 'You go' : 'CPU goes'} first`);
 }
 
 function getSoloStateSnapshot() {
@@ -1047,8 +1267,11 @@ function getSoloStateSnapshot() {
     pondCount: soloPond.length,
     isMyTurn: soloGameActive && soloTurn === 'me',
     turnName: soloTurn === 'me' ? soloName : 'CPU',
-    askableRanks: [...new Set(soloHands.me.map((c) => c.rank))],
-    actionLocked: actionAnimating || askPending,
+    askableRanks: [...new Set(soloHands.me.map((card) => card.rank))],
+    actionLocked: actionAnimating || askPending ||
+      ![GF_PHASES.PLAYER_SELECTING, GF_PHASES.FINAL_ROUND_PLAYER].includes(gamePhase),
+    phase: gamePhase,
+    finalRound: soloFinal.active,
   };
 }
 
@@ -1056,58 +1279,217 @@ function soloRenderState() {
   applyGameState(getSoloStateSnapshot());
 }
 
-function soloBeginTurn() {
-  if (!soloGameActive) return;
+el('soloStartBtn').addEventListener('click', () => {
+  soloName = el('soloNameInput').value.trim() || 'You';
+  startSoloGame();
+});
+
+function startSoloGame() {
+  mode = 'solo';
+  actionQueue.length = 0;
+  actionAnimating = false;
+  askPending = false;
+  pendingGameState = null;
+  pendingRoundResult = null;
+  pendingFinalRoundIntro = null;
+  lastGameState = null;
+  selectedRank = null;
+
+  totalRounds = 1;
+  roundNumber = 1;
+  el('roundNum').textContent = '1';
+  el('totalRounds').textContent = '1';
+  el('eventBanner').textContent = '';
+
+  const deck = shuffle(buildDeck());
+  soloHands = { me: deck.splice(0, 7), cpu: deck.splice(0, 7) };
+  soloBooks = { me: [], cpu: [] };
+  soloPond = deck;
+  soloTurn = Math.random() < 0.5 ? 'me' : 'cpu';
+  soloGameActive = true;
+  soloFinal = { active: false, order: [], index: 0 };
+  soloLastBookOwner = null;
+  soloCpuMemory = new Map();
+  soloMemoryClock = 0;
+  soloStats = freshSoloStats();
+
+  // Setup books are automatic. They count, but because setup is simultaneous
+  // they do not decide the "most recent book" tiebreak.
+  soloCheckBooks('me', { recordRecent: false });
+  soloCheckBooks('cpu', { recordRecent: false });
+  syncSoloHud();
+
+  setupWrap.classList.add('hidden');
+  lobby.classList.add('hidden');
+  gameOver.classList.add('hidden');
+  gameArea.classList.remove('hidden');
+  el('finalRoundOverlay').classList.add('hidden');
+  el('hudP2').classList.remove('hidden');
+  el('finalBoard').classList.add('hidden');
+
+  soloBeginTurn();
+  showEventBanner(soloTurn === 'me' ? 'You start' : 'CPU starts');
+}
+
+function chooseCpuRank() {
+  // Deliberately only reads CPU cards + public memory. It never inspects
+  // soloHands.me, so the CPU cannot cheat.
+  decayCpuMemory();
+  const counts = new Map();
+  for (const card of soloHands.cpu) counts.set(card.rank, (counts.get(card.rank) || 0) + 1);
+  const options = [...counts.entries()];
+  if (!options.length) return null;
+
+  const weighted = options.map(([rank, count]) => {
+    const memory = soloCpuMemory.get(rank);
+    let weight = 1 + count * 3;
+    if (count >= 2) weight += 2;
+    if (count >= 3) weight += 4;
+    if (memory) weight += memory.confidence * 7;
+    // Small noise keeps identical positions from feeling scripted.
+    weight += Math.random() * 2.5;
+    return { rank, weight };
+  });
+
+  const total = weighted.reduce((sum, item) => sum + item.weight, 0);
+  let roll = Math.random() * total;
+  for (const item of weighted) {
+    roll -= item.weight;
+    if (roll <= 0) return item.rank;
+  }
+  return weighted[weighted.length - 1].rank;
+}
+
+async function soloBeginTurn() {
+  if (!soloGameActive || soloFinal.active || actionAnimating) return;
+
   const hand = soloHands[soloTurn];
   if (hand.length === 0) {
     if (soloPond.length > 0) {
-      hand.push(soloPond.pop());
-      soloCheckBooks(soloTurn);
-      if (soloTotalBooks() >= RANKS.length) return soloEndDeal();
-    } else {
-      return soloEndDeal();
+      await soloReplenish(soloTurn);
+      return;
     }
+    // No hand and no pond means the normal phase is over.
+    await soloEnterFinalRound(soloTurn);
+    return;
   }
-  soloRenderState();
-  if (soloTurn === 'cpu') setTimeout(runCpuTurn, 900);
+
+  selectedRank = null;
+  if (soloTurn === 'me') {
+    setGamePhase(GF_PHASES.PLAYER_SELECTING);
+    soloRenderState();
+  } else {
+    setGamePhase(GF_PHASES.CPU_THINKING);
+    soloRenderState();
+    const delay = 750 + Math.floor(Math.random() * 450);
+    setTimeout(runCpuTurn, delay);
+  }
+}
+
+async function soloReplenish(who) {
+  if (!soloGameActive || soloFinal.active || actionAnimating || soloPond.length === 0) return;
+  actionAnimating = true;
+  askPending = false;
+
+  const drawn = soloPond.pop();
+  soloHands[who].push(drawn);
+  const books = soloCheckBooks(who);
+  const emptiedPond = soloPond.length === 0;
+  const action = {
+    kind: 'replenish',
+    askerName: who === 'me' ? soloName : 'CPU',
+    opponentName: who === 'me' ? 'CPU' : soloName,
+    drawnCard: who === 'me' ? drawn : null,
+    books,
+    pondEmpty: false,
+    emptiedPond,
+    keepsTurn: true,
+  };
+
+  try {
+    await playTurnAction(action);
+    await applyPendingAfterAction(action);
+  } finally {
+    actionAnimating = false;
+    askPending = false;
+    gameArea.classList.remove('gf-resolving');
+  }
+
+  if (emptiedPond) {
+    await soloEnterFinalRound(who);
+    return;
+  }
+  await soloBeginTurn();
 }
 
 function soloAsk(rank) {
-  if (actionAnimating || askPending || !soloGameActive || soloTurn !== 'me' || !soloHands.me.some((c) => c.rank === rank)) return;
+  if (
+    actionAnimating ||
+    askPending ||
+    !soloGameActive ||
+    soloTurn !== 'me' ||
+    !humanSelectionPhase() ||
+    !soloHands.me.some((card) => card.rank === rank)
+  ) return;
+
   lockVisibleHand();
+  setGamePhase(GF_PHASES.PLAYER_ASKING);
   showEventBanner(`You ask CPU for ${rankPlural(rank)}…`, { persist: true });
   soloResolveAsk('me', 'cpu', rank, soloName, 'CPU');
 }
 
 function runCpuTurn() {
-  if (actionAnimating || !soloGameActive || soloTurn !== 'cpu') return;
-  // Prefer the rank it holds the most copies of — a decent, not perfect, heuristic.
-  const counts = new Map();
-  for (const c of soloHands.cpu) counts.set(c.rank, (counts.get(c.rank) || 0) + 1);
-  let bestRank = null;
-  let bestCount = 0;
-  for (const [rank, count] of counts) {
-    if (count > bestCount || (count === bestCount && Math.random() < 0.5)) {
-      bestRank = rank;
-      bestCount = count;
+  if (
+    actionAnimating ||
+    !soloGameActive ||
+    soloTurn !== 'cpu' ||
+    ![GF_PHASES.CPU_THINKING, GF_PHASES.FINAL_ROUND_CPU].includes(gamePhase)
+  ) return;
+
+  const rank = chooseCpuRank();
+  if (!rank) {
+    if (soloFinal.active) {
+      soloSkipFinalTurn('cpu');
+    } else {
+      soloBeginTurn();
     }
+    return;
   }
-  if (!bestRank) return soloBeginTurn();
-  soloResolveAsk('cpu', 'me', bestRank, 'CPU', soloName);
+
+  setGamePhase(GF_PHASES.CPU_ASKING);
+  soloResolveAsk('cpu', 'me', rank, 'CPU', soloName);
 }
 
 async function soloResolveAsk(askerKey, targetKey, rank, askerName, targetName) {
-  if (actionAnimating) return;
+  if (actionAnimating || !soloGameActive) return;
+  const finalRound = soloFinal.active;
+  if (finalRound) {
+    const expected = soloFinal.order[soloFinal.index];
+    if (expected !== askerKey) return;
+  }
+
   actionAnimating = true;
+  noteSoloAsk(askerKey);
+
+  // A human asking for a rank publicly proves they hold that rank right now.
+  if (askerKey === 'me') rememberHumanRank(rank, 3.5);
 
   const asker = soloHands[askerKey];
   const target = soloHands[targetKey];
-  const matches = target.filter((c) => c.rank === rank);
+  const matches = target.filter((card) => card.rank === rank);
   let action;
+  let nextNormalTurn = targetKey;
+  let emptiedPond = false;
 
   if (matches.length > 0) {
-    soloHands[targetKey] = target.filter((c) => c.rank !== rank);
+    soloHands[targetKey] = target.filter((card) => card.rank !== rank);
     soloHands[askerKey] = asker.concat(matches);
+    soloStats[askerKey].successfulAsks += 1;
+
+    // These are public transfers, so CPU memory can update without cheating.
+    if (askerKey === 'me') rememberHumanRank(rank, 5);
+    else forgetHumanRank(rank);
+
     const books = soloCheckBooks(askerKey);
     action = {
       kind: 'take',
@@ -1117,7 +1499,22 @@ async function soloResolveAsk(askerKey, targetKey, rank, askerName, targetName) 
       count: matches.length,
       cards: matches.map((card) => ({ rank: card.rank, suit: card.suit })),
       books,
-      keepsTurn: true,
+      keepsTurn: !finalRound,
+      finalRound,
+    };
+    nextNormalTurn = askerKey;
+  } else if (finalRound) {
+    if (askerKey === 'cpu') forgetHumanRank(rank);
+    action = {
+      kind: 'final-miss',
+      askerName,
+      opponentName: targetName,
+      rank,
+      count: 0,
+      books: [],
+      keepsTurn: false,
+      finalRound: true,
+      pondEmpty: true,
     };
   } else {
     let drawn = null;
@@ -1125,8 +1522,17 @@ async function soloResolveAsk(askerKey, targetKey, rank, askerName, targetName) 
       drawn = soloPond.pop();
       soloHands[askerKey].push(drawn);
     }
+
     const books = soloCheckBooks(askerKey);
     const matched = !!drawn && drawn.rank === rank;
+    if (matched) {
+      soloStats[askerKey].luckyCatches += 1;
+      if (askerKey === 'me' && !books.includes(rank)) rememberHumanRank(rank, 5);
+    }
+    if (askerKey === 'cpu' && !matches.length) forgetHumanRank(rank);
+
+    nextNormalTurn = matched ? askerKey : targetKey;
+    emptiedPond = !!drawn && soloPond.length === 0;
     action = {
       kind: 'fish',
       askerName,
@@ -1134,76 +1540,206 @@ async function soloResolveAsk(askerKey, targetKey, rank, askerName, targetName) 
       rank,
       matched,
       pondEmpty: !drawn,
+      emptiedPond,
       drawnCard: askerKey === 'me' ? drawn : null,
       books,
       keepsTurn: matched,
+      finalRound: false,
     };
-    if (!matched) soloTurn = targetKey;
   }
+
+  // State may already know who would normally act next, but the UI keeps the
+  // visible turn frozen until the physical action has completed.
+  if (!finalRound) soloTurn = nextNormalTurn;
 
   try {
     await playTurnAction(action);
-    applyPendingAfterAction(action);
-    if (action.books.length) await wait(TURN_TIMING.book);
+    await applyPendingAfterAction(action);
   } finally {
     actionAnimating = false;
     askPending = false;
     gameArea.classList.remove('gf-resolving');
   }
 
-  if (soloTotalBooks() >= RANKS.length) return soloEndDeal();
-  soloBeginTurn();
+  if (finalRound) {
+    endSoloTurnStreak(askerKey);
+    soloFinal.index += 1;
+    await wait(260);
+    await soloBeginFinalTurn();
+    return;
+  }
+
+  if (!action.keepsTurn) endSoloTurnStreak(askerKey);
+
+  if (emptiedPond) {
+    // Per the final rules, the player who would normally act next gets the
+    // first Final Round ask. The move that emptied the pond is already done.
+    await soloEnterFinalRound(nextNormalTurn);
+    return;
+  }
+
+  if (soloTotalBooks() >= RANKS.length) {
+    // All 52 cards are already in books. There are no legal final asks to
+    // make, so the final-round skipper will close the game cleanly.
+    await soloEnterFinalRound(nextNormalTurn);
+    return;
+  }
+
+  await soloBeginTurn();
 }
 
-function soloEndDeal() {
-  soloGameActive = false;
+async function soloEnterFinalRound(starterKey) {
+  if (!soloGameActive || soloFinal.active) return;
+  soloFinal = {
+    active: true,
+    order: [starterKey, starterKey === 'me' ? 'cpu' : 'me'],
+    index: 0,
+  };
+  selectedRank = null;
+  pendingFinalRoundIntro = { starter: starterKey };
   soloRenderState();
-
-  let winnerName = null;
-  if (soloBooks.me.length > soloBooks.cpu.length) { soloScore.me += 1; winnerName = soloName; }
-  else if (soloBooks.cpu.length > soloBooks.me.length) { soloScore.cpu += 1; winnerName = 'CPU'; }
-  players[0].score = soloScore.me;
-  players[1].score = soloScore.cpu;
-  updateDuelHud();
-
-  showEventBanner(winnerName ? `${winnerName} took this deal` : 'This deal is a tie');
-  if (winnerName === soloName) { hapticSuccess(); playSuccess(); }
-
-  setTimeout(startSoloRound, 3200);
+  await showFinalRoundIntro();
+  pendingFinalRoundIntro = null;
+  await soloBeginFinalTurn();
 }
 
-function soloBestKey(name) {
-  return `gofish-solo-best-${name.trim().toLowerCase()}-${totalRounds}`;
+async function soloSkipFinalTurn(who) {
+  if (!soloFinal.active || soloFinal.order[soloFinal.index] !== who) return;
+  soloTurn = who;
+  setGamePhase(who === 'me' ? GF_PHASES.FINAL_ROUND_PLAYER : GF_PHASES.FINAL_ROUND_CPU);
+  soloRenderState();
+  showEventBanner(who === 'me' ? 'No cards — your final ask is skipped' : 'CPU has no cards — final ask skipped');
+  await wait(950);
+  soloFinal.index += 1;
+  await soloBeginFinalTurn();
 }
 
-function endSoloGame() {
+async function soloBeginFinalTurn() {
+  if (!soloGameActive || !soloFinal.active || actionAnimating) return;
+  if (soloFinal.index >= soloFinal.order.length) {
+    soloFinishGame();
+    return;
+  }
+
+  const who = soloFinal.order[soloFinal.index];
+  soloTurn = who;
+  selectedRank = null;
+
+  if (soloHands[who].length === 0) {
+    await soloSkipFinalTurn(who);
+    return;
+  }
+
+  if (who === 'me') {
+    setGamePhase(GF_PHASES.FINAL_ROUND_PLAYER);
+    soloRenderState();
+    showEventBanner('Your final ask — choose carefully');
+  } else {
+    setGamePhase(GF_PHASES.FINAL_ROUND_CPU);
+    soloRenderState();
+    showEventBanner('CPU has one final ask');
+    const delay = 850 + Math.floor(Math.random() * 350);
+    setTimeout(runCpuTurn, delay);
+  }
+}
+
+function soloDetermineWinner() {
+  const myBooks = soloBooks.me.length;
+  const cpuBooks = soloBooks.cpu.length;
+  if (myBooks !== cpuBooks) {
+    return { winner: myBooks > cpuBooks ? 'me' : 'cpu', reason: 'books' };
+  }
+
+  if (soloHands.me.length !== soloHands.cpu.length) {
+    return { winner: soloHands.me.length > soloHands.cpu.length ? 'me' : 'cpu', reason: 'cards' };
+  }
+
+  if (soloLastBookOwner) {
+    return { winner: soloLastBookOwner, reason: 'recent-book' };
+  }
+
+  return { winner: null, reason: 'draw' };
+}
+
+function escapeResultText(value) {
+  return String(value)
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#039;');
+}
+
+function resultBooksMarkup(books) {
+  if (!books.length) return '<span class="gf-player-meta">None</span>';
+  return books
+    .slice()
+    .sort((a, b) => RANKS.indexOf(a) - RANKS.indexOf(b))
+    .map((rank) => `<span class="gf-mini-book">${rank}</span>`)
+    .join('');
+}
+
+function resultHandMarkup(hand) {
+  if (!hand.length) return '<span class="gf-player-meta">No cards left</span>';
+  return sortHand(hand).map((card) => {
+    const red = RED_SUITS.has(card.suit) ? ' red' : '';
+    return `<span class="gf-mini-card${red}">${card.rank}${card.suit}</span>`;
+  }).join('');
+}
+
+function soloFinishGame() {
+  if (!soloGameActive) return;
+  soloGameActive = false;
+  setGamePhase(GF_PHASES.GAME_OVER);
+  syncSoloHud();
+
+  const result = soloDetermineWinner();
   gameArea.classList.add('hidden');
   gameOver.classList.remove('hidden');
   el('playAgainBtn').classList.remove('hidden');
-  el('finalBoard').classList.remove('hidden');
-  renderLeaderboard('finalBoard', [...players].sort((a, b) => b.score - a.score));
+  el('finalBoard').classList.add('hidden');
 
-  const wins = soloScore.me;
-  el('overTitle').textContent = wins > soloScore.cpu ? '🏆 You beat the CPU!' : wins === soloScore.cpu ? "🤝 Tied with the CPU!" : '🤖 The CPU got you this time.';
-
-  const key = soloBestKey(soloName);
-  let bestEver = null;
-  try {
-    bestEver = JSON.parse(localStorage.getItem(key) || 'null');
-  } catch (e) {
-    bestEver = null;
-  }
-  const improved = !bestEver || wins > bestEver.wins;
-  if (improved) {
-    try {
-      localStorage.setItem(key, JSON.stringify({ wins, total: totalRounds }));
-    } catch (e) {
-      // localStorage unavailable — best-tracking just won't persist
-    }
-    el('soloSummary').textContent = `${wins} / ${totalRounds} deals won — ${bestEver ? '🏆 New personal best!' : '🏆 First run in the books!'}`;
+  if (result.winner === 'me') {
+    el('overTitle').textContent = 'YOU WIN';
+    hapticSuccess();
+    playSuccess();
+  } else if (result.winner === 'cpu') {
+    el('overTitle').textContent = 'YOU LOSE';
   } else {
-    el('soloSummary').textContent = `${wins} / ${totalRounds} deals won · Personal best: ${bestEver.wins} / ${bestEver.total}`;
+    el('overTitle').textContent = 'DRAW';
   }
+
+  const reasonText = {
+    books: 'Most completed books',
+    cards: 'Tiebreak: more cards left in hand',
+    'recent-book': 'Tiebreak: most recent book',
+    draw: 'Still level after every tiebreak',
+  }[result.reason];
+  el('soloSummary').textContent = reasonText;
+
+  el('finalScore').classList.remove('hidden');
+  el('finalScore').innerHTML = `
+    <div class="gf-final-score-side"><strong>${soloBooks.me.length}</strong><span>You · books</span></div>
+    <div class="gf-final-score-vs">vs</div>
+    <div class="gf-final-score-side"><strong>${soloBooks.cpu.length}</strong><span>CPU · books</span></div>`;
+
+  el('finalBooks').classList.remove('hidden');
+  el('finalBooks').innerHTML = `
+    <div class="gf-final-section-title">Completed books</div>
+    <div class="gf-result-row"><span class="gf-result-row-name">You</span><div class="gf-result-mini-cards">${resultBooksMarkup(soloBooks.me)}</div></div>
+    <div class="gf-result-row"><span class="gf-result-row-name">CPU</span><div class="gf-result-mini-cards">${resultBooksMarkup(soloBooks.cpu)}</div></div>`;
+
+  el('finalHands').classList.remove('hidden');
+  el('finalHands').innerHTML = `
+    <div class="gf-final-section-title">Cards left in hand</div>
+    <div class="gf-result-row"><span class="gf-result-row-name">You</span><div class="gf-result-mini-cards">${resultHandMarkup(soloHands.me)}</div></div>
+    <div class="gf-result-row"><span class="gf-result-row-name">CPU</span><div class="gf-result-mini-cards">${resultHandMarkup(soloHands.cpu)}</div></div>`;
+
+  el('finalStats').classList.remove('hidden');
+  el('finalStats').innerHTML = `
+    <div class="gf-stat"><strong>${soloStats.me.luckyCatches}</strong><span>Lucky catches</span></div>
+    <div class="gf-stat"><strong>${soloStats.me.successfulAsks}</strong><span>Successful asks</span></div>
+    <div class="gf-stat"><strong>${soloStats.me.longestTurnStreak}</strong><span>Longest streak</span></div>`;
 }
 
 // --- Party Mashup: auto-join and auto-start a single-round leg ------------
