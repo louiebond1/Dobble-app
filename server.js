@@ -2342,7 +2342,7 @@ io.on('connection', (socket) => {
       room.actionLocked ||
       socket.id !== room.turn ||
       !CARD_RANKS.includes(rank) ||
-      (room.phase !== 'NORMAL' && room.phase !== GOFISH_PHASES.FINAL_ROUND)
+      (room.phase !== GOFISH_PHASES.NORMAL && room.phase !== GOFISH_PHASES.FINAL_ROUND)
     ) {
       if (typeof ack === 'function') ack({ ok: false });
       return;
