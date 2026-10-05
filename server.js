@@ -827,7 +827,17 @@ function goFishOpponentId(room, socketId) {
   return room.playerOrder.find((id) => id !== socketId) || null;
 }
 
-function goFishCheckBooks(room, playerId) {
+function goFishFreshStats() {
+  return {
+    successfulAsks: 0,
+    luckyCatches: 0,
+    booksCompleted: 0,
+    currentStreak: 0,
+    longestTurnStreak: 0,
+  };
+}
+
+function goFishCheckBooks(room, playerId, { recordRecent = true } = {}) {
   const player = room.players.get(playerId);
   if (!player) return [];
   const completed = [];
@@ -835,14 +845,23 @@ function goFishCheckBooks(room, playerId) {
   for (const card of player.hand) counts.set(card.rank, (counts.get(card.rank) || 0) + 1);
 
   for (const [rank, count] of counts) {
-    if (count >= 4) {
-      player.hand = player.hand.filter((card) => card.rank !== rank);
-      player.books.push(rank);
-      room.bookHistory.push({ playerId, rank, at: Date.now() });
-      completed.push(rank);
-    }
+    if (count < 4) continue;
+    player.hand = player.hand.filter((card) => card.rank !== rank);
+    player.books.push(rank);
+    player.stats.booksCompleted += 1;
+    completed.push(rank);
+    if (recordRecent) room.lastBookOwnerId = playerId;
   }
   return completed;
+}
+
+function goFishNoteAsk(player) {
+  player.stats.currentStreak += 1;
+  player.stats.longestTurnStreak = Math.max(player.stats.longestTurnStreak, player.stats.currentStreak);
+}
+
+function goFishEndTurnStreak(player) {
+  if (player) player.stats.currentStreak = 0;
 }
 
 let goFishActionSeq = 0;
@@ -857,20 +876,24 @@ function goFishEmitAction(code, action, privateBySocket = null) {
   }
 }
 
-function goFishPlayerPublic(p) {
+function goFishTotalBooks(room) {
+  return Array.from(room.players.values()).reduce((sum, player) => sum + player.books.length, 0);
+}
+
+function goFishPlayerPublic(player) {
   return {
-    name: p.name,
-    score: p.score || 0,
-    handCount: p.hand.length,
-    books: p.books.slice(),
+    name: player.name,
+    score: player.books.length,
+    handCount: player.hand.length,
+    books: player.books.slice(),
+    stats: { ...player.stats },
   };
 }
 
 function goFishBroadcastState(code) {
   const room = goFishRooms.get(code);
   if (!room) return;
-  const turnPlayer = room.turn ? room.players.get(room.turn) : null;
-
+  const turnPlayer = room.players.get(room.turn);
   for (const [socketId, player] of room.players) {
     const opponentId = goFishOpponentId(room, socketId);
     const opponent = opponentId ? room.players.get(opponentId) : null;
@@ -885,35 +908,15 @@ function goFishBroadcastState(code) {
       turnName: turnPlayer ? turnPlayer.name : null,
       askableRanks: [...new Set(player.hand.map((card) => card.rank))],
       actionLocked: !!room.actionLocked,
-      gamePhase: room.phase,
-      finalRound: room.phase === GOFISH_PHASES.FINAL_ROUND || room.phase === GOFISH_PHASES.FINAL_ROUND_INTRO,
-      finalTurnIndex: room.finalIndex,
-      finalTurnTotal: room.finalOrder.length,
+      phase: room.phase,
+      finalRound: room.phase === 'FINAL_ROUND',
+      finalRoundIndex: room.finalRound ? room.finalRound.index : null,
     });
   }
 }
 
 function goFishFeed(code, text) {
   io.to(`gofish:${code}`).emit('gofish:feed', { text });
-}
-
-function goFishSetFinalRoundIntro(room, firstPlayerId) {
-  const otherId = room.playerOrder.find((id) => id !== firstPlayerId);
-  room.phase = GOFISH_PHASES.FINAL_ROUND_INTRO;
-  room.finalOrder = otherId ? [firstPlayerId, otherId] : [firstPlayerId];
-  room.finalIndex = 0;
-  room.turn = firstPlayerId;
-  room.actionLocked = true;
-}
-
-function goFishActivateFinalRound(code, delayMs = 2250) {
-  setTimeout(() => {
-    const room = goFishRooms.get(code);
-    if (!room || !room.gameActive || room.phase !== GOFISH_PHASES.FINAL_ROUND_INTRO) return;
-    room.phase = GOFISH_PHASES.FINAL_ROUND;
-    room.actionLocked = false;
-    goFishPrepareTurn(code);
-  }, delayMs);
 }
 
 function goFishDetermineWinner(room) {
@@ -925,179 +928,143 @@ function goFishDetermineWinner(room) {
   if (a.books.length !== b.books.length) {
     return { winnerId: a.books.length > b.books.length ? idA : idB, reason: 'books' };
   }
-
   if (a.hand.length !== b.hand.length) {
-    return { winnerId: a.hand.length > b.hand.length ? idA : idB, reason: 'hand-count' };
+    return { winnerId: a.hand.length > b.hand.length ? idA : idB, reason: 'cards' };
   }
-
-  const lastBook = room.bookHistory.length ? room.bookHistory[room.bookHistory.length - 1] : null;
-  if (lastBook && room.players.has(lastBook.playerId)) {
-    return { winnerId: lastBook.playerId, reason: 'last-book' };
+  if (room.lastBookOwnerId && room.players.has(room.lastBookOwnerId)) {
+    return { winnerId: room.lastBookOwnerId, reason: 'recent-book' };
   }
-
   return { winnerId: null, reason: 'draw' };
 }
 
-function goFishEndGame(code) {
+function goFishFinishGame(code) {
   const room = goFishRooms.get(code);
-  if (!room || room.phase === GOFISH_PHASES.GAME_OVER) return;
-
+  if (!room || room.phase === 'GAME_OVER') return;
   room.gameActive = false;
-  room.started = false;
   room.actionLocked = true;
-  room.phase = GOFISH_PHASES.GAME_OVER;
-  room.turn = null;
+  room.phase = 'GAME_OVER';
 
   const result = goFishDetermineWinner(room);
   const winner = result.winnerId ? room.players.get(result.winnerId) : null;
-
   goFishBroadcastState(code);
 
   io.to(`gofish:${code}`).emit('gofish:game:over', {
+    players: room.playerOrder.map((id) => goFishPlayerPublic(room.players.get(id))),
     winnerName: winner ? winner.name : null,
-    winnerReason: result.reason,
-    players: room.playerOrder.map((id) => {
-      const player = room.players.get(id);
-      return {
-        name: player.name,
-        score: result.winnerId === id ? 1 : 0,
-        bookCount: player.books.length,
-        books: player.books.slice(),
-        handCount: player.hand.length,
-        hand: player.hand.slice(),
-      };
-    }),
+    reason: result.reason,
+    hands: room.playerOrder.map((id) => ({
+      name: room.players.get(id).name,
+      hand: room.players.get(id).hand.map((card) => ({ rank: card.rank, suit: card.suit })),
+      books: room.players.get(id).books.slice(),
+      stats: { ...room.players.get(id).stats },
+    })),
   });
 }
 
-function goFishAdvanceFinalRound(code, delayMs = 1350) {
+function goFishUnlockAndBegin(code, delayMs = 1550) {
   setTimeout(() => {
     const room = goFishRooms.get(code);
-    if (!room || !room.gameActive || room.phase !== GOFISH_PHASES.FINAL_ROUND) return;
-    if (room.finalIndex >= room.finalOrder.length) {
-      goFishEndGame(code);
-      return;
-    }
+    if (!room || !room.gameActive || room.phase === 'GAME_OVER') return;
     room.actionLocked = false;
-    goFishPrepareTurn(code);
+    goFishBeginTurn(code);
   }, delayMs);
 }
 
-function goFishPrepareFinalTurn(code) {
+function goFishEnterFinalRound(code, starterId) {
   const room = goFishRooms.get(code);
-  if (!room || !room.gameActive || room.phase !== GOFISH_PHASES.FINAL_ROUND) return;
+  if (!room || !room.gameActive || room.phase === 'FINAL_ROUND' || room.phase === 'GAME_OVER') return;
 
-  if (room.finalIndex >= room.finalOrder.length) {
-    goFishEndGame(code);
-    return;
-  }
-
-  const playerId = room.finalOrder[room.finalIndex];
-  room.turn = playerId;
-  const player = room.players.get(playerId);
-  const opponentId = goFishOpponentId(room, playerId);
-  const opponent = opponentId ? room.players.get(opponentId) : null;
-
-  if (!player || player.hand.length === 0) {
-    room.actionLocked = true;
-    goFishEmitAction(code, {
-      kind: 'skip',
-      askerName: player ? player.name : 'Player',
-      opponentName: opponent ? opponent.name : 'Opponent',
-      books: [],
-      finalRound: true,
-      keepsTurn: false,
-      reason: 'empty-hand',
-    });
-    room.finalIndex += 1;
-    room.turn = room.finalOrder[room.finalIndex] || null;
-    goFishBroadcastState(code);
-    goFishAdvanceFinalRound(code, 900);
-    return;
-  }
-
-  room.actionLocked = false;
-  goFishBroadcastState(code);
-}
-
-function goFishDrawReplacement(code) {
-  const room = goFishRooms.get(code);
-  if (!room || !room.gameActive || room.phase !== GOFISH_PHASES.NORMAL) return;
-
-  const playerId = room.turn;
-  const player = room.players.get(playerId);
-  const opponentId = goFishOpponentId(room, playerId);
-  const opponent = opponentId ? room.players.get(opponentId) : null;
-
-  if (!player || player.hand.length > 0 || room.pond.length === 0) return;
-
+  const otherId = goFishOpponentId(room, starterId);
+  room.phase = 'FINAL_ROUND';
+  room.finalRound = { order: [starterId, otherId].filter(Boolean), index: 0 };
+  room.turn = starterId;
   room.actionLocked = true;
-  const drawn = room.pond.pop();
-  player.hand.push(drawn);
-  const completedBooks = goFishCheckBooks(room, playerId);
-  const emptiedPond = room.pond.length === 0;
 
-  if (emptiedPond) goFishSetFinalRoundIntro(room, playerId);
-
-  goFishEmitAction(
-    code,
-    {
-      kind: 'replenish',
-      askerName: player.name,
-      opponentName: opponent ? opponent.name : 'Opponent',
-      books: completedBooks,
-      keepsTurn: true,
-      pondEmpty: false,
-      finalRoundStarts: emptiedPond,
-      finalRoundFirstName: player.name,
-    },
-    { [playerId]: { drawnCard: drawn } }
-  );
   goFishBroadcastState(code);
+  io.to(`gofish:${code}`).emit('gofish:final-round', {
+    starterName: (room.players.get(starterId) || {}).name || null,
+    order: room.finalRound.order.map((id) => (room.players.get(id) || {}).name).filter(Boolean),
+  });
 
-  if (emptiedPond) {
-    goFishActivateFinalRound(code);
-  } else {
-    setTimeout(() => {
-      const fresh = goFishRooms.get(code);
-      if (!fresh || !fresh.gameActive || fresh.phase !== GOFISH_PHASES.NORMAL) return;
-      fresh.actionLocked = false;
-      goFishPrepareTurn(code);
-    }, 1350);
-  }
+  // Client queues the intro until the move that emptied the pond has visually
+  // finished. Keep the server locked long enough that no phone can submit an
+  // early final ask behind that animation.
+  goFishUnlockAndBegin(code, 3200);
 }
 
-function goFishPrepareTurn(code) {
+function goFishAdvanceFinalRound(code) {
   const room = goFishRooms.get(code);
-  if (!room || !room.gameActive) return;
+  if (!room || room.phase !== 'FINAL_ROUND' || !room.finalRound) return;
+  room.finalRound.index += 1;
+  if (room.finalRound.index >= room.finalRound.order.length) {
+    goFishFinishGame(code);
+    return;
+  }
+  room.turn = room.finalRound.order[room.finalRound.index];
+  room.actionLocked = true;
+  goFishBroadcastState(code);
+  goFishUnlockAndBegin(code, 1450);
+}
 
-  if (room.phase === GOFISH_PHASES.FINAL_ROUND_INTRO) {
+function goFishBeginTurn(code) {
+  const room = goFishRooms.get(code);
+  if (!room || !room.gameActive || room.phase === 'GAME_OVER') return;
+
+  if (room.phase === 'FINAL_ROUND') {
+    if (!room.finalRound || room.finalRound.index >= room.finalRound.order.length) {
+      goFishFinishGame(code);
+      return;
+    }
+    room.turn = room.finalRound.order[room.finalRound.index];
+    const player = room.players.get(room.turn);
+    if (!player) return goFishFinishGame(code);
+
+    if (player.hand.length === 0) {
+      room.actionLocked = true;
+      goFishBroadcastState(code);
+      io.to(`gofish:${code}`).emit('gofish:final-skip', { name: player.name });
+      setTimeout(() => goFishAdvanceFinalRound(code), 950);
+      return;
+    }
+
+    room.actionLocked = false;
     goFishBroadcastState(code);
     return;
   }
-
-  if (room.phase === GOFISH_PHASES.FINAL_ROUND) {
-    goFishPrepareFinalTurn(code);
-    return;
-  }
-
-  if (room.phase !== GOFISH_PHASES.NORMAL) return;
 
   const player = room.players.get(room.turn);
   if (!player) return;
 
   if (player.hand.length === 0) {
-    if (room.pond.length > 0) {
-      goFishDrawReplacement(code);
+    if (room.pond.length === 0) {
+      goFishEnterFinalRound(code, room.turn);
       return;
     }
 
-    // Defensive fallback: reaching a normal turn with an empty pond means the
-    // final-round transition was missed. Start it with the player who would
-    // otherwise act now.
-    goFishSetFinalRoundIntro(room, room.turn);
+    room.actionLocked = true;
+    const drawn = room.pond.pop();
+    player.hand.push(drawn);
+    const completedBooks = goFishCheckBooks(room, room.turn);
+    const emptiedPond = room.pond.length === 0;
+
+    goFishEmitAction(
+      code,
+      {
+        kind: 'replenish',
+        askerName: player.name,
+        opponentName: (room.players.get(goFishOpponentId(room, room.turn)) || {}).name || 'Opponent',
+        books: completedBooks,
+        pondEmpty: false,
+        emptiedPond,
+        keepsTurn: true,
+        finalRound: false,
+      },
+      { [room.turn]: { drawnCard: drawn } }
+    );
     goFishBroadcastState(code);
-    goFishActivateFinalRound(code, 1700);
+
+    if (emptiedPond) goFishEnterFinalRound(code, room.turn);
+    else goFishUnlockAndBegin(code, completedBooks.length ? 2050 : 1450);
     return;
   }
 
@@ -1107,41 +1074,37 @@ function goFishPrepareTurn(code) {
 
 function goFishDealGame(code) {
   const room = goFishRooms.get(code);
-  if (!room || room.playerOrder.length !== 2) return;
+  if (!room) return;
 
   const deck = shuffleDeck(buildDeck());
-  room.bookHistory = [];
-  room.finalOrder = [];
-  room.finalIndex = 0;
-  room.phase = GOFISH_PHASES.NORMAL;
-  room.gameActive = true;
-  room.started = true;
-  room.actionLocked = false;
   room.roundNumber = 1;
   room.totalRounds = 1;
+  room.phase = 'NORMAL';
+  room.finalRound = null;
+  room.lastBookOwnerId = null;
+  room.actionLocked = false;
 
   for (const id of room.playerOrder) {
     const player = room.players.get(id);
     player.hand = deck.splice(0, GOFISH_DEAL_SIZE);
     player.books = [];
-    player.score = 0;
+    player.stats = goFishFreshStats();
   }
 
   room.pond = deck;
-
-  // Initial four-of-a-kind is always converted before the first turn.
-  for (const id of room.playerOrder) goFishCheckBooks(room, id);
+  for (const id of room.playerOrder) goFishCheckBooks(room, id, { recordRecent: false });
 
   room.turn = room.playerOrder[Math.floor(Math.random() * room.playerOrder.length)];
+  room.gameActive = true;
+  room.started = true;
 
   io.to(`gofish:${code}`).emit('gofish:round:start', {
     roundNumber: 1,
     totalRounds: 1,
     players: room.playerOrder.map((id) => goFishPlayerPublic(room.players.get(id))),
   });
-
-  goFishFeed(code, `${room.players.get(room.turn).name} goes first`);
-  goFishPrepareTurn(code);
+  goFishFeed(code, `${room.players.get(room.turn).name} starts`);
+  goFishBeginTurn(code);
 }
 
 // --- Sliding Puzzle Race helpers ---------------------------------------------
