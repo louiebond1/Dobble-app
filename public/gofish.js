@@ -414,6 +414,20 @@ async function flyBetweenRects(startRect, endRect, {
   if (targetNode) targetNode.classList.remove('gf-staging-hidden');
 }
 
+function playLayoutAnimation(node, keyframes, options) {
+  const animation = node.animate(keyframes, options);
+  return animation.finished
+    .catch(() => {})
+    .finally(() => {
+      // iOS Safari can keep a composited transform's hit-test geometry
+      // around after a WAAPI animation has visually finished. Explicitly
+      // cancel the animation and force a layout read so the tap target is
+      // rebuilt at the card's real DOM position.
+      try { animation.cancel(); } catch (e) {}
+      void node.offsetHeight;
+    });
+}
+
 function animateExistingLayout(before) {
   const jobs = [];
   document.querySelectorAll('#myHand [data-card-key]').forEach((node) => {
@@ -426,13 +440,14 @@ function animateExistingLayout(before) {
     const sy = oldRect.height / now.height;
     const base = node.style.transform || '';
     if (Math.abs(dx) < 1 && Math.abs(dy) < 1 && Math.abs(sx - 1) < .01 && Math.abs(sy - 1) < .01) return;
-    jobs.push(node.animate(
+    jobs.push(playLayoutAnimation(
+      node,
       [
         { transform: `translate(${dx}px,${dy}px) scale(${sx},${sy}) ${base}` },
         { transform: base },
       ],
       { duration: 520, easing: 'cubic-bezier(.2,.8,.2,1)' }
-    ).finished.catch(() => {}));
+    ));
   });
 
   const newOpp = Array.from(document.querySelectorAll('#opponentHand .gf-card'));
@@ -444,10 +459,11 @@ function animateExistingLayout(before) {
     const dx = oldRect.left - now.left;
     const dy = oldRect.top - now.top;
     const base = node.style.transform || '';
-    jobs.push(node.animate(
+    jobs.push(playLayoutAnimation(
+      node,
       [{ transform: `translate(${dx}px,${dy}px) ${base}` }, { transform: base }],
       { duration: 480, easing: 'cubic-bezier(.2,.8,.2,1)' }
-    ).finished.catch(() => {}));
+    ));
   }
   return jobs;
 }

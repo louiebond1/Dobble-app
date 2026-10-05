@@ -411,6 +411,9 @@
 }
 
 .gf-table {
+  position: relative;
+  z-index: 1;
+  isolation: isolate;
   width: min(100%, 680px);
   margin: 0 auto;
   padding: 9px 16px 5px;
@@ -511,6 +514,8 @@
 
 .gf-hand {
   position: relative;
+  z-index: 1;
+  isolation: isolate;
   flex: 1;
   min-height: 0;
   display: flex;
@@ -518,6 +523,11 @@
   justify-content: center;
   overflow: visible;
   padding: 7px 4px 0;
+  pointer-events: none;
+}
+
+.gf-hand button.gf-card {
+  pointer-events: auto;
 }
 
 .gf-card {
@@ -535,7 +545,6 @@
   user-select: none;
   -webkit-user-select: none;
   touch-action: manipulation;
-  will-change: transform;
   transition: transform 180ms cubic-bezier(.2,.8,.2,1), box-shadow 180ms ease;
 }
 
@@ -774,6 +783,9 @@ button.gf-card:focus-visible {
 /* ---------- Ask tray ---------- */
 
 .gf-ask-panel {
+  position: relative;
+  z-index: 50;
+  isolation: isolate;
   flex: 0 0 auto;
   padding:
     12px
