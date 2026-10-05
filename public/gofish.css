@@ -1609,3 +1609,41 @@ button.gf-card:focus-visible {
     animation: none !important;
   }
 }
+
+
+.gf-final-progress {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-height: 24px;
+}
+
+.gf-final-progress-step {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 7px;
+  border-radius: 999px;
+  color: var(--gf-muted);
+  background: rgba(255,255,255,.58);
+  border: 1px solid var(--gf-line);
+  font-size: .58rem;
+  font-weight: 760;
+}
+
+.gf-final-progress-step b {
+  color: var(--gf-ink);
+  font-size: .58rem;
+}
+
+.gf-final-progress-step.current {
+  color: var(--gf-coral-dark);
+  border-color: rgba(216,111,116,.22);
+  background: var(--gf-blush-soft);
+}
+
+.gf-final-progress-step.done {
+  opacity: .42;
+  text-decoration: line-through;
+}
