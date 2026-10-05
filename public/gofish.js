@@ -337,9 +337,16 @@ function updateAskControls(data) {
     askButton.textContent = 'Resolving…';
     hint.textContent = 'Watch the cards — the result is playing out.';
   } else if (selectedRank) {
+    const finalAsk = mode === 'solo'
+      ? soloFinal.active
+      : data.gamePhase === 'FINAL_ROUND';
     askButton.disabled = !canAct;
-    askButton.textContent = `Ask ${opponentName} for ${rankPlural(selectedRank)}`;
-    hint.textContent = `Your ${rankPlural(selectedRank)} are highlighted. Nothing happens until you ask.`;
+    askButton.textContent = finalAsk
+      ? `Final ask · ${rankPlural(selectedRank)}`
+      : `Ask ${opponentName} for ${rankPlural(selectedRank)}`;
+    hint.textContent = finalAsk
+      ? 'One ask only. No fishing and no extra turn.'
+      : `Your ${rankPlural(selectedRank)} are highlighted. Nothing happens until you ask.`;
   } else {
     askButton.disabled = true;
     askButton.textContent = 'Choose a rank';
@@ -1518,7 +1525,10 @@ async function soloResolveAsk(askerKey, targetKey, rank, askerName, targetName) 
 
     const books = soloCheckBooks(askerKey);
     const matched = !!drawn && drawn.rank === rank;
-    if (matched) soloStats[askerKey].luckyCatches += 1;
+    if (matched) {
+      soloStats[askerKey].luckyCatches += 1;
+      if (askerKey === 'me' && !books.includes(rank)) rememberHumanRank(rank, 5);
+    }
     if (askerKey === 'cpu' && !matches.length) forgetHumanRank(rank);
 
     nextNormalTurn = matched ? askerKey : targetKey;
