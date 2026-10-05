@@ -603,7 +603,7 @@ async function animateStateTransition(action, nextState) {
         }
       });
     }
-  } else if (action.kind === 'fish' && !action.pondEmpty) {
+  } else if ((action.kind === 'fish' || action.kind === 'replenish') && !action.pondEmpty) {
     if (mine) {
       const drawn = action.drawnCard;
       if (bookRank) {
@@ -690,24 +690,35 @@ async function playTurnAction(action) {
   const targetName = action.opponentName || 'your opponent';
   gameArea.classList.add('gf-resolving');
 
-  showEventBanner(
-    mine
-      ? `You ask ${targetName} for ${rankPlural(action.rank)}…`
-      : `${action.askerName} asks you for ${rankPlural(action.rank)}…`,
-    { persist: true }
-  );
-  await wait(TURN_TIMING.anticipation);
-
-  if (action.kind === 'take') {
+  if (action.kind === 'replenish') {
+    setGamePhase(GF_PHASES.DRAWING);
+    showEventBanner(mine ? 'Your hand is empty — draw one' : `${action.askerName} draws back in`, { persist: true });
+  } else {
+    setGamePhase(mine ? GF_PHASES.PLAYER_ASKING : GF_PHASES.CPU_ASKING);
     showEventBanner(
       mine
-        ? `${targetName} has ${humanCount(action.count)} ${action.count === 1 ? rankSingular(action.rank) : rankPlural(action.rank)}`
-        : `You hand over ${humanCount(action.count)} ${action.count === 1 ? rankSingular(action.rank) : rankPlural(action.rank)}`,
+        ? `You ask ${targetName} for ${rankPlural(action.rank)}…`
+        : `${action.askerName} asks you for ${rankPlural(action.rank)}…`,
       { persist: true }
     );
-  } else {
-    showEventBanner(mine ? 'Go Fish' : `${action.askerName} goes fishing`, { persist: true, emphasis: true });
-    await wait(160);
+    await wait(TURN_TIMING.anticipation);
+
+    if (action.kind === 'take') {
+      setGamePhase(GF_PHASES.CARD_TRANSFER);
+      showEventBanner(
+        mine
+          ? `${targetName} had ${humanCount(action.count)}`
+          : `You hand over ${humanCount(action.count)} ${action.count === 1 ? rankSingular(action.rank) : rankPlural(action.rank)}`,
+        { persist: true }
+      );
+    } else if (action.kind === 'final-miss') {
+      showEventBanner(mine ? 'Nothing there' : 'You have none', { persist: true, emphasis: true });
+    } else {
+      setGamePhase(GF_PHASES.GO_FISH);
+      showEventBanner(mine ? 'GO FISH' : `${action.askerName} goes fishing`, { persist: true, emphasis: true });
+      await wait(220);
+      setGamePhase(GF_PHASES.DRAWING);
+    }
   }
 
   let nextState = null;
@@ -719,6 +730,10 @@ async function playTurnAction(action) {
   }
 
   if (nextState) await animateStateTransition(action, nextState);
+
+  if (action.books && action.books.length) {
+    setGamePhase(GF_PHASES.BOOK_COMPLETING);
+  }
   await wait(TURN_TIMING.settle);
 }
 
@@ -728,14 +743,28 @@ function applyPendingAfterAction(action) {
   if (action.books && action.books.length) {
     const who = mine ? 'You' : action.askerName;
     showEventBanner(`${who} completed the book of ${rankPlural(action.books[0])}`, { book: true });
+    return;
+  }
+
+  if (action.finalRound) {
+    if (action.kind === 'take') {
+      showEventBanner(mine ? 'Got them — final ask complete' : `${action.askerName} got them`);
+    } else {
+      showEventBanner(mine ? 'Nothing there — final ask complete' : `${action.askerName} found nothing`);
+    }
+    return;
+  }
+
+  if (action.kind === 'replenish') {
+    if (mine && action.drawnCard) {
+      showEventBanner(`You draw ${action.drawnCard.rank}${action.drawnCard.suit} — keep playing`);
+    } else {
+      showEventBanner(`${action.askerName} is back in`);
+    }
   } else if (action.kind === 'take') {
-    showEventBanner(mine ? 'They’re yours — go again' : `${action.askerName} gets another go`);
-  } else if (action.pondEmpty) {
-    showEventBanner('The pond is empty');
+    showEventBanner(mine ? 'Got them — your turn again' : `${action.askerName} goes again`);
   } else if (action.matched) {
-    showEventBanner(mine
-      ? `You fished the ${action.rank} — go again`
-      : `${action.askerName} found the ${action.rank} — they go again`);
+    showEventBanner('LUCKY CATCH', { emphasis: true });
   } else if (mine && action.drawnCard) {
     showEventBanner(`You drew ${action.drawnCard.rank}${action.drawnCard.suit} — ${action.opponentName}’s turn`);
   } else {
