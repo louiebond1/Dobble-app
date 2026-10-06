@@ -1339,6 +1339,7 @@ document.querySelectorAll('#modeToggle .mode-btn').forEach((btn) => {
     document.querySelectorAll('#modeToggle .mode-btn').forEach((b) => b.classList.toggle('active', b === btn));
     el('soloFields').classList.toggle('hidden', mode !== 'solo');
     el('duoFields').classList.toggle('hidden', mode !== 'duo');
+    if (mode === 'solo') renderSetupRecord();
   });
 });
 
@@ -1478,6 +1479,7 @@ socket.on('gofish:round:start', (data) => {
   setupWrap.classList.add('hidden');
   lobby.classList.add('hidden');
   gameOver.classList.add('hidden');
+  el('finalRecordStrip').classList.add('hidden');
   gameArea.classList.remove('hidden');
   updateDuelHud();
 });
@@ -1575,6 +1577,10 @@ function handleDuoGameOver(data) {
     <div class="gf-final-section-title">Cards left in hand</div>
     <div class="gf-result-row"><span class="gf-result-row-name">You</span><div class="gf-result-mini-cards">${resultHandMarkup(mineReveal.hand || [])}</div></div>
     <div class="gf-result-row"><span class="gf-result-row-name">${escapeResultText(opponentName)}</span><div class="gf-result-mini-cards">${resultHandMarkup(opponentReveal.hand || [])}</div></div>`;
+
+  const duoRecord = updateDuoRecord(data.winnerName || null);
+  el('finalRecordStrip').classList.remove('hidden');
+  el('finalRecordStrip').innerHTML = duoRecordText(duoRecord);
 
   const myStats = minePublic && minePublic.stats ? minePublic.stats : {};
   el('finalStats').classList.remove('hidden');
@@ -2162,6 +2168,8 @@ function soloFinishGame() {
   syncSoloHud();
 
   const result = soloDetermineWinner();
+  const record = updateSoloRecord(result);
+  renderSetupRecord();
   gameArea.classList.add('hidden');
   gameOver.classList.remove('hidden');
   el('playAgainBtn').classList.remove('hidden');
@@ -2208,6 +2216,9 @@ function soloFinishGame() {
     <div class="gf-stat"><strong>${soloStats.me.luckyCatches}</strong><span>Lucky catches</span></div>
     <div class="gf-stat"><strong>${soloStats.me.successfulAsks}</strong><span>Successful asks</span></div>
     <div class="gf-stat"><strong>${soloStats.me.longestTurnStreak}</strong><span>Longest streak</span></div>`;
+
+  el('finalRecordStrip').classList.remove('hidden');
+  el('finalRecordStrip').innerHTML = soloRecordText(record);
 }
 
 // --- Party Mashup: auto-join and auto-start a single-round leg ------------
