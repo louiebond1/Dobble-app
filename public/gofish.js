@@ -316,6 +316,8 @@ function isClosingState(data = lastGameState) {
 function updateClosingAtmosphere(data = lastGameState) {
   const active = isClosingState(data) && !(data && ['FINAL_ROUND_INTRO', 'FINAL_ROUND', 'GAME_OVER'].includes(data.gamePhase));
   gameArea.classList.toggle('gf-closing-mode', active);
+  const theme = document.querySelector('meta[name="theme-color"]');
+  if (theme) theme.setAttribute('content', active ? '#211a1d' : '#f8f1ec');
   const badge = el('closingBadge');
   if (badge) badge.classList.toggle('hidden', !active);
 
@@ -481,6 +483,8 @@ async function presentPendingClosingRoundIntro() {
 
 async function showFinalRoundIntro(info = pendingFinalRoundIntro || {}) {
   gameArea.classList.remove('gf-closing-mode');
+  const theme = document.querySelector('meta[name="theme-color"]');
+  if (theme) theme.setAttribute('content', '#f8f1ec');
   el('closingBadge').classList.add('hidden');
   setGamePhase(GF_PHASES.FINAL_ROUND_INTRO);
   gameArea.classList.add('gf-resolving');
