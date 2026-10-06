@@ -1684,3 +1684,270 @@ button.gf-card:focus-visible {
 .gf-my-hand > .gf-card {
   pointer-events: none !important;
 }
+
+
+/* ---------- Closing Phase: lights down, one ask per turn ---------- */
+
+.gf-closing-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 95;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  pointer-events: none;
+  background:
+    radial-gradient(circle at 50% 48%, rgba(255, 233, 215, .17) 0 10%, rgba(46, 31, 35, .56) 34%, rgba(20, 15, 17, .91) 76%),
+    rgba(20, 15, 17, .80);
+  backdrop-filter: blur(5px) brightness(.68);
+  -webkit-backdrop-filter: blur(5px) brightness(.68);
+}
+
+.gf-closing-stage {
+  position: relative;
+  width: min(100%, 360px);
+  padding: 28px 22px 25px;
+  text-align: center;
+  color: #fff7f2;
+  border: 1px solid rgba(255,255,255,.13);
+  border-radius: 28px;
+  background:
+    radial-gradient(circle at 50% 18%, rgba(255, 219, 190, .16), transparent 42%),
+    rgba(43, 31, 35, .78);
+  box-shadow:
+    0 30px 90px rgba(0,0,0,.40),
+    inset 0 1px 0 rgba(255,255,255,.10);
+}
+
+.gf-closing-stage::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: -110px;
+  width: 250px;
+  height: 220px;
+  transform: translateX(-50%);
+  pointer-events: none;
+  background: radial-gradient(ellipse at center, rgba(255,232,208,.30), rgba(255,232,208,.05) 44%, transparent 71%);
+  filter: blur(9px);
+}
+
+.gf-closing-eyebrow {
+  display: block;
+  margin-bottom: 9px;
+  color: #e7b88b;
+  font-size: .60rem;
+  font-weight: 900;
+  letter-spacing: .18em;
+}
+
+.gf-closing-stage strong {
+  display: block;
+  font-size: clamp(1.7rem, 7vw, 2.35rem);
+  line-height: .98;
+  letter-spacing: -.045em;
+}
+
+.gf-closing-stage p {
+  margin: 12px 0 0;
+  color: #f3e7e2;
+  font-size: .93rem;
+  font-weight: 720;
+}
+
+.gf-closing-stage small {
+  display: block;
+  margin-top: 6px;
+  color: rgba(255,247,242,.60);
+  font-size: .69rem;
+  font-weight: 620;
+}
+
+.gf-closing-badge {
+  min-height: 24px;
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 8px;
+  border: 1px solid rgba(223, 174, 132, .20);
+  border-radius: 999px;
+  color: #9b5d42;
+  background: rgba(255, 235, 218, .86);
+  font-size: .56rem;
+  font-weight: 900;
+  letter-spacing: .10em;
+}
+
+/* Persistent dramatic state after the intro. The table does not become a
+   different app: it simply feels like the room lights dropped. */
+.gf-game.gf-closing-mode {
+  background:
+    radial-gradient(70% 48% at 50% 52%, rgba(126, 79, 67, .18), transparent 72%),
+    linear-gradient(180deg, #2e2528 0%, #211a1d 100%);
+}
+
+.gf-game.gf-closing-mode .gf-topbar {
+  border-bottom-color: rgba(255,255,255,.07);
+  background: rgba(32,25,28,.90);
+}
+
+.gf-game.gf-closing-mode .gf-topbar-title strong,
+.gf-game.gf-closing-mode .gf-match-score b {
+  color: #fff8f4;
+}
+
+.gf-game.gf-closing-mode .gf-topbar-title span,
+.gf-game.gf-closing-mode .gf-topbar-back,
+.gf-game.gf-closing-mode .gf-match-score {
+  color: rgba(255,246,241,.58);
+}
+
+.gf-game.gf-closing-mode .gf-table {
+  position: relative;
+}
+
+.gf-game.gf-closing-mode .gf-player-zone,
+.gf-game.gf-closing-mode .gf-action-stage {
+  position: relative;
+  isolation: isolate;
+  transition:
+    opacity 300ms ease,
+    filter 300ms ease,
+    transform 300ms ease;
+}
+
+.gf-game.gf-closing-mode .gf-player-name {
+  color: #fff8f4;
+}
+
+.gf-game.gf-closing-mode .gf-player-meta {
+  color: rgba(255,246,241,.56);
+}
+
+.gf-game.gf-closing-mode .gf-turn-pill {
+  color: rgba(255,246,241,.72);
+  border-color: rgba(255,255,255,.10);
+  background: rgba(255,255,255,.07);
+}
+
+.gf-game.gf-closing-mode .gf-turn-pill.mine {
+  color: #f2ba9b;
+  border-color: rgba(242,186,155,.18);
+  background: rgba(242,186,155,.10);
+}
+
+.gf-game.gf-closing-mode .gf-action-stage {
+  opacity: .78;
+}
+
+.gf-game.gf-closing-mode.gf-turn-me .gf-opponent-zone {
+  opacity: .25;
+  filter: brightness(.62) saturate(.55);
+  transform: scale(.985);
+}
+
+.gf-game.gf-closing-mode.gf-turn-them .gf-me-zone {
+  opacity: .24;
+  filter: brightness(.58) saturate(.52);
+  transform: scale(.985);
+}
+
+.gf-game.gf-closing-mode.gf-turn-me .gf-me-zone,
+.gf-game.gf-closing-mode.gf-turn-them .gf-opponent-zone {
+  opacity: 1;
+  filter: brightness(1.06) saturate(1.02);
+}
+
+.gf-game.gf-closing-mode.gf-turn-me .gf-me-zone::before,
+.gf-game.gf-closing-mode.gf-turn-them .gf-opponent-zone::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  inset: -28px -18px -24px;
+  border-radius: 42%;
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse at 50% 52%, rgba(255, 222, 196, .22) 0%, rgba(255, 222, 196, .08) 42%, transparent 72%);
+  filter: blur(8px);
+}
+
+.gf-game.gf-closing-mode .gf-pond-wrap {
+  filter: brightness(.76) saturate(.84);
+}
+
+.gf-game.gf-closing-mode .gf-pond-warning {
+  color: #efb28d;
+}
+
+.gf-game.gf-closing-mode.gf-turn-me .gf-ask-panel {
+  border-top-color: rgba(255,255,255,.10);
+  background: rgba(255, 250, 246, .97);
+  box-shadow: 0 -18px 48px rgba(0,0,0,.24);
+}
+
+.gf-game.gf-closing-mode.gf-turn-them .gf-ask-panel {
+  border-top-color: rgba(255,255,255,.07);
+  background: rgba(35,28,30,.94);
+  box-shadow: 0 -18px 48px rgba(0,0,0,.18);
+}
+
+.gf-game.gf-closing-mode.gf-turn-them .gf-ask-heading,
+.gf-game.gf-closing-mode.gf-turn-them .gf-ask-hint {
+  color: rgba(255,246,241,.46);
+}
+
+.gf-game.gf-closing-mode.gf-turn-them .gf-rank-chip {
+  color: rgba(255,246,241,.44);
+  border-color: rgba(255,255,255,.08);
+  background: rgba(255,255,255,.05);
+  box-shadow: none;
+}
+
+.gf-game.gf-closing-mode.gf-turn-them .gf-ask-btn {
+  color: rgba(255,246,241,.38);
+  background: rgba(255,255,255,.08);
+}
+
+.gf-game.gf-closing-mode .gf-event-banner {
+  color: #f3e6e1;
+  background: rgba(255,255,255,.08);
+}
+
+.gf-game.gf-closing-mode .gf-event-banner.emphasis {
+  color: #f3b697;
+  background: rgba(216,111,116,.13);
+}
+
+.gf-game.gf-closing-mode .gf-cpu-bubble {
+  color: #4f4044;
+  background: rgba(255,249,245,.96);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .gf-closing-overlay:not(.hidden) .gf-closing-stage {
+    animation: gfClosingReveal 760ms cubic-bezier(.16,.84,.22,1) both;
+  }
+
+  .gf-game.gf-closing-mode.gf-turn-me .gf-me-zone,
+  .gf-game.gf-closing-mode.gf-turn-them .gf-opponent-zone {
+    animation: gfSpotlightBreathe 2.8s ease-in-out infinite;
+  }
+}
+
+@keyframes gfClosingReveal {
+  0% { opacity: 0; transform: scale(.94) translateY(8px); }
+  55% { opacity: 1; transform: scale(1.018) translateY(-1px); }
+  100% { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+@keyframes gfSpotlightBreathe {
+  0%,100% { filter: brightness(1.03) saturate(1); }
+  50% { filter: brightness(1.10) saturate(1.04); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gf-game.gf-closing-mode.gf-turn-me .gf-me-zone,
+  .gf-game.gf-closing-mode.gf-turn-them .gf-opponent-zone,
+  .gf-closing-overlay:not(.hidden) .gf-closing-stage {
+    animation: none !important;
+  }
+}

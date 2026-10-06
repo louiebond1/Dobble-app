@@ -71,6 +71,15 @@
   </main>
 
   <main class="gf-game hidden" id="gameArea">
+    <div class="gf-closing-overlay hidden" id="closingOverlay" role="status" aria-live="assertive">
+      <div class="gf-closing-stage">
+        <span class="gf-closing-eyebrow">5 CARDS LEFT</span>
+        <strong>THE POND IS CLOSING</strong>
+        <p>One ask each turn from here.</p>
+        <small>No chain turns. Every ask matters.</small>
+      </div>
+    </div>
+
     <div class="gf-final-round-overlay hidden" id="finalRoundOverlay" role="status" aria-live="assertive">
       <div class="gf-final-round-card">
         <span class="gf-final-eyebrow">THE POND IS EMPTY</span>
@@ -117,6 +126,7 @@
 
       <section class="gf-action-stage" id="actionStage">
         <div class="gf-turn-pill" id="turnPill">Waiting…</div>
+        <div class="gf-closing-badge hidden" id="closingBadge">1 ASK PER TURN</div>
         <div class="gf-final-progress hidden" id="finalProgress" aria-label="Final round progress"></div>
         <div class="gf-pond-wrap">
           <div class="gf-pond-shadow gf-pond-shadow-two"></div>

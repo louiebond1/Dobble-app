@@ -123,6 +123,10 @@ function gfSound(kind) {
   } else if (kind === 'lucky') {
     gfNote(720, .10, { type: 'triangle', gain: .020 });
     gfNote(1080, .16, { type: 'sine', gain: .020, delay: .09 });
+  } else if (kind === 'closing') {
+    gfNote(220, .22, { type: 'triangle', gain: .021, endFreq: 185 });
+    gfNote(330, .24, { type: 'sine', gain: .018, delay: .16, endFreq: 300 });
+    gfNote(494, .28, { type: 'sine', gain: .014, delay: .34 });
   } else if (kind === 'final') {
     gfNote(196, .20, { type: 'triangle', gain: .022 });
     gfNote(294, .22, { type: 'triangle', gain: .020, delay: .15 });
@@ -304,6 +308,28 @@ function updatePondPressure(count) {
   else warning.textContent = '';
 }
 
+function isClosingState(data = lastGameState) {
+  if (mode === 'solo') return !!(typeof soloClosing !== 'undefined' && soloClosing);
+  return !!data && ['CLOSING_INTRO', 'CLOSING'].includes(data.gamePhase);
+}
+
+function updateClosingAtmosphere(data = lastGameState) {
+  const active = isClosingState(data) && !(data && ['FINAL_ROUND_INTRO', 'FINAL_ROUND', 'GAME_OVER'].includes(data.gamePhase));
+  gameArea.classList.toggle('gf-closing-mode', active);
+  const theme = document.querySelector('meta[name="theme-color"]');
+  if (theme) theme.setAttribute('content', active ? '#211a1d' : '#f8f1ec');
+  const badge = el('closingBadge');
+  if (badge) badge.classList.toggle('hidden', !active);
+
+  if (active) {
+    const warning = el('pondWarning');
+    if (warning && Number(data && data.pondCount) > 0) {
+      warning.classList.remove('hidden');
+      warning.textContent = Number(data.pondCount) === 1 ? 'LAST CARD' : `${data.pondCount} LEFT · CLOSING`;
+    }
+  }
+}
+
 function updateFinalProgressFromState(data) {
   if (mode === 'solo') {
     if (typeof soloFinal !== 'undefined' && soloFinal && soloFinal.active) {
@@ -351,6 +377,9 @@ const GF_PHASES = Object.freeze({
   BOOK_COMPLETING: 'BOOK_COMPLETING',
   CPU_THINKING: 'CPU_THINKING',
   CPU_ASKING: 'CPU_ASKING',
+  CLOSING_INTRO: 'CLOSING_INTRO',
+  CLOSING_PLAYER: 'CLOSING_PLAYER',
+  CLOSING_CPU: 'CLOSING_CPU',
   FINAL_ROUND_INTRO: 'FINAL_ROUND_INTRO',
   FINAL_ROUND_PLAYER: 'FINAL_ROUND_PLAYER',
   FINAL_ROUND_CPU: 'FINAL_ROUND_CPU',
@@ -358,6 +387,8 @@ const GF_PHASES = Object.freeze({
 });
 
 let gamePhase = GF_PHASES.SETUP;
+let pendingClosingRoundIntro = null;
+let closingRoundIntroShowing = false;
 let pendingFinalRoundIntro = null;
 let finalRoundIntroShowing = false;
 
@@ -375,6 +406,9 @@ function setGamePhase(phase) {
     [GF_PHASES.BOOK_COMPLETING]: 'Book complete',
     [GF_PHASES.CPU_THINKING]: mode === 'solo' ? 'CPU thinking…' : 'Their turn',
     [GF_PHASES.CPU_ASKING]: mode === 'solo' ? 'CPU asking…' : 'They’re asking…',
+    [GF_PHASES.CLOSING_INTRO]: 'Closing Phase',
+    [GF_PHASES.CLOSING_PLAYER]: 'Closing · Your one ask',
+    [GF_PHASES.CLOSING_CPU]: mode === 'solo' ? 'Closing · CPU one ask' : 'Closing · Their one ask',
     [GF_PHASES.FINAL_ROUND_INTRO]: 'Final Round',
     [GF_PHASES.FINAL_ROUND_PLAYER]: 'Final Round · Your ask',
     [GF_PHASES.FINAL_ROUND_CPU]: mode === 'solo' ? 'Final Round · CPU ask' : 'Final Round · Their ask',
@@ -384,12 +418,20 @@ function setGamePhase(phase) {
 }
 
 function humanSelectionPhase() {
-  return gamePhase === GF_PHASES.PLAYER_SELECTING || gamePhase === GF_PHASES.FINAL_ROUND_PLAYER;
+  return [
+    GF_PHASES.PLAYER_SELECTING,
+    GF_PHASES.CLOSING_PLAYER,
+    GF_PHASES.FINAL_ROUND_PLAYER,
+  ].includes(gamePhase);
 }
 
 function syncPhaseFromState(data) {
   if (!data || mode !== 'duo' || actionAnimating) return;
-  if (data.gamePhase === 'FINAL_ROUND_INTRO') {
+  if (data.gamePhase === 'CLOSING_INTRO') {
+    setGamePhase(GF_PHASES.CLOSING_INTRO);
+  } else if (data.gamePhase === 'CLOSING') {
+    setGamePhase(data.isMyTurn ? GF_PHASES.CLOSING_PLAYER : GF_PHASES.CLOSING_CPU);
+  } else if (data.gamePhase === 'FINAL_ROUND_INTRO') {
     setGamePhase(GF_PHASES.FINAL_ROUND_INTRO);
   } else if (data.gamePhase === 'FINAL_ROUND') {
     setGamePhase(data.isMyTurn ? GF_PHASES.FINAL_ROUND_PLAYER : GF_PHASES.FINAL_ROUND_CPU);
@@ -403,10 +445,47 @@ function syncPhaseFromState(data) {
 function stateAllowsSelection(data) {
   if (!data || !data.isMyTurn || data.actionLocked) return false;
   if (mode === 'solo') return humanSelectionPhase();
-  return data.gamePhase === 'NORMAL' || data.gamePhase === 'FINAL_ROUND';
+  return ['NORMAL', 'CLOSING', 'FINAL_ROUND'].includes(data.gamePhase);
+}
+
+async function showClosingRoundIntro(info = pendingClosingRoundIntro || {}) {
+  setGamePhase(GF_PHASES.CLOSING_INTRO);
+  gameArea.classList.add('gf-resolving');
+  gameArea.classList.add('gf-closing-mode');
+
+  const overlay = el('closingOverlay');
+  const eyebrow = overlay.querySelector('.gf-closing-eyebrow');
+  const pondCount = Number(info.pondCount) || 5;
+  if (eyebrow) eyebrow.textContent = `${pondCount} CARD${pondCount === 1 ? '' : 'S'} LEFT`;
+
+  overlay.classList.remove('hidden');
+  gfSound('closing');
+  hapticSuccess();
+  await wait(2300);
+  overlay.classList.add('hidden');
+  gameArea.classList.remove('gf-resolving');
+}
+
+async function presentPendingClosingRoundIntro() {
+  if (mode !== 'duo' || closingRoundIntroShowing || !pendingClosingRoundIntro) return;
+  closingRoundIntroShowing = true;
+  const info = pendingClosingRoundIntro;
+  pendingClosingRoundIntro = null;
+  try {
+    await showClosingRoundIntro(info);
+    const state = pendingGameState || lastGameState;
+    pendingGameState = null;
+    if (state) applyGameState(state);
+  } finally {
+    closingRoundIntroShowing = false;
+  }
 }
 
 async function showFinalRoundIntro(info = pendingFinalRoundIntro || {}) {
+  gameArea.classList.remove('gf-closing-mode');
+  const theme = document.querySelector('meta[name="theme-color"]');
+  if (theme) theme.setAttribute('content', '#f8f1ec');
+  el('closingBadge').classList.add('hidden');
   setGamePhase(GF_PHASES.FINAL_ROUND_INTRO);
   gameArea.classList.add('gf-resolving');
 
@@ -432,7 +511,9 @@ async function presentPendingFinalRoundIntro() {
   pendingFinalRoundIntro = null;
   try {
     await showFinalRoundIntro(info);
-    if (lastGameState) applyGameState(lastGameState);
+    const state = pendingGameState || lastGameState;
+    pendingGameState = null;
+    if (state) applyGameState(state);
   } finally {
     finalRoundIntroShowing = false;
   }
@@ -707,13 +788,18 @@ function updateAskControls(data) {
     const finalAsk = mode === 'solo'
       ? soloFinal.active
       : data.gamePhase === 'FINAL_ROUND';
+    const closingAsk = !finalAsk && isClosingState(data);
     askButton.disabled = !canAct;
     askButton.textContent = finalAsk
       ? `Final ask · ${rankPlural(selectedRank)}`
-      : `Ask ${opponentName} for ${rankPlural(selectedRank)}`;
+      : closingAsk
+        ? `One ask · ${rankPlural(selectedRank)}`
+        : `Ask ${opponentName} for ${rankPlural(selectedRank)}`;
     hint.textContent = finalAsk
       ? 'One ask only. No fishing and no extra turn.'
-      : `Your ${rankPlural(selectedRank)} are highlighted. Nothing happens until you ask.`;
+      : closingAsk
+        ? 'Closing Phase: this ask ends your turn, even if you get the cards.'
+        : `Your ${rankPlural(selectedRank)} are highlighted. Nothing happens until you ask.`;
   } else {
     askButton.disabled = true;
     askButton.textContent = 'Choose a rank';
@@ -767,6 +853,7 @@ function applyGameState(data, { freezeTurn = false } = {}) {
   updateDuelHud(data);
   updatePondPressure(data.pondCount);
   if (!freezeTurn) {
+    updateClosingAtmosphere(data);
     updateTurnFocus(data);
     updateFinalProgressFromState(data);
     syncPhaseFromState(data);
@@ -774,7 +861,10 @@ function applyGameState(data, { freezeTurn = false } = {}) {
   }
   renderRankChoices(data);
   updateAskControls(data);
-  gameArea.classList.toggle('gf-resolving', !!data.actionLocked || actionAnimating || askPending);
+  gameArea.classList.toggle(
+    'gf-resolving',
+    !!data.actionLocked || actionAnimating || askPending || closingRoundIntroShowing || finalRoundIntroShowing
+  );
 
   if (!freezeTurn && stateAllowsSelection(data)) {
     showCoach('select', 'Choose a rank you already hold. Tap the card itself or the rank below.');
@@ -1248,6 +1338,30 @@ async function applyPendingAfterAction(action) {
     return;
   }
 
+  if (action.closingPhase) {
+    if (action.kind === 'take') {
+      showEventBanner(
+        mine
+          ? `Got them — ${action.opponentName}’s turn`
+          : `${action.askerName} got them — your turn`
+      );
+    } else if (action.luckyCatch || action.matched) {
+      gfSound('lucky');
+      showEventBanner(
+        mine
+          ? 'LUCKY CATCH — but the turn still passes'
+          : `${action.askerName} hit a Lucky Catch — your turn`,
+        { emphasis: true }
+      );
+    } else if (mine && action.drawnCard) {
+      showEventBanner(`You drew ${action.drawnCard.rank}${action.drawnCard.suit} — ${action.opponentName}’s turn`);
+    } else {
+      showEventBanner(`One ask used — ${action.opponentName}’s turn`);
+    }
+    if (cpuActor) await wait(CPU_PACING.outcomeHold);
+    return;
+  }
+
   if (action.kind === 'replenish') {
     if (mine && action.drawnCard) {
       showEventBanner(`You draw ${action.drawnCard.rank}${action.drawnCard.suit} — keep playing`);
@@ -1305,6 +1419,10 @@ async function drainActionQueue() {
     }
 
     pendingRoundResult = null;
+
+    if (!actionQueue.length && pendingClosingRoundIntro) {
+      await presentPendingClosingRoundIntro();
+    }
 
     if (!actionQueue.length && pendingFinalRoundIntro) {
       await presentPendingFinalRoundIntro();
@@ -1482,6 +1600,7 @@ socket.on('gofish:round:start', (data) => {
   pendingGameState = null;
   pendingRoundResult = null;
   pendingGameOver = null;
+  pendingClosingRoundIntro = null;
   pendingFinalRoundIntro = null;
   activeFinalOrder = [];
   renderFinalOrder([], 0);
@@ -1502,12 +1621,18 @@ socket.on('gofish:round:start', (data) => {
   gameOver.classList.add('hidden');
   el('finalRecordStrip').classList.add('hidden');
   gameArea.classList.remove('hidden');
+  gameArea.classList.remove('gf-closing-mode');
+  el('closingOverlay').classList.add('hidden');
+  el('closingBadge').classList.add('hidden');
+  gameArea.classList.remove('gf-closing-mode');
+  el('closingOverlay').classList.add('hidden');
+  el('closingBadge').classList.add('hidden');
   updateDuelHud();
 });
 
 socket.on('gofish:state', (data) => {
   if (mode !== 'duo') return;
-  if (actionAnimating || askPending) {
+  if (actionAnimating || askPending || closingRoundIntroShowing || finalRoundIntroShowing) {
     pendingGameState = data;
     return;
   }
@@ -1517,6 +1642,14 @@ socket.on('gofish:state', (data) => {
 socket.on('gofish:action', (data) => {
   if (mode !== 'duo') return;
   queueTurnAction(data);
+});
+
+socket.on('gofish:closing-round', (data) => {
+  if (mode !== 'duo') return;
+  pendingClosingRoundIntro = data || {};
+  if (!actionAnimating && !askPending && !actionQueue.length) {
+    presentPendingClosingRoundIntro();
+  }
 });
 
 socket.on('gofish:final-round', (data) => {
@@ -1554,6 +1687,8 @@ function handleDuoGameOver(data) {
   if (mode !== 'duo') return;
 
   setGamePhase(GF_PHASES.GAME_OVER);
+  gameArea.classList.remove('gf-closing-mode');
+  el('closingBadge').classList.add('hidden');
   gameArea.classList.add('hidden');
   gameOver.classList.remove('hidden');
   el('playAgainBtn').classList.toggle('hidden', !amHost());
@@ -1638,6 +1773,7 @@ let soloBooks = { me: [], cpu: [] };
 let soloPond = [];
 let soloTurn = 'me';
 let soloGameActive = false;
+let soloClosing = false;
 let soloFinal = { active: false, order: [], index: 0 };
 let soloLastBookOwner = null;
 let soloCpuMemory = new Map();
@@ -1733,8 +1869,14 @@ function getSoloStateSnapshot() {
     turnName: soloTurn === 'me' ? soloName : 'CPU',
     askableRanks: [...new Set(soloHands.me.map((card) => card.rank))],
     actionLocked: actionAnimating || askPending ||
-      ![GF_PHASES.PLAYER_SELECTING, GF_PHASES.FINAL_ROUND_PLAYER].includes(gamePhase),
+      ![GF_PHASES.PLAYER_SELECTING, GF_PHASES.CLOSING_PLAYER, GF_PHASES.FINAL_ROUND_PLAYER].includes(gamePhase),
     phase: gamePhase,
+    gamePhase: soloFinal.active
+      ? 'FINAL_ROUND'
+      : soloClosing
+        ? 'CLOSING'
+        : 'NORMAL',
+    closingPhase: soloClosing,
     finalRound: soloFinal.active,
   };
 }
@@ -1762,6 +1904,7 @@ function startSoloGame() {
   askPending = false;
   pendingGameState = null;
   pendingRoundResult = null;
+  pendingClosingRoundIntro = null;
   pendingFinalRoundIntro = null;
   lastGameState = null;
   selectedRank = null;
@@ -1778,6 +1921,7 @@ function startSoloGame() {
   soloPond = deck;
   soloTurn = Math.random() < 0.5 ? 'me' : 'cpu';
   soloGameActive = true;
+  soloClosing = false;
   soloFinal = { active: false, order: [], index: 0 };
   soloLastBookOwner = null;
   soloCpuMemory = new Map();
@@ -1852,19 +1996,20 @@ async function soloBeginTurn() {
       await soloReplenish(soloTurn);
       return;
     }
-    // No hand and no pond means the normal phase is over.
     await soloEnterFinalRound(soloTurn);
     return;
   }
 
   selectedRank = null;
   if (soloTurn === 'me') {
-    setGamePhase(GF_PHASES.PLAYER_SELECTING);
+    setGamePhase(soloClosing ? GF_PHASES.CLOSING_PLAYER : GF_PHASES.PLAYER_SELECTING);
     soloRenderState();
   } else {
-    setGamePhase(GF_PHASES.CPU_THINKING);
+    setGamePhase(soloClosing ? GF_PHASES.CLOSING_CPU : GF_PHASES.CPU_THINKING);
     soloRenderState();
-    const delay = CPU_PACING.thinkMin + Math.floor(Math.random() * CPU_PACING.thinkJitter);
+    const delay = soloClosing
+      ? CPU_PACING.finalThinkMin + Math.floor(Math.random() * CPU_PACING.finalThinkJitter)
+      : CPU_PACING.thinkMin + Math.floor(Math.random() * CPU_PACING.thinkJitter);
     setTimeout(runCpuTurn, delay);
   }
 }
@@ -1874,10 +2019,12 @@ async function soloReplenish(who) {
   actionAnimating = true;
   askPending = false;
 
+  const wasClosing = soloClosing;
   const drawn = soloPond.pop();
   soloHands[who].push(drawn);
   const books = soloCheckBooks(who);
   const emptiedPond = soloPond.length === 0;
+  const startsClosing = !wasClosing && soloPond.length > 0 && soloPond.length <= 5;
   const action = {
     kind: 'replenish',
     askerName: who === 'me' ? soloName : 'CPU',
@@ -1886,6 +2033,8 @@ async function soloReplenish(who) {
     books,
     pondEmpty: false,
     emptiedPond,
+    closingPhase: wasClosing,
+    closingPhaseStarts: startsClosing,
     keepsTurn: true,
   };
 
@@ -1901,6 +2050,13 @@ async function soloReplenish(who) {
   if (emptiedPond) {
     await soloEnterFinalRound(who);
     return;
+  }
+  if (startsClosing) {
+    soloClosing = true;
+    pendingClosingRoundIntro = { starterName: who === 'me' ? soloName : 'CPU', pondCount: soloPond.length };
+    soloRenderState();
+    await showClosingRoundIntro(pendingClosingRoundIntro);
+    pendingClosingRoundIntro = null;
   }
   await soloBeginTurn();
 }
@@ -1926,7 +2082,7 @@ function runCpuTurn() {
     actionAnimating ||
     !soloGameActive ||
     soloTurn !== 'cpu' ||
-    ![GF_PHASES.CPU_THINKING, GF_PHASES.FINAL_ROUND_CPU].includes(gamePhase)
+    ![GF_PHASES.CPU_THINKING, GF_PHASES.CLOSING_CPU, GF_PHASES.FINAL_ROUND_CPU].includes(gamePhase)
   ) return;
 
   const decision = chooseCpuRank();
@@ -1958,6 +2114,8 @@ function runCpuTurn() {
 async function soloResolveAsk(askerKey, targetKey, rank, askerName, targetName) {
   if (actionAnimating || !soloGameActive) return;
   const finalRound = soloFinal.active;
+  const closingPhase = soloClosing && !finalRound;
+
   if (finalRound) {
     const expected = soloFinal.order[soloFinal.index];
     if (expected !== askerKey) return;
@@ -1966,7 +2124,6 @@ async function soloResolveAsk(askerKey, targetKey, rank, askerName, targetName) 
   actionAnimating = true;
   noteSoloAsk(askerKey);
 
-  // A human asking for a rank publicly proves they hold that rank right now.
   if (askerKey === 'me') rememberHumanRank(rank, 3.5);
 
   const asker = soloHands[askerKey];
@@ -1975,13 +2132,13 @@ async function soloResolveAsk(askerKey, targetKey, rank, askerName, targetName) 
   let action;
   let nextNormalTurn = targetKey;
   let emptiedPond = false;
+  let startsClosing = false;
 
   if (matches.length > 0) {
     soloHands[targetKey] = target.filter((card) => card.rank !== rank);
     soloHands[askerKey] = asker.concat(matches);
     soloStats[askerKey].successfulAsks += 1;
 
-    // These are public transfers, so CPU memory can update without cheating.
     if (askerKey === 'me') rememberHumanRank(rank, 5);
     else forgetHumanRank(rank);
 
@@ -1994,10 +2151,11 @@ async function soloResolveAsk(askerKey, targetKey, rank, askerName, targetName) 
       count: matches.length,
       cards: matches.map((card) => ({ rank: card.rank, suit: card.suit })),
       books,
-      keepsTurn: !finalRound,
+      keepsTurn: !finalRound && !closingPhase,
+      closingPhase,
       finalRound,
     };
-    nextNormalTurn = askerKey;
+    nextNormalTurn = closingPhase ? targetKey : askerKey;
   } else if (finalRound) {
     if (askerKey === 'cpu') forgetHumanRank(rank);
     action = {
@@ -2024,27 +2182,30 @@ async function soloResolveAsk(askerKey, targetKey, rank, askerName, targetName) 
       soloStats[askerKey].luckyCatches += 1;
       if (askerKey === 'me' && !books.includes(rank)) rememberHumanRank(rank, 5);
     }
-    if (askerKey === 'cpu' && !matches.length) forgetHumanRank(rank);
+    if (askerKey === 'cpu') forgetHumanRank(rank);
 
-    nextNormalTurn = matched ? askerKey : targetKey;
     emptiedPond = !!drawn && soloPond.length === 0;
+    startsClosing = !closingPhase && !emptiedPond && soloPond.length > 0 && soloPond.length <= 5;
+    nextNormalTurn = closingPhase ? targetKey : (matched ? askerKey : targetKey);
+
     action = {
       kind: 'fish',
       askerName,
       opponentName: targetName,
       rank,
       matched,
+      luckyCatch: matched,
       pondEmpty: !drawn,
       emptiedPond,
       drawnCard: askerKey === 'me' ? drawn : null,
       books,
-      keepsTurn: matched,
+      keepsTurn: !closingPhase && matched,
+      closingPhase,
+      closingPhaseStarts: startsClosing,
       finalRound: false,
     };
   }
 
-  // State may already know who would normally act next, but the UI keeps the
-  // visible turn frozen until the physical action has completed.
   if (!finalRound) soloTurn = nextNormalTurn;
 
   try {
@@ -2064,18 +2225,27 @@ async function soloResolveAsk(askerKey, targetKey, rank, askerName, targetName) 
     return;
   }
 
-  if (!action.keepsTurn) endSoloTurnStreak(askerKey);
+  if (closingPhase || !action.keepsTurn) endSoloTurnStreak(askerKey);
 
   if (emptiedPond) {
-    // Per the final rules, the player who would normally act next gets the
-    // first Final Round ask. The move that emptied the pond is already done.
+    soloClosing = false;
     await soloEnterFinalRound(nextNormalTurn);
     return;
   }
 
+  if (startsClosing) {
+    soloClosing = true;
+    pendingClosingRoundIntro = {
+      starterName: nextNormalTurn === 'me' ? soloName : 'CPU',
+      pondCount: soloPond.length,
+    };
+    soloRenderState();
+    await showClosingRoundIntro(pendingClosingRoundIntro);
+    pendingClosingRoundIntro = null;
+  }
+
   if (soloTotalBooks() >= RANKS.length) {
-    // All 52 cards are already in books. There are no legal final asks to
-    // make, so the final-round skipper will close the game cleanly.
+    soloClosing = false;
     await soloEnterFinalRound(nextNormalTurn);
     return;
   }
@@ -2085,6 +2255,9 @@ async function soloResolveAsk(askerKey, targetKey, rank, askerName, targetName) 
 
 async function soloEnterFinalRound(starterKey) {
   if (!soloGameActive || soloFinal.active) return;
+  soloClosing = false;
+  gameArea.classList.remove('gf-closing-mode');
+  el('closingBadge').classList.add('hidden');
   soloFinal = {
     active: true,
     order: [starterKey, starterKey === 'me' ? 'cpu' : 'me'],
