@@ -2055,6 +2055,8 @@ function runCpuTurn() {
 async function soloResolveAsk(askerKey, targetKey, rank, askerName, targetName) {
   if (actionAnimating || !soloGameActive) return;
   const finalRound = soloFinal.active;
+  const closingPhase = soloClosing && !finalRound;
+
   if (finalRound) {
     const expected = soloFinal.order[soloFinal.index];
     if (expected !== askerKey) return;
@@ -2063,7 +2065,6 @@ async function soloResolveAsk(askerKey, targetKey, rank, askerName, targetName) 
   actionAnimating = true;
   noteSoloAsk(askerKey);
 
-  // A human asking for a rank publicly proves they hold that rank right now.
   if (askerKey === 'me') rememberHumanRank(rank, 3.5);
 
   const asker = soloHands[askerKey];
@@ -2072,13 +2073,13 @@ async function soloResolveAsk(askerKey, targetKey, rank, askerName, targetName) 
   let action;
   let nextNormalTurn = targetKey;
   let emptiedPond = false;
+  let startsClosing = false;
 
   if (matches.length > 0) {
     soloHands[targetKey] = target.filter((card) => card.rank !== rank);
     soloHands[askerKey] = asker.concat(matches);
     soloStats[askerKey].successfulAsks += 1;
 
-    // These are public transfers, so CPU memory can update without cheating.
     if (askerKey === 'me') rememberHumanRank(rank, 5);
     else forgetHumanRank(rank);
 
@@ -2091,10 +2092,11 @@ async function soloResolveAsk(askerKey, targetKey, rank, askerName, targetName) 
       count: matches.length,
       cards: matches.map((card) => ({ rank: card.rank, suit: card.suit })),
       books,
-      keepsTurn: !finalRound,
+      keepsTurn: !finalRound && !closingPhase,
+      closingPhase,
       finalRound,
     };
-    nextNormalTurn = askerKey;
+    nextNormalTurn = closingPhase ? targetKey : askerKey;
   } else if (finalRound) {
     if (askerKey === 'cpu') forgetHumanRank(rank);
     action = {
@@ -2121,27 +2123,30 @@ async function soloResolveAsk(askerKey, targetKey, rank, askerName, targetName) 
       soloStats[askerKey].luckyCatches += 1;
       if (askerKey === 'me' && !books.includes(rank)) rememberHumanRank(rank, 5);
     }
-    if (askerKey === 'cpu' && !matches.length) forgetHumanRank(rank);
+    if (askerKey === 'cpu') forgetHumanRank(rank);
 
-    nextNormalTurn = matched ? askerKey : targetKey;
     emptiedPond = !!drawn && soloPond.length === 0;
+    startsClosing = !closingPhase && !emptiedPond && soloPond.length > 0 && soloPond.length <= 5;
+    nextNormalTurn = closingPhase ? targetKey : (matched ? askerKey : targetKey);
+
     action = {
       kind: 'fish',
       askerName,
       opponentName: targetName,
       rank,
       matched,
+      luckyCatch: matched,
       pondEmpty: !drawn,
       emptiedPond,
       drawnCard: askerKey === 'me' ? drawn : null,
       books,
-      keepsTurn: matched,
+      keepsTurn: !closingPhase && matched,
+      closingPhase,
+      closingPhaseStarts: startsClosing,
       finalRound: false,
     };
   }
 
-  // State may already know who would normally act next, but the UI keeps the
-  // visible turn frozen until the physical action has completed.
   if (!finalRound) soloTurn = nextNormalTurn;
 
   try {
@@ -2161,18 +2166,27 @@ async function soloResolveAsk(askerKey, targetKey, rank, askerName, targetName) 
     return;
   }
 
-  if (!action.keepsTurn) endSoloTurnStreak(askerKey);
+  if (closingPhase || !action.keepsTurn) endSoloTurnStreak(askerKey);
 
   if (emptiedPond) {
-    // Per the final rules, the player who would normally act next gets the
-    // first Final Round ask. The move that emptied the pond is already done.
+    soloClosing = false;
     await soloEnterFinalRound(nextNormalTurn);
     return;
   }
 
+  if (startsClosing) {
+    soloClosing = true;
+    pendingClosingRoundIntro = {
+      starterName: nextNormalTurn === 'me' ? soloName : 'CPU',
+      pondCount: soloPond.length,
+    };
+    soloRenderState();
+    await showClosingRoundIntro(pendingClosingRoundIntro);
+    pendingClosingRoundIntro = null;
+  }
+
   if (soloTotalBooks() >= RANKS.length) {
-    // All 52 cards are already in books. There are no legal final asks to
-    // make, so the final-round skipper will close the game cleanly.
+    soloClosing = false;
     await soloEnterFinalRound(nextNormalTurn);
     return;
   }
@@ -2182,6 +2196,9 @@ async function soloResolveAsk(askerKey, targetKey, rank, askerName, targetName) 
 
 async function soloEnterFinalRound(starterKey) {
   if (!soloGameActive || soloFinal.active) return;
+  soloClosing = false;
+  gameArea.classList.remove('gf-closing-mode');
+  el('closingBadge').classList.add('hidden');
   soloFinal = {
     active: true,
     order: [starterKey, starterKey === 'me' ? 'cpu' : 'me'],
