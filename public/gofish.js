@@ -844,8 +844,8 @@ function applyGameState(data, { freezeTurn = false } = {}) {
   updateIdentity(data);
   updateDuelHud(data);
   updatePondPressure(data.pondCount);
-  updateClosingAtmosphere(data);
   if (!freezeTurn) {
+    updateClosingAtmosphere(data);
     updateTurnFocus(data);
     updateFinalProgressFromState(data);
     syncPhaseFromState(data);
@@ -1613,6 +1613,9 @@ socket.on('gofish:round:start', (data) => {
   gameArea.classList.remove('gf-closing-mode');
   el('closingOverlay').classList.add('hidden');
   el('closingBadge').classList.add('hidden');
+  gameArea.classList.remove('gf-closing-mode');
+  el('closingOverlay').classList.add('hidden');
+  el('closingBadge').classList.add('hidden');
   updateDuelHud();
 });
 
@@ -1890,6 +1893,7 @@ function startSoloGame() {
   askPending = false;
   pendingGameState = null;
   pendingRoundResult = null;
+  pendingClosingRoundIntro = null;
   pendingFinalRoundIntro = null;
   lastGameState = null;
   selectedRank = null;
