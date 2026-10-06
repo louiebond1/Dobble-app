@@ -123,6 +123,10 @@ function gfSound(kind) {
   } else if (kind === 'lucky') {
     gfNote(720, .10, { type: 'triangle', gain: .020 });
     gfNote(1080, .16, { type: 'sine', gain: .020, delay: .09 });
+  } else if (kind === 'closing') {
+    gfNote(220, .22, { type: 'triangle', gain: .021, endFreq: 185 });
+    gfNote(330, .24, { type: 'sine', gain: .018, delay: .16, endFreq: 300 });
+    gfNote(494, .28, { type: 'sine', gain: .014, delay: .34 });
   } else if (kind === 'final') {
     gfNote(196, .20, { type: 'triangle', gain: .022 });
     gfNote(294, .22, { type: 'triangle', gain: .020, delay: .15 });
@@ -302,6 +306,26 @@ function updatePondPressure(count) {
   else if (count > 3 && count <= 5) warning.textContent = 'GETTING LOW';
   else if (count === 0) warning.textContent = 'FINAL ROUND';
   else warning.textContent = '';
+}
+
+function isClosingState(data = lastGameState) {
+  if (mode === 'solo') return !!(typeof soloClosing !== 'undefined' && soloClosing);
+  return !!data && ['CLOSING_INTRO', 'CLOSING'].includes(data.gamePhase);
+}
+
+function updateClosingAtmosphere(data = lastGameState) {
+  const active = isClosingState(data) && !(data && ['FINAL_ROUND_INTRO', 'FINAL_ROUND', 'GAME_OVER'].includes(data.gamePhase));
+  gameArea.classList.toggle('gf-closing-mode', active);
+  const badge = el('closingBadge');
+  if (badge) badge.classList.toggle('hidden', !active);
+
+  if (active) {
+    const warning = el('pondWarning');
+    if (warning && Number(data && data.pondCount) > 0) {
+      warning.classList.remove('hidden');
+      warning.textContent = Number(data.pondCount) === 1 ? 'LAST CARD' : `${data.pondCount} LEFT · CLOSING`;
+    }
+  }
 }
 
 function updateFinalProgressFromState(data) {
@@ -754,13 +778,18 @@ function updateAskControls(data) {
     const finalAsk = mode === 'solo'
       ? soloFinal.active
       : data.gamePhase === 'FINAL_ROUND';
+    const closingAsk = !finalAsk && isClosingState(data);
     askButton.disabled = !canAct;
     askButton.textContent = finalAsk
       ? `Final ask · ${rankPlural(selectedRank)}`
-      : `Ask ${opponentName} for ${rankPlural(selectedRank)}`;
+      : closingAsk
+        ? `One ask · ${rankPlural(selectedRank)}`
+        : `Ask ${opponentName} for ${rankPlural(selectedRank)}`;
     hint.textContent = finalAsk
       ? 'One ask only. No fishing and no extra turn.'
-      : `Your ${rankPlural(selectedRank)} are highlighted. Nothing happens until you ask.`;
+      : closingAsk
+        ? 'Closing Phase: this ask ends your turn, even if you get the cards.'
+        : `Your ${rankPlural(selectedRank)} are highlighted. Nothing happens until you ask.`;
   } else {
     askButton.disabled = true;
     askButton.textContent = 'Choose a rank';
@@ -813,6 +842,7 @@ function applyGameState(data, { freezeTurn = false } = {}) {
   updateIdentity(data);
   updateDuelHud(data);
   updatePondPressure(data.pondCount);
+  updateClosingAtmosphere(data);
   if (!freezeTurn) {
     updateTurnFocus(data);
     updateFinalProgressFromState(data);
