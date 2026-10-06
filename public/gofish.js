@@ -742,9 +742,9 @@ function applyGameState(data, { freezeTurn = false } = {}) {
   updateIdentity(data);
   updateDuelHud(data);
   updatePondPressure(data.pondCount);
-  updateTurnFocus(data);
-  updateFinalProgressFromState(data);
   if (!freezeTurn) {
+    updateTurnFocus(data);
+    updateFinalProgressFromState(data);
     syncPhaseFromState(data);
     updateTurnPill(data.isMyTurn, data.turnName);
   }
@@ -845,6 +845,7 @@ async function flyBetweenRects(startRect, endRect, {
   const midTransform = `translate3d(${dx * .56}px,${dy * .48 - 24}px,0) scale(${(sx + 1) / 2},${(sy + 1) / 2}) rotate(-4deg)`;
   const endTransform = `translate3d(${dx}px,${dy}px,0) scale(1,1) rotate(0deg)`;
 
+  gfSound('slide');
   const first = node.animate(
     [{ transform: startTransform }, { transform: midTransform }],
     { duration: 390, easing: 'cubic-bezier(.24,.75,.22,1)', fill: 'forwards' }
@@ -857,6 +858,7 @@ async function flyBetweenRects(startRect, endRect, {
       { duration: 95, easing: 'ease-in', fill: 'forwards' }
     );
     try { await close.finished; } catch (e) {}
+    gfSound('flip');
     setFlightAppearance(node, card, endBack);
     const open = node.animate(
       [{ transform: midTransform + ' scaleX(.06)' }, { transform: midTransform + ' scaleX(1)' }],
@@ -871,7 +873,14 @@ async function flyBetweenRects(startRect, endRect, {
   );
   try { await second.finished; } catch (e) {}
   node.remove();
-  if (targetNode) targetNode.classList.remove('gf-staging-hidden');
+  gfSound('land');
+  if (targetNode) {
+    targetNode.classList.remove('gf-staging-hidden');
+    targetNode.classList.remove('gf-landed');
+    void targetNode.offsetWidth;
+    targetNode.classList.add('gf-landed');
+    setTimeout(() => targetNode.classList.remove('gf-landed'), 330);
+  }
   scheduleHandHitLayer();
 }
 
@@ -1051,9 +1060,19 @@ async function animateStateTransition(action, nextState) {
   }
 
   await Promise.all([...layoutJobs, ...flightJobs]);
+  ['myHand', 'opponentHand'].forEach((id) => {
+    const hand = el(id);
+    hand.classList.remove('gf-hand-settle');
+    void hand.offsetWidth;
+    hand.classList.add('gf-hand-settle');
+    setTimeout(() => hand.classList.remove('gf-hand-settle'), 380);
+  });
+  updateTurnFocus(nextState);
+  updateFinalProgressFromState(nextState);
   updateTurnPill(nextState.isMyTurn, nextState.turnName);
   renderRankChoices(nextState);
   updateAskControls(nextState);
+  scheduleHandHitLayer(nextState.askableRanks || []);
 }
 
 let bannerTimer = null;
