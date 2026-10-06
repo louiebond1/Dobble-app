@@ -1715,6 +1715,7 @@ let soloBooks = { me: [], cpu: [] };
 let soloPond = [];
 let soloTurn = 'me';
 let soloGameActive = false;
+let soloClosing = false;
 let soloFinal = { active: false, order: [], index: 0 };
 let soloLastBookOwner = null;
 let soloCpuMemory = new Map();
@@ -1810,8 +1811,14 @@ function getSoloStateSnapshot() {
     turnName: soloTurn === 'me' ? soloName : 'CPU',
     askableRanks: [...new Set(soloHands.me.map((card) => card.rank))],
     actionLocked: actionAnimating || askPending ||
-      ![GF_PHASES.PLAYER_SELECTING, GF_PHASES.FINAL_ROUND_PLAYER].includes(gamePhase),
+      ![GF_PHASES.PLAYER_SELECTING, GF_PHASES.CLOSING_PLAYER, GF_PHASES.FINAL_ROUND_PLAYER].includes(gamePhase),
     phase: gamePhase,
+    gamePhase: soloFinal.active
+      ? 'FINAL_ROUND'
+      : soloClosing
+        ? 'CLOSING'
+        : 'NORMAL',
+    closingPhase: soloClosing,
     finalRound: soloFinal.active,
   };
 }
@@ -1855,6 +1862,7 @@ function startSoloGame() {
   soloPond = deck;
   soloTurn = Math.random() < 0.5 ? 'me' : 'cpu';
   soloGameActive = true;
+  soloClosing = false;
   soloFinal = { active: false, order: [], index: 0 };
   soloLastBookOwner = null;
   soloCpuMemory = new Map();
@@ -1929,19 +1937,20 @@ async function soloBeginTurn() {
       await soloReplenish(soloTurn);
       return;
     }
-    // No hand and no pond means the normal phase is over.
     await soloEnterFinalRound(soloTurn);
     return;
   }
 
   selectedRank = null;
   if (soloTurn === 'me') {
-    setGamePhase(GF_PHASES.PLAYER_SELECTING);
+    setGamePhase(soloClosing ? GF_PHASES.CLOSING_PLAYER : GF_PHASES.PLAYER_SELECTING);
     soloRenderState();
   } else {
-    setGamePhase(GF_PHASES.CPU_THINKING);
+    setGamePhase(soloClosing ? GF_PHASES.CLOSING_CPU : GF_PHASES.CPU_THINKING);
     soloRenderState();
-    const delay = CPU_PACING.thinkMin + Math.floor(Math.random() * CPU_PACING.thinkJitter);
+    const delay = soloClosing
+      ? CPU_PACING.finalThinkMin + Math.floor(Math.random() * CPU_PACING.finalThinkJitter)
+      : CPU_PACING.thinkMin + Math.floor(Math.random() * CPU_PACING.thinkJitter);
     setTimeout(runCpuTurn, delay);
   }
 }
@@ -1951,10 +1960,12 @@ async function soloReplenish(who) {
   actionAnimating = true;
   askPending = false;
 
+  const wasClosing = soloClosing;
   const drawn = soloPond.pop();
   soloHands[who].push(drawn);
   const books = soloCheckBooks(who);
   const emptiedPond = soloPond.length === 0;
+  const startsClosing = !wasClosing && soloPond.length > 0 && soloPond.length <= 5;
   const action = {
     kind: 'replenish',
     askerName: who === 'me' ? soloName : 'CPU',
@@ -1963,6 +1974,8 @@ async function soloReplenish(who) {
     books,
     pondEmpty: false,
     emptiedPond,
+    closingPhase: wasClosing,
+    closingPhaseStarts: startsClosing,
     keepsTurn: true,
   };
 
@@ -1978,6 +1991,13 @@ async function soloReplenish(who) {
   if (emptiedPond) {
     await soloEnterFinalRound(who);
     return;
+  }
+  if (startsClosing) {
+    soloClosing = true;
+    pendingClosingRoundIntro = { starterName: who === 'me' ? soloName : 'CPU', pondCount: soloPond.length };
+    soloRenderState();
+    await showClosingRoundIntro(pendingClosingRoundIntro);
+    pendingClosingRoundIntro = null;
   }
   await soloBeginTurn();
 }
@@ -2003,7 +2023,7 @@ function runCpuTurn() {
     actionAnimating ||
     !soloGameActive ||
     soloTurn !== 'cpu' ||
-    ![GF_PHASES.CPU_THINKING, GF_PHASES.FINAL_ROUND_CPU].includes(gamePhase)
+    ![GF_PHASES.CPU_THINKING, GF_PHASES.CLOSING_CPU, GF_PHASES.FINAL_ROUND_CPU].includes(gamePhase)
   ) return;
 
   const decision = chooseCpuRank();
