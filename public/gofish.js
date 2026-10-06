@@ -290,6 +290,42 @@ function updatePondPressure(count) {
   else warning.textContent = '';
 }
 
+function updateFinalProgressFromState(data) {
+  if (mode === 'solo') {
+    if (typeof soloFinal !== 'undefined' && soloFinal && soloFinal.active) {
+      renderFinalOrder(soloFinal.order, soloFinal.index);
+    } else {
+      renderFinalOrder([], 0);
+    }
+    return;
+  }
+
+  if (data && (data.gamePhase === 'FINAL_ROUND' || data.gamePhase === 'FINAL_ROUND_INTRO')) {
+    const index = Number.isInteger(data.finalRoundIndex) ? data.finalRoundIndex : 0;
+    renderFinalOrder(activeFinalOrder, index);
+  } else {
+    renderFinalOrder([], 0);
+  }
+}
+
+const soundButton = el('soundBtn');
+soundButton.setAttribute('aria-pressed', gfSoundMuted ? 'true' : 'false');
+soundButton.textContent = gfSoundMuted ? '×' : '♪';
+soundButton.setAttribute('aria-label', gfSoundMuted ? 'Turn Go Fish sounds on' : 'Mute Go Fish sounds');
+soundButton.addEventListener('click', () => {
+  gfSoundMuted = !gfSoundMuted;
+  gfStorageSet(GF_STORAGE.soundMuted, gfSoundMuted);
+  soundButton.setAttribute('aria-pressed', gfSoundMuted ? 'true' : 'false');
+  soundButton.textContent = gfSoundMuted ? '×' : '♪';
+  soundButton.setAttribute('aria-label', gfSoundMuted ? 'Turn Go Fish sounds on' : 'Mute Go Fish sounds');
+  if (!gfSoundMuted) {
+    ensureGfAudio();
+    gfSound('turn');
+  }
+});
+
+renderSetupRecord();
+
 
 const GF_PHASES = Object.freeze({
   SETUP: 'SETUP',
@@ -359,10 +395,17 @@ function stateAllowsSelection(data) {
 async function showFinalRoundIntro() {
   setGamePhase(GF_PHASES.FINAL_ROUND_INTRO);
   gameArea.classList.add('gf-resolving');
+
+  const info = pendingFinalRoundIntro || {};
+  const fallbackSoloOrder = typeof soloFinal !== 'undefined' && soloFinal && soloFinal.active ? soloFinal.order : [];
+  const order = Array.isArray(info.order) && info.order.length ? info.order : fallbackSoloOrder;
+  renderFinalOrder(order, 0);
+
   const overlay = el('finalRoundOverlay');
   overlay.classList.remove('hidden');
+  gfSound('final');
   hapticSuccess();
-  await wait(1550);
+  await wait(1900);
   overlay.classList.add('hidden');
   gameArea.classList.remove('gf-resolving');
 }
@@ -644,6 +687,9 @@ function applyGameState(data, { freezeTurn = false } = {}) {
   el('pondCount').textContent = data.pondCount;
   updateIdentity(data);
   updateDuelHud(data);
+  updatePondPressure(data.pondCount);
+  updateTurnFocus(data);
+  updateFinalProgressFromState(data);
   if (!freezeTurn) {
     syncPhaseFromState(data);
     updateTurnPill(data.isMyTurn, data.turnName);
@@ -651,6 +697,10 @@ function applyGameState(data, { freezeTurn = false } = {}) {
   renderRankChoices(data);
   updateAskControls(data);
   gameArea.classList.toggle('gf-resolving', !!data.actionLocked || actionAnimating || askPending);
+
+  if (!freezeTurn && stateAllowsSelection(data)) {
+    showCoach('select', 'Choose a rank you already hold. Tap the card itself or the rank below.');
+  }
 }
 
 function lockVisibleHand() {
