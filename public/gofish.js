@@ -1325,6 +1325,30 @@ async function applyPendingAfterAction(action) {
     return;
   }
 
+  if (action.closingPhase) {
+    if (action.kind === 'take') {
+      showEventBanner(
+        mine
+          ? `Got them — ${action.opponentName}’s turn`
+          : `${action.askerName} got them — your turn`
+      );
+    } else if (action.luckyCatch || action.matched) {
+      gfSound('lucky');
+      showEventBanner(
+        mine
+          ? 'LUCKY CATCH — but the turn still passes'
+          : `${action.askerName} hit a Lucky Catch — your turn`,
+        { emphasis: true }
+      );
+    } else if (mine && action.drawnCard) {
+      showEventBanner(`You drew ${action.drawnCard.rank}${action.drawnCard.suit} — ${action.opponentName}’s turn`);
+    } else {
+      showEventBanner(`One ask used — ${action.opponentName}’s turn`);
+    }
+    if (cpuActor) await wait(CPU_PACING.outcomeHold);
+    return;
+  }
+
   if (action.kind === 'replenish') {
     if (mine && action.drawnCard) {
       showEventBanner(`You draw ${action.drawnCard.rank}${action.drawnCard.suit} — keep playing`);
