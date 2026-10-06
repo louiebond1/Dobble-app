@@ -1244,6 +1244,7 @@ async function applyPendingAfterAction(action) {
     } else {
       showEventBanner(mine ? 'Nothing there — final ask complete' : `${action.askerName} found nothing — final ask complete`);
     }
+    if (cpuActor) await wait(CPU_PACING.outcomeHold);
     return;
   }
 
