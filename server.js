@@ -15,10 +15,12 @@ const { SCRAMBLE_WORDS } = require('./lib/scrambleWords');
 const { COUNTRIES } = require('./lib/countries');
 const { RANKS: CARD_RANKS, buildDeck, shuffle: shuffleDeck } = require('./lib/cards');
 const {
+  CLOSING_POND_COUNT,
   GO_FISH_PHASES: GOFISH_PHASES,
   buildFinalOrder,
   legalAskRanks,
   isLuckyCatch,
+  shouldEnterClosingPhase,
   shouldKeepTurn,
   determineGoFishWinner,
 } = require('./lib/gofishRules');
