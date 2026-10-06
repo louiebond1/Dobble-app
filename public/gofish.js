@@ -478,6 +478,8 @@ async function presentPendingClosingRoundIntro() {
 }
 
 async function showFinalRoundIntro(info = pendingFinalRoundIntro || {}) {
+  gameArea.classList.remove('gf-closing-mode');
+  el('closingBadge').classList.add('hidden');
   setGamePhase(GF_PHASES.FINAL_ROUND_INTRO);
   gameArea.classList.add('gf-resolving');
 
@@ -1407,6 +1409,10 @@ async function drainActionQueue() {
 
     pendingRoundResult = null;
 
+    if (!actionQueue.length && pendingClosingRoundIntro) {
+      await presentPendingClosingRoundIntro();
+    }
+
     if (!actionQueue.length && pendingFinalRoundIntro) {
       await presentPendingFinalRoundIntro();
     }
@@ -1583,6 +1589,7 @@ socket.on('gofish:round:start', (data) => {
   pendingGameState = null;
   pendingRoundResult = null;
   pendingGameOver = null;
+  pendingClosingRoundIntro = null;
   pendingFinalRoundIntro = null;
   activeFinalOrder = [];
   renderFinalOrder([], 0);
@@ -1603,6 +1610,9 @@ socket.on('gofish:round:start', (data) => {
   gameOver.classList.add('hidden');
   el('finalRecordStrip').classList.add('hidden');
   gameArea.classList.remove('hidden');
+  gameArea.classList.remove('gf-closing-mode');
+  el('closingOverlay').classList.add('hidden');
+  el('closingBadge').classList.add('hidden');
   updateDuelHud();
 });
 
@@ -1618,6 +1628,14 @@ socket.on('gofish:state', (data) => {
 socket.on('gofish:action', (data) => {
   if (mode !== 'duo') return;
   queueTurnAction(data);
+});
+
+socket.on('gofish:closing-round', (data) => {
+  if (mode !== 'duo') return;
+  pendingClosingRoundIntro = data || {};
+  if (!actionAnimating && !askPending && !actionQueue.length) {
+    presentPendingClosingRoundIntro();
+  }
 });
 
 socket.on('gofish:final-round', (data) => {
@@ -1655,6 +1673,8 @@ function handleDuoGameOver(data) {
   if (mode !== 'duo') return;
 
   setGamePhase(GF_PHASES.GAME_OVER);
+  gameArea.classList.remove('gf-closing-mode');
+  el('closingBadge').classList.add('hidden');
   gameArea.classList.add('hidden');
   gameOver.classList.remove('hidden');
   el('playAgainBtn').classList.toggle('hidden', !amHost());
