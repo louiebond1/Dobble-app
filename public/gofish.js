@@ -505,18 +505,14 @@ function cardFaceMarkup(card) {
     </span>`;
 }
 
-function cardEl(card, { interactive = false } = {}) {
-  const node = document.createElement(interactive ? 'button' : 'div');
+function cardEl(card) {
+  const node = document.createElement('div');
   node.className = 'gf-card' + (RED_SUITS.has(card.suit) ? ' red' : '');
   node.dataset.rank = card.rank;
   node.dataset.suit = card.suit;
   node.dataset.cardKey = cardKey(card);
   node.innerHTML = cardFaceMarkup(card);
-  if (interactive) {
-    node.type = 'button';
-    node.setAttribute('aria-label', `Select ${rankPlural(card.rank)}`);
-    node.addEventListener('click', () => selectRank(card.rank));
-  }
+  node.setAttribute('aria-hidden', 'true');
   return node;
 }
 
@@ -526,17 +522,74 @@ function renderMyHand(hand, { interactive = false, askableRanks = [] } = {}) {
   const sorted = sortHand(hand);
   setHandOverlap(container, sorted.length, false);
   sorted.forEach((card, i) => {
-    // The visible card is a real tap target. The rank chips below are a
-    // second way to select, not a displaced substitute for the card.
-    const canSelect = interactive && askableRanks.includes(card.rank);
-    const node = cardEl(card, { interactive: canSelect });
+    const node = cardEl(card);
     const isSelected = selectedRank === card.rank;
     node.style.transform = fanTransform(i, sorted.length, false) + (isSelected ? ' translateY(-10px)' : '');
     node.style.zIndex = String(i + 1 + (isSelected ? 30 : 0));
     node.classList.toggle('selected', isSelected);
-    if (!canSelect) node.classList.add('is-disabled');
+    node.classList.toggle('is-disabled', !(interactive && askableRanks.includes(card.rank)));
     container.appendChild(node);
   });
+  scheduleHandHitLayer(interactive ? askableRanks : []);
+}
+
+let handHitLayerFrame = 0;
+let handHitLayerTimer = 0;
+let handHitRanks = [];
+
+function handHitLayer() {
+  let layer = document.getElementById('myHandHitLayer');
+  if (!layer) {
+    layer = document.createElement('div');
+    layer.id = 'myHandHitLayer';
+    layer.className = 'gf-hand-hit-layer';
+    layer.setAttribute('aria-label', 'Your hand');
+    el('myHand').appendChild(layer);
+  }
+  return layer;
+}
+
+function rebuildHandHitLayer() {
+  const container = el('myHand');
+  const layer = handHitLayer();
+  layer.innerHTML = '';
+
+  if (!lastGameState || !stateAllowsSelection(lastGameState) || actionAnimating || askPending) return;
+
+  const containerRect = container.getBoundingClientRect();
+  const cards = Array.from(container.querySelectorAll(':scope > .gf-card'));
+  cards.forEach((card, index) => {
+    const rank = card.dataset.rank;
+    if (!handHitRanks.includes(rank)) return;
+
+    const rect = card.getBoundingClientRect();
+    const hit = document.createElement('button');
+    hit.type = 'button';
+    hit.className = 'gf-card-hit';
+    hit.dataset.rank = rank;
+    hit.setAttribute('aria-label', `Select ${rankPlural(rank)}`);
+    hit.style.left = `${rect.left - containerRect.left}px`;
+    hit.style.top = `${rect.top - containerRect.top}px`;
+    hit.style.width = `${rect.width}px`;
+    hit.style.height = `${rect.height}px`;
+    hit.style.zIndex = String(index + 1 + (selectedRank === rank ? 30 : 0));
+    hit.addEventListener('click', (event) => {
+      event.preventDefault();
+      selectRank(rank);
+    });
+    layer.appendChild(hit);
+  });
+}
+
+function scheduleHandHitLayer(askableRanks = handHitRanks) {
+  handHitRanks = Array.from(new Set(askableRanks || []));
+  cancelAnimationFrame(handHitLayerFrame);
+  clearTimeout(handHitLayerTimer);
+  handHitLayerFrame = requestAnimationFrame(() => {
+    requestAnimationFrame(rebuildHandHitLayer);
+  });
+  // Safari can finish transform interpolation a frame later than paint.
+  handHitLayerTimer = setTimeout(rebuildHandHitLayer, 230);
 }
 
 function renderOpponentBacks(count) {
@@ -651,13 +704,14 @@ function updateAskControls(data) {
     hint.textContent = 'Pick any rank you already hold.';
   }
 
-  const handCards = Array.from(document.querySelectorAll('#myHand .gf-card'));
+  const handCards = Array.from(document.querySelectorAll('#myHand > .gf-card'));
   handCards.forEach((card, index) => {
     const on = !!selectedRank && card.dataset.rank === selectedRank;
     card.classList.toggle('selected', on);
     card.style.transform = fanTransform(index, handCards.length, false) + (on ? ' translateY(-10px)' : '');
     card.style.zIndex = String(index + 1 + (on ? 30 : 0));
   });
+  scheduleHandHitLayer(data.askableRanks || []);
   document.querySelectorAll('#rankChoices .gf-rank-chip').forEach((button) => {
     const on = button.textContent === selectedRank;
     button.classList.toggle('selected', on);
@@ -818,6 +872,7 @@ async function flyBetweenRects(startRect, endRect, {
   try { await second.finished; } catch (e) {}
   node.remove();
   if (targetNode) targetNode.classList.remove('gf-staging-hidden');
+  scheduleHandHitLayer();
 }
 
 function playLayoutAnimation(node, keyframes, options) {
@@ -831,6 +886,7 @@ function playLayoutAnimation(node, keyframes, options) {
       // rebuilt at the card's real DOM position.
       try { animation.cancel(); } catch (e) {}
       void node.offsetHeight;
+      scheduleHandHitLayer();
     });
 }
 
@@ -2059,5 +2115,6 @@ function soloFinishGame() {
 window.addEventListener('resize', () => {
   if (!gameArea.classList.contains('hidden') && lastGameState && !actionAnimating) {
     applyGameState(lastGameState);
+    scheduleHandHitLayer(lastGameState.askableRanks || []);
   }
 });
