@@ -912,6 +912,8 @@ function goFishBroadcastState(code) {
       actionLocked: !!room.actionLocked,
       phase: room.phase,
       gamePhase: room.phase,
+      closingPhase: room.phase === GOFISH_PHASES.CLOSING || room.phase === GOFISH_PHASES.CLOSING_INTRO,
+      closingThreshold: CLOSING_POND_COUNT,
       finalRound: room.phase === GOFISH_PHASES.FINAL_ROUND || room.phase === GOFISH_PHASES.FINAL_ROUND_INTRO,
       finalRoundIndex: room.finalRound ? room.finalRound.index : null,
     });
@@ -965,6 +967,36 @@ function goFishUnlockAndBegin(code, delayMs = 1550) {
   }, delayMs);
 }
 
+function goFishEnterClosingPhase(code, starterId) {
+  const room = goFishRooms.get(code);
+  if (
+    !room ||
+    !room.gameActive ||
+    room.phase !== GOFISH_PHASES.NORMAL ||
+    !shouldEnterClosingPhase(room.pond.length)
+  ) return;
+
+  room.phase = GOFISH_PHASES.CLOSING_INTRO;
+  room.turn = starterId;
+  room.actionLocked = true;
+
+  goFishBroadcastState(code);
+  io.to(`gofish:${code}`).emit('gofish:closing-round', {
+    starterName: (room.players.get(starterId) || {}).name || null,
+    pondCount: room.pond.length,
+  });
+
+  // Finish the move that crossed the five-card threshold first. Then dim the
+  // table and begin one-ask-per-turn play with whoever would normally act next.
+  setTimeout(() => {
+    const fresh = goFishRooms.get(code);
+    if (!fresh || !fresh.gameActive || fresh.phase !== GOFISH_PHASES.CLOSING_INTRO) return;
+    fresh.phase = GOFISH_PHASES.CLOSING;
+    fresh.actionLocked = false;
+    goFishBeginTurn(code);
+  }, 3400);
+}
+
 function goFishEnterFinalRound(code, starterId) {
   const room = goFishRooms.get(code);
   if (
@@ -1015,7 +1047,10 @@ function goFishBeginTurn(code) {
   const room = goFishRooms.get(code);
   if (!room || !room.gameActive || room.phase === GOFISH_PHASES.GAME_OVER) return;
 
-  if (room.phase === GOFISH_PHASES.FINAL_ROUND_INTRO) {
+  if (
+    room.phase === GOFISH_PHASES.CLOSING_INTRO ||
+    room.phase === GOFISH_PHASES.FINAL_ROUND_INTRO
+  ) {
     room.actionLocked = true;
     goFishBroadcastState(code);
     return;
@@ -1060,10 +1095,15 @@ function goFishBeginTurn(code) {
     }
 
     room.actionLocked = true;
+    const phaseBeforeDraw = room.phase;
     const drawn = room.pond.pop();
     player.hand.push(drawn);
     const completedBooks = goFishCheckBooks(room, room.turn);
     const emptiedPond = room.pond.length === 0;
+    const closingPhase = phaseBeforeDraw === GOFISH_PHASES.CLOSING;
+    const startsClosing =
+      phaseBeforeDraw === GOFISH_PHASES.NORMAL &&
+      shouldEnterClosingPhase(room.pond.length);
 
     goFishEmitAction(
       code,
@@ -1074,14 +1114,20 @@ function goFishBeginTurn(code) {
         books: completedBooks,
         pondEmpty: false,
         emptiedPond,
-        keepsTurn: shouldKeepTurn({ successfulAsk: true }),
+        closingPhase,
+        closingPhaseStarts: startsClosing,
+        keepsTurn: true,
         finalRound: false,
       },
       { [room.turn]: { drawnCard: drawn } }
     );
     goFishBroadcastState(code);
 
+    // A replacement draw happens before the player's ask. If it takes the
+    // pond to five, that same player gets the first Closing Phase ask. If it
+    // takes the pond to zero, that same player gets the first Final Round ask.
     if (emptiedPond) goFishEnterFinalRound(code, room.turn);
+    else if (startsClosing) goFishEnterClosingPhase(code, room.turn);
     else goFishUnlockAndBegin(code, completedBooks.length ? 2050 : 1450);
     return;
   }
@@ -2344,7 +2390,11 @@ io.on('connection', (socket) => {
       room.actionLocked ||
       socket.id !== room.turn ||
       !CARD_RANKS.includes(rank) ||
-      (room.phase !== GOFISH_PHASES.NORMAL && room.phase !== GOFISH_PHASES.FINAL_ROUND)
+      (
+        room.phase !== GOFISH_PHASES.NORMAL &&
+        room.phase !== GOFISH_PHASES.CLOSING &&
+        room.phase !== GOFISH_PHASES.FINAL_ROUND
+      )
     ) {
       if (typeof ack === 'function') ack({ ok: false });
       return;
@@ -2402,11 +2452,14 @@ io.on('connection', (socket) => {
     }
 
     if (matches.length > 0) {
+      const closingPhase = room.phase === GOFISH_PHASES.CLOSING;
       opponent.hand = opponent.hand.filter((card) => card.rank !== rank);
       asker.hand.push(...matches);
       asker.stats.successfulAsks += 1;
       const completedBooks = goFishCheckBooks(room, askerId);
-      room.turn = askerId;
+
+      room.turn = closingPhase ? opponentId : askerId;
+      if (closingPhase) goFishEndTurnStreak(asker);
 
       goFishEmitAction(code, {
         kind: 'take',
@@ -2416,7 +2469,8 @@ io.on('connection', (socket) => {
         count: matches.length,
         cards: matches.map((card) => ({ rank: card.rank, suit: card.suit })),
         books: completedBooks,
-        keepsTurn: true,
+        keepsTurn: shouldKeepTurn({ successfulAsk: true, closingPhase }),
+        closingPhase,
         finalRound: false,
       });
       goFishBroadcastState(code);
@@ -2429,16 +2483,23 @@ io.on('connection', (socket) => {
       return;
     }
 
+    const closingPhase = room.phase === GOFISH_PHASES.CLOSING;
     const drawn = room.pond.pop();
     asker.hand.push(drawn);
     const completedBooks = goFishCheckBooks(room, askerId);
     const luckyCatch = isLuckyCatch(rank, drawn);
     if (luckyCatch) asker.stats.luckyCatches += 1;
 
-    const nextPlayerId = luckyCatch ? askerId : opponentId;
-    if (!luckyCatch) goFishEndTurnStreak(asker);
+    // In Closing Phase every ask consumes the turn, even a Lucky Catch.
+    const nextPlayerId = closingPhase ? opponentId : (luckyCatch ? askerId : opponentId);
+    if (closingPhase || !luckyCatch) goFishEndTurnStreak(asker);
     room.turn = nextPlayerId;
+
     const emptiedPond = room.pond.length === 0;
+    const startsClosing =
+      !closingPhase &&
+      room.phase === GOFISH_PHASES.NORMAL &&
+      shouldEnterClosingPhase(room.pond.length);
 
     goFishEmitAction(
       code,
@@ -2452,7 +2513,13 @@ io.on('connection', (socket) => {
         pondEmpty: false,
         emptiedPond,
         books: completedBooks,
-        keepsTurn: shouldKeepTurn({ askedRank: rank, drawnCard: drawn }),
+        keepsTurn: shouldKeepTurn({
+          askedRank: rank,
+          drawnCard: drawn,
+          closingPhase,
+        }),
+        closingPhase,
+        closingPhaseStarts: startsClosing,
         finalRound: false,
       },
       { [askerId]: { drawnCard: drawn } }
@@ -2461,6 +2528,10 @@ io.on('connection', (socket) => {
 
     if (emptiedPond) {
       goFishEnterFinalRound(code, nextPlayerId);
+      return;
+    }
+    if (startsClosing) {
+      goFishEnterClosingPhase(code, nextPlayerId);
       return;
     }
     goFishUnlockAndBegin(code, completedBooks.length ? 2050 : 1450);
