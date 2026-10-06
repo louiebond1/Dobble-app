@@ -1647,3 +1647,40 @@ button.gf-card:focus-visible {
   opacity: .42;
   text-decoration: line-through;
 }
+
+
+/* iOS-safe card interaction.
+   The fanned cards are visuals only. These transparent buttons are rebuilt
+   from each card's actual getBoundingClientRect(), so touch geometry can
+   never drift away from the transformed artwork mid-game. */
+.gf-hand-hit-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 120;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.gf-card-hit {
+  position: absolute;
+  display: block;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  pointer-events: auto;
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  outline: none;
+}
+
+.gf-card-hit:focus-visible {
+  box-shadow: 0 0 0 3px rgba(216,111,116,.30);
+}
+
+/* The artwork itself never participates in hit-testing. */
+.gf-my-hand > .gf-card {
+  pointer-events: none !important;
+}
