@@ -1808,6 +1808,7 @@ button.gf-card:focus-visible {
 .gf-game.gf-closing-mode .gf-player-zone,
 .gf-game.gf-closing-mode .gf-action-stage {
   position: relative;
+  isolation: isolate;
   transition:
     opacity 300ms ease,
     filter 300ms ease,
