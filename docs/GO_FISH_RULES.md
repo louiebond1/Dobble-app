@@ -11,9 +11,33 @@ This file is the single source of truth for Go Fish gameplay, CPU decisions, end
 - A player may ask only for a rank currently in their own hand.
 - A successful ask transfers **all** cards of that rank and normally gives the asker another turn.
 - A failed ask draws exactly one card from the pond.
-- If that card is the exact requested rank, it is a **Lucky Catch** and the same player continues.
+- If that card is the exact requested rank, it is a **Lucky Catch** and the same player continues during normal play.
 - Any other drawn rank ends the turn, even if that unrelated draw completes a book.
+- Closing Phase overrides extra-turn rules: successful asks and Lucky Catches both pass the turn.
 - If a player's hand is empty when they need to play and the pond still has cards, automatically draw one replacement card and continue from that new hand.
+
+## Closing Phase
+
+The 1v1 game changes once the pond reaches **5 cards remaining**.
+
+Finish the move that drew the pond down to five first. Then enter:
+
+**THE POND IS CLOSING**  
+*One ask each turn from here.*
+
+During Closing Phase:
+
+- each player gets exactly one ask on their turn;
+- a successful ask still transfers every matching card and may complete a book;
+- a successful ask does **not** grant another ask;
+- a failed ask still draws one card while the pond contains cards;
+- an exact requested draw is still recorded as a Lucky Catch, but it does **not** extend the turn;
+- after that one ask resolves, play always passes to the opponent;
+- an empty-handed player may draw one replacement card before making their one ask.
+
+The player who would normally act next after the threshold-crossing move gets the first Closing Phase turn. This prevents a player with good memory from sweeping several known ranks in one uninterrupted chain.
+
+The UI treats this as a dramatic late-game transition: lights dim, the inactive player recedes, and the active player/hand is visually spotlighted. A persistent **1 ASK PER TURN** indicator remains visible.
 
 ## Final Round
 
@@ -74,6 +98,9 @@ Client phases are explicit:
 - BOOK_COMPLETING
 - CPU_THINKING
 - CPU_ASKING
+- CLOSING_INTRO
+- CLOSING_PLAYER
+- CLOSING_CPU
 - FINAL_ROUND_INTRO
 - FINAL_ROUND_PLAYER
 - FINAL_ROUND_CPU
