@@ -726,6 +726,7 @@ function selectRank(rank) {
   if (!stateAllowsSelection(lastGameState)) return;
   if (!(lastGameState.askableRanks || []).includes(rank)) return;
   selectedRank = selectedRank === rank ? null : rank;
+  hapticTap();
   updateAskControls(lastGameState);
   if (selectedRank) {
     showCoach(
