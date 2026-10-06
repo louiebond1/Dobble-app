@@ -471,7 +471,9 @@ async function presentPendingClosingRoundIntro() {
   pendingClosingRoundIntro = null;
   try {
     await showClosingRoundIntro(info);
-    if (lastGameState) applyGameState(lastGameState);
+    const state = pendingGameState || lastGameState;
+    pendingGameState = null;
+    if (state) applyGameState(state);
   } finally {
     closingRoundIntroShowing = false;
   }
@@ -505,7 +507,9 @@ async function presentPendingFinalRoundIntro() {
   pendingFinalRoundIntro = null;
   try {
     await showFinalRoundIntro(info);
-    if (lastGameState) applyGameState(lastGameState);
+    const state = pendingGameState || lastGameState;
+    pendingGameState = null;
+    if (state) applyGameState(state);
   } finally {
     finalRoundIntroShowing = false;
   }
@@ -853,7 +857,10 @@ function applyGameState(data, { freezeTurn = false } = {}) {
   }
   renderRankChoices(data);
   updateAskControls(data);
-  gameArea.classList.toggle('gf-resolving', !!data.actionLocked || actionAnimating || askPending);
+  gameArea.classList.toggle(
+    'gf-resolving',
+    !!data.actionLocked || actionAnimating || askPending || closingRoundIntroShowing || finalRoundIntroShowing
+  );
 
   if (!freezeTurn && stateAllowsSelection(data)) {
     showCoach('select', 'Choose a rank you already hold. Tap the card itself or the rank below.');
@@ -1621,7 +1628,7 @@ socket.on('gofish:round:start', (data) => {
 
 socket.on('gofish:state', (data) => {
   if (mode !== 'duo') return;
-  if (actionAnimating || askPending) {
+  if (actionAnimating || askPending || closingRoundIntroShowing || finalRoundIntroShowing) {
     pendingGameState = data;
     return;
   }
