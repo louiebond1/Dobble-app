@@ -392,11 +392,10 @@ function stateAllowsSelection(data) {
   return data.gamePhase === 'NORMAL' || data.gamePhase === 'FINAL_ROUND';
 }
 
-async function showFinalRoundIntro() {
+async function showFinalRoundIntro(info = pendingFinalRoundIntro || {}) {
   setGamePhase(GF_PHASES.FINAL_ROUND_INTRO);
   gameArea.classList.add('gf-resolving');
 
-  const info = pendingFinalRoundIntro || {};
   const fallbackSoloOrder = typeof soloFinal !== 'undefined' && soloFinal && soloFinal.active ? soloFinal.order : [];
   const order = Array.isArray(info.order) && info.order.length ? info.order : fallbackSoloOrder;
   renderFinalOrder(order, 0);
@@ -408,14 +407,22 @@ async function showFinalRoundIntro() {
   await wait(1900);
   overlay.classList.add('hidden');
   gameArea.classList.remove('gf-resolving');
+
+  showCoach(
+    'final',
+    'The pond is empty. One ask each now — even a successful ask ends the turn.',
+    { kicker: 'FINAL ROUND', autoHide: 3400 }
+  );
+  finishTutorial();
 }
 
 async function presentPendingFinalRoundIntro() {
   if (mode !== 'duo' || finalRoundIntroShowing || !pendingFinalRoundIntro) return;
   finalRoundIntroShowing = true;
+  const info = pendingFinalRoundIntro;
   pendingFinalRoundIntro = null;
   try {
-    await showFinalRoundIntro();
+    await showFinalRoundIntro(info);
     if (lastGameState) applyGameState(lastGameState);
   } finally {
     finalRoundIntroShowing = false;
@@ -725,6 +732,13 @@ function selectRank(rank) {
   if (!(lastGameState.askableRanks || []).includes(rank)) return;
   selectedRank = selectedRank === rank ? null : rank;
   updateAskControls(lastGameState);
+  if (selectedRank) {
+    showCoach(
+      'ask',
+      `Good. ${rankPlural(selectedRank)} are selected — now press the Ask button. Nothing happens until you do.`,
+      { autoHide: 3000 }
+    );
+  }
 }
 
 function applyGameState(data, { freezeTurn = false } = {}) {
@@ -1135,6 +1149,16 @@ async function playTurnAction(action) {
 
     if (action.kind === 'take') {
       setGamePhase(GF_PHASES.CARD_TRANSFER);
+      if (mode === 'solo' && mine) {
+        showCpuBubble(
+          cpuLine([
+            action.count === 1 ? 'Yep. I had one.' : `Yep. I had ${humanCount(action.count)}.`,
+            action.count === 1 ? 'You got one.' : `You got all ${humanCount(action.count)}.`,
+            'Fair enough.',
+          ]),
+          { duration: 980 }
+        );
+      }
       showEventBanner(
         mine
           ? `${targetName} had ${humanCount(action.count)}`
@@ -1142,12 +1166,22 @@ async function playTurnAction(action) {
         { persist: true }
       );
     } else if (action.kind === 'final-miss') {
+      if (mode === 'solo' && mine) showCpuBubble('Nothing.', { duration: 850 });
       showEventBanner(mine ? 'Nothing there' : 'You have none', { persist: true, emphasis: true });
       await wait(260);
     } else {
       setGamePhase(GF_PHASES.GO_FISH);
+      gfSound('fish');
+      if (mode === 'solo' && mine) {
+        showCpuBubble(cpuLine(['Nope. Go fish.', 'Nothing. Fish.', 'Not this time. Go fish.']), { duration: 1150 });
+      }
       showEventBanner(mine ? 'GO FISH' : `${action.askerName} goes fishing`, { persist: true, emphasis: true });
-      await wait(260);
+      showCoach(
+        'fish',
+        'They had none, so one card comes from the pond. If it matches what you asked for, you keep the turn.',
+        { autoHide: 3300 }
+      );
+      await wait(300);
       setGamePhase(GF_PHASES.DRAWING);
     }
   }
@@ -1171,7 +1205,14 @@ async function applyPendingAfterAction(action) {
 
   if (action.books && action.books.length) {
     const who = mine ? 'You' : action.askerName;
+    gfSound('book');
+    if (mode === 'solo' && !mine) showCpuBubble('That’s a book.', { duration: 1050 });
     showEventBanner(`${who} completed the book of ${rankPlural(action.books[0])}`, { book: true });
+    showCoach(
+      'book',
+      'Four of a rank becomes a book automatically. Those four cards are now locked out of play.',
+      { autoHide: 3300 }
+    );
     await wait(TURN_TIMING.book);
   }
 
@@ -1198,9 +1239,24 @@ async function applyPendingAfterAction(action) {
       showEventBanner(`${action.askerName} is back in`);
     }
   } else if (action.kind === 'take') {
+    if (mode === 'solo' && !mine) {
+      showCpuBubble(
+        lastCpuDecision && lastCpuDecision.reason === 'memory'
+          ? cpuLine(['Knew it.', 'I remembered that.', 'Thought so.'])
+          : cpuLine(['I’ll take those.', 'Got them.', 'That works.']),
+        { memory: !!(lastCpuDecision && lastCpuDecision.reason === 'memory'), duration: 980 }
+      );
+    }
     showEventBanner(mine ? 'Got them — your turn again' : `${action.askerName} goes again`);
   } else if (action.luckyCatch || action.matched) {
+    gfSound('lucky');
+    if (mode === 'solo' && !mine) showCpuBubble('That’ll do.', { duration: 900 });
     showEventBanner('LUCKY CATCH — go again', { emphasis: true });
+    showCoach(
+      'lucky',
+      'Exact match. That’s a Lucky Catch, so the same player gets another turn.',
+      { autoHide: 3200 }
+    );
   } else if (mine && action.drawnCard) {
     showEventBanner(`You drew ${action.drawnCard.rank}${action.drawnCard.suit} — ${action.opponentName}’s turn`);
   } else {
@@ -1667,6 +1723,11 @@ el('soloStartBtn').addEventListener('click', () => {
 
 function startSoloGame() {
   mode = 'solo';
+  startTutorialIfNeeded();
+  lastCpuDecision = null;
+  activeFinalOrder = [];
+  renderFinalOrder([], 0);
+  el('cpuBubble').classList.add('hidden');
   actionQueue.length = 0;
   actionAnimating = false;
   askPending = false;
@@ -2001,9 +2062,9 @@ async function soloEnterFinalRound(starterKey) {
     index: 0,
   };
   selectedRank = null;
-  pendingFinalRoundIntro = { starter: starterKey };
+  pendingFinalRoundIntro = { starter: starterKey, order: soloFinal.order.slice() };
   soloRenderState();
-  await showFinalRoundIntro();
+  await showFinalRoundIntro(pendingFinalRoundIntro);
   pendingFinalRoundIntro = null;
   await soloBeginFinalTurn();
 }
@@ -2016,6 +2077,7 @@ async function soloSkipFinalTurn(who) {
   showEventBanner(who === 'me' ? 'No cards — your final ask is skipped' : 'CPU has no cards — final ask skipped');
   await wait(950);
   soloFinal.index += 1;
+  renderFinalOrder(soloFinal.order, soloFinal.index);
   await soloBeginFinalTurn();
 }
 
@@ -2029,6 +2091,7 @@ async function soloBeginFinalTurn() {
   const who = soloFinal.order[soloFinal.index];
   soloTurn = who;
   selectedRank = null;
+  renderFinalOrder(soloFinal.order, soloFinal.index);
 
   if (soloHands[who].length === 0) {
     await soloSkipFinalTurn(who);
