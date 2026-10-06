@@ -408,11 +408,6 @@ async function showFinalRoundIntro(info = pendingFinalRoundIntro || {}) {
   overlay.classList.add('hidden');
   gameArea.classList.remove('gf-resolving');
 
-  showCoach(
-    'final',
-    'The pond is empty. One ask each now — even a successful ask ends the turn.',
-    { kicker: 'FINAL ROUND', autoHide: 3400 }
-  );
   finishTutorial();
 }
 
@@ -564,7 +559,7 @@ function rebuildHandHitLayer() {
   if (!lastGameState || !stateAllowsSelection(lastGameState) || actionAnimating || askPending) return;
 
   const containerRect = container.getBoundingClientRect();
-  const cards = Array.from(container.querySelectorAll(':scope > .gf-card'));
+  const cards = Array.from(container.children).filter((node) => node.classList && node.classList.contains('gf-card'));
   cards.forEach((card, index) => {
     const rank = card.dataset.rank;
     if (!handHitRanks.includes(rank)) return;
@@ -1176,11 +1171,13 @@ async function playTurnAction(action) {
         showCpuBubble(cpuLine(['Nope. Go fish.', 'Nothing. Fish.', 'Not this time. Go fish.']), { duration: 1150 });
       }
       showEventBanner(mine ? 'GO FISH' : `${action.askerName} goes fishing`, { persist: true, emphasis: true });
-      showCoach(
-        'fish',
-        'They had none, so one card comes from the pond. If it matches what you asked for, you keep the turn.',
-        { autoHide: 3300 }
-      );
+      if (mine) {
+        showCoach(
+          'fish',
+          'They had none, so one card comes from the pond. If it matches what you asked for, you keep the turn.',
+          { autoHide: 3300 }
+        );
+      }
       await wait(300);
       setGamePhase(GF_PHASES.DRAWING);
     }
@@ -1465,6 +1462,9 @@ socket.on('gofish:round:start', (data) => {
   pendingRoundResult = null;
   pendingGameOver = null;
   pendingFinalRoundIntro = null;
+  activeFinalOrder = [];
+  renderFinalOrder([], 0);
+  lastTurnFocus = null;
   actionQueue.length = 0;
   actionAnimating = false;
   askPending = false;
@@ -1731,8 +1731,10 @@ function startSoloGame() {
   mode = 'solo';
   startTutorialIfNeeded();
   lastCpuDecision = null;
+  lastTurnFocus = null;
   activeFinalOrder = [];
   renderFinalOrder([], 0);
+  clearTimeout(cpuBubbleTimer);
   el('cpuBubble').classList.add('hidden');
   actionQueue.length = 0;
   actionAnimating = false;
