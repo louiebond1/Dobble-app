@@ -34,6 +34,20 @@ const TURN_TIMING = {
   book: 760,
 };
 
+const CPU_PACING = {
+  thinkMin: 1180,
+  thinkJitter: 620,
+  finalThinkMin: 1350,
+  finalThinkJitter: 520,
+  preAsk: 460,
+  preAskMemory: 680,
+  askRead: 900,
+  responseRead: 560,
+  fishRead: 680,
+  settle: 520,
+  outcomeHold: 900,
+};
+
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 const GF_STORAGE = {
@@ -1119,6 +1133,7 @@ function humanCount(count) {
 
 async function playTurnAction(action) {
   const mine = action.askerName === currentPlayerName();
+  const cpuActor = mode === 'solo' && action.askerName === 'CPU';
   const targetName = action.opponentName || 'your opponent';
   gameArea.classList.add('gf-resolving');
 
@@ -1141,7 +1156,7 @@ async function playTurnAction(action) {
         : `${action.askerName} asks you for ${rankPlural(action.rank)}…`,
       { persist: true }
     );
-    await wait(TURN_TIMING.anticipation);
+    await wait(cpuActor ? CPU_PACING.askRead : TURN_TIMING.anticipation);
 
     if (action.kind === 'take') {
       setGamePhase(GF_PHASES.CARD_TRANSFER);
@@ -1161,10 +1176,11 @@ async function playTurnAction(action) {
           : `You hand over ${humanCount(action.count)} ${action.count === 1 ? rankSingular(action.rank) : rankPlural(action.rank)}`,
         { persist: true }
       );
+      if (cpuActor) await wait(CPU_PACING.responseRead);
     } else if (action.kind === 'final-miss') {
       if (mode === 'solo' && mine) showCpuBubble('Nothing.', { duration: 850 });
       showEventBanner(mine ? 'Nothing there' : 'You have none', { persist: true, emphasis: true });
-      await wait(260);
+      await wait(cpuActor ? CPU_PACING.responseRead : 260);
     } else {
       setGamePhase(GF_PHASES.GO_FISH);
       gfSound('fish');
@@ -1179,7 +1195,7 @@ async function playTurnAction(action) {
           { autoHide: 3300 }
         );
       }
-      await wait(300);
+      await wait(cpuActor ? CPU_PACING.fishRead : 300);
       setGamePhase(GF_PHASES.DRAWING);
     }
   }
@@ -1195,11 +1211,12 @@ async function playTurnAction(action) {
   if (nextState) await animateStateTransition(action, nextState);
 
   if (action.books && action.books.length) setGamePhase(GF_PHASES.BOOK_COMPLETING);
-  await wait(TURN_TIMING.settle);
+  await wait(cpuActor ? CPU_PACING.settle : TURN_TIMING.settle);
 }
 
 async function applyPendingAfterAction(action) {
   const mine = action.askerName === currentPlayerName();
+  const cpuActor = mode === 'solo' && action.askerName === 'CPU';
 
   if (action.books && action.books.length) {
     const who = mine ? 'You' : action.askerName;
@@ -1227,6 +1244,7 @@ async function applyPendingAfterAction(action) {
     } else {
       showEventBanner(mine ? 'Nothing there — final ask complete' : `${action.askerName} found nothing — final ask complete`);
     }
+    if (cpuActor) await wait(CPU_PACING.outcomeHold);
     return;
   }
 
@@ -1260,6 +1278,8 @@ async function applyPendingAfterAction(action) {
   } else {
     showEventBanner(`${action.opponentName}’s turn`);
   }
+
+  if (cpuActor) await wait(CPU_PACING.outcomeHold);
 }
 
 async function drainActionQueue() {
@@ -1844,7 +1864,7 @@ async function soloBeginTurn() {
   } else {
     setGamePhase(GF_PHASES.CPU_THINKING);
     soloRenderState();
-    const delay = 750 + Math.floor(Math.random() * 450);
+    const delay = CPU_PACING.thinkMin + Math.floor(Math.random() * CPU_PACING.thinkJitter);
     setTimeout(runCpuTurn, delay);
   }
 }
@@ -1932,7 +1952,7 @@ function runCpuTurn() {
   setTimeout(() => {
     if (!soloGameActive || soloTurn !== 'cpu') return;
     soloResolveAsk('cpu', 'me', decision.rank, 'CPU', soloName);
-  }, decision.reason === 'memory' ? 420 : 260);
+  }, decision.reason === 'memory' ? CPU_PACING.preAskMemory : CPU_PACING.preAsk);
 }
 
 async function soloResolveAsk(askerKey, targetKey, rank, askerName, targetName) {
@@ -2115,7 +2135,7 @@ async function soloBeginFinalTurn() {
     setGamePhase(GF_PHASES.FINAL_ROUND_CPU);
     soloRenderState();
     showEventBanner('CPU has one final ask');
-    const delay = 850 + Math.floor(Math.random() * 350);
+    const delay = CPU_PACING.finalThinkMin + Math.floor(Math.random() * CPU_PACING.finalThinkJitter);
     setTimeout(runCpuTurn, delay);
   }
 }
