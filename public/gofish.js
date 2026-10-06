@@ -351,6 +351,9 @@ const GF_PHASES = Object.freeze({
   BOOK_COMPLETING: 'BOOK_COMPLETING',
   CPU_THINKING: 'CPU_THINKING',
   CPU_ASKING: 'CPU_ASKING',
+  CLOSING_INTRO: 'CLOSING_INTRO',
+  CLOSING_PLAYER: 'CLOSING_PLAYER',
+  CLOSING_CPU: 'CLOSING_CPU',
   FINAL_ROUND_INTRO: 'FINAL_ROUND_INTRO',
   FINAL_ROUND_PLAYER: 'FINAL_ROUND_PLAYER',
   FINAL_ROUND_CPU: 'FINAL_ROUND_CPU',
@@ -358,6 +361,8 @@ const GF_PHASES = Object.freeze({
 });
 
 let gamePhase = GF_PHASES.SETUP;
+let pendingClosingRoundIntro = null;
+let closingRoundIntroShowing = false;
 let pendingFinalRoundIntro = null;
 let finalRoundIntroShowing = false;
 
@@ -375,6 +380,9 @@ function setGamePhase(phase) {
     [GF_PHASES.BOOK_COMPLETING]: 'Book complete',
     [GF_PHASES.CPU_THINKING]: mode === 'solo' ? 'CPU thinking…' : 'Their turn',
     [GF_PHASES.CPU_ASKING]: mode === 'solo' ? 'CPU asking…' : 'They’re asking…',
+    [GF_PHASES.CLOSING_INTRO]: 'Closing Phase',
+    [GF_PHASES.CLOSING_PLAYER]: 'Closing · Your one ask',
+    [GF_PHASES.CLOSING_CPU]: mode === 'solo' ? 'Closing · CPU one ask' : 'Closing · Their one ask',
     [GF_PHASES.FINAL_ROUND_INTRO]: 'Final Round',
     [GF_PHASES.FINAL_ROUND_PLAYER]: 'Final Round · Your ask',
     [GF_PHASES.FINAL_ROUND_CPU]: mode === 'solo' ? 'Final Round · CPU ask' : 'Final Round · Their ask',
@@ -384,12 +392,20 @@ function setGamePhase(phase) {
 }
 
 function humanSelectionPhase() {
-  return gamePhase === GF_PHASES.PLAYER_SELECTING || gamePhase === GF_PHASES.FINAL_ROUND_PLAYER;
+  return [
+    GF_PHASES.PLAYER_SELECTING,
+    GF_PHASES.CLOSING_PLAYER,
+    GF_PHASES.FINAL_ROUND_PLAYER,
+  ].includes(gamePhase);
 }
 
 function syncPhaseFromState(data) {
   if (!data || mode !== 'duo' || actionAnimating) return;
-  if (data.gamePhase === 'FINAL_ROUND_INTRO') {
+  if (data.gamePhase === 'CLOSING_INTRO') {
+    setGamePhase(GF_PHASES.CLOSING_INTRO);
+  } else if (data.gamePhase === 'CLOSING') {
+    setGamePhase(data.isMyTurn ? GF_PHASES.CLOSING_PLAYER : GF_PHASES.CLOSING_CPU);
+  } else if (data.gamePhase === 'FINAL_ROUND_INTRO') {
     setGamePhase(GF_PHASES.FINAL_ROUND_INTRO);
   } else if (data.gamePhase === 'FINAL_ROUND') {
     setGamePhase(data.isMyTurn ? GF_PHASES.FINAL_ROUND_PLAYER : GF_PHASES.FINAL_ROUND_CPU);
@@ -403,7 +419,38 @@ function syncPhaseFromState(data) {
 function stateAllowsSelection(data) {
   if (!data || !data.isMyTurn || data.actionLocked) return false;
   if (mode === 'solo') return humanSelectionPhase();
-  return data.gamePhase === 'NORMAL' || data.gamePhase === 'FINAL_ROUND';
+  return ['NORMAL', 'CLOSING', 'FINAL_ROUND'].includes(data.gamePhase);
+}
+
+async function showClosingRoundIntro(info = pendingClosingRoundIntro || {}) {
+  setGamePhase(GF_PHASES.CLOSING_INTRO);
+  gameArea.classList.add('gf-resolving');
+  gameArea.classList.add('gf-closing-mode');
+
+  const overlay = el('closingOverlay');
+  const eyebrow = overlay.querySelector('.gf-closing-eyebrow');
+  const pondCount = Number(info.pondCount) || 5;
+  if (eyebrow) eyebrow.textContent = `${pondCount} CARD${pondCount === 1 ? '' : 'S'} LEFT`;
+
+  overlay.classList.remove('hidden');
+  gfSound('closing');
+  hapticSuccess();
+  await wait(2300);
+  overlay.classList.add('hidden');
+  gameArea.classList.remove('gf-resolving');
+}
+
+async function presentPendingClosingRoundIntro() {
+  if (mode !== 'duo' || closingRoundIntroShowing || !pendingClosingRoundIntro) return;
+  closingRoundIntroShowing = true;
+  const info = pendingClosingRoundIntro;
+  pendingClosingRoundIntro = null;
+  try {
+    await showClosingRoundIntro(info);
+    if (lastGameState) applyGameState(lastGameState);
+  } finally {
+    closingRoundIntroShowing = false;
+  }
 }
 
 async function showFinalRoundIntro(info = pendingFinalRoundIntro || {}) {
