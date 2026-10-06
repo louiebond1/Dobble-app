@@ -36,6 +36,297 @@ const TURN_TIMING = {
 
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+const GF_STORAGE = {
+  tutorial: 'gofish:tutorial:v2',
+  soundMuted: 'gofish:sound-muted:v1',
+  soloRecord: 'gofish:solo-record:v1',
+  duoRecord: 'gofish:duo-record:v1',
+};
+
+function gfStorageGet(key, fallback = null) {
+  try {
+    const raw = localStorage.getItem(key);
+    return raw == null ? fallback : JSON.parse(raw);
+  } catch (e) {
+    return fallback;
+  }
+}
+
+function gfStorageSet(key, value) {
+  try { localStorage.setItem(key, JSON.stringify(value)); } catch (e) {}
+}
+
+let gfSoundMuted = !!gfStorageGet(GF_STORAGE.soundMuted, false);
+let gfAudioContext = null;
+
+function ensureGfAudio() {
+  if (gfSoundMuted) return null;
+  try {
+    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+    if (!AudioCtx) return null;
+    if (!gfAudioContext) gfAudioContext = new AudioCtx();
+    if (gfAudioContext.state === 'suspended') gfAudioContext.resume().catch(() => {});
+    return gfAudioContext;
+  } catch (e) {
+    return null;
+  }
+}
+
+function gfNote(freq, duration = .08, {
+  type = 'sine',
+  gain = .025,
+  delay = 0,
+  endFreq = null,
+} = {}) {
+  const ctx = ensureGfAudio();
+  if (!ctx) return;
+  const start = ctx.currentTime + delay;
+  const osc = ctx.createOscillator();
+  const amp = ctx.createGain();
+  osc.type = type;
+  osc.frequency.setValueAtTime(freq, start);
+  if (endFreq) osc.frequency.exponentialRampToValueAtTime(Math.max(1, endFreq), start + duration);
+  amp.gain.setValueAtTime(.0001, start);
+  amp.gain.exponentialRampToValueAtTime(gain, start + .012);
+  amp.gain.exponentialRampToValueAtTime(.0001, start + duration);
+  osc.connect(amp);
+  amp.connect(ctx.destination);
+  osc.start(start);
+  osc.stop(start + duration + .02);
+}
+
+function gfSound(kind) {
+  if (gfSoundMuted) return;
+  if (kind === 'slide') gfNote(260, .10, { type: 'triangle', gain: .014, endFreq: 175 });
+  else if (kind === 'flip') gfNote(860, .055, { type: 'sine', gain: .020, endFreq: 1120 });
+  else if (kind === 'land') gfNote(165, .075, { type: 'triangle', gain: .018, endFreq: 125 });
+  else if (kind === 'fish') gfNote(185, .18, { type: 'sine', gain: .020, endFreq: 145 });
+  else if (kind === 'turn') gfNote(440, .06, { type: 'sine', gain: .012, endFreq: 520 });
+  else if (kind === 'book') {
+    gfNote(520, .13, { type: 'sine', gain: .022 });
+    gfNote(780, .14, { type: 'sine', gain: .020, delay: .08 });
+    gfNote(1040, .18, { type: 'sine', gain: .018, delay: .16 });
+  } else if (kind === 'lucky') {
+    gfNote(720, .10, { type: 'triangle', gain: .020 });
+    gfNote(1080, .16, { type: 'sine', gain: .020, delay: .09 });
+  } else if (kind === 'final') {
+    gfNote(196, .20, { type: 'triangle', gain: .022 });
+    gfNote(294, .22, { type: 'triangle', gain: .020, delay: .15 });
+    gfNote(392, .32, { type: 'sine', gain: .018, delay: .31 });
+  }
+}
+
+document.addEventListener('pointerdown', () => ensureGfAudio(), { once: true, capture: true });
+
+let cpuBubbleTimer = null;
+function showCpuBubble(text, { memory = false, duration = 1300 } = {}) {
+  if (mode !== 'solo') return;
+  const bubble = el('cpuBubble');
+  if (!bubble) return;
+  clearTimeout(cpuBubbleTimer);
+  bubble.textContent = text;
+  bubble.classList.remove('hidden', 'show', 'memory');
+  bubble.classList.toggle('memory', memory);
+  void bubble.offsetWidth;
+  bubble.classList.add('show');
+  cpuBubbleTimer = setTimeout(() => bubble.classList.add('hidden'), duration);
+}
+
+function cpuLine(lines) {
+  return lines[Math.floor(Math.random() * lines.length)];
+}
+
+let tutorialMode = false;
+let coachStep = null;
+const tutorialSeen = new Set();
+let coachTimer = null;
+
+function startTutorialIfNeeded() {
+  tutorialMode = !gfStorageGet(GF_STORAGE.tutorial, false);
+  tutorialSeen.clear();
+  coachStep = null;
+  const coach = el('coachCard');
+  if (coach) coach.classList.add('hidden');
+}
+
+function finishTutorial() {
+  if (!tutorialMode) return;
+  gfStorageSet(GF_STORAGE.tutorial, true);
+  tutorialMode = false;
+  const coach = el('coachCard');
+  if (coach) coach.classList.add('hidden');
+}
+
+function showCoach(step, text, { kicker = 'FIRST GAME', autoHide = 0 } = {}) {
+  if (!tutorialMode || tutorialSeen.has(step)) return;
+  tutorialSeen.add(step);
+  coachStep = step;
+  clearTimeout(coachTimer);
+  el('coachKicker').textContent = kicker;
+  el('coachText').textContent = text;
+  el('coachCard').classList.remove('hidden');
+  if (autoHide) coachTimer = setTimeout(() => el('coachCard').classList.add('hidden'), autoHide);
+}
+
+function hideCoach() {
+  clearTimeout(coachTimer);
+  el('coachCard').classList.add('hidden');
+}
+
+el('coachDismiss').addEventListener('click', hideCoach);
+
+function emptySoloRecord() {
+  return { games: 0, wins: 0, losses: 0, draws: 0, streak: 0, bestStreak: 0 };
+}
+
+function loadSoloRecord() {
+  return { ...emptySoloRecord(), ...(gfStorageGet(GF_STORAGE.soloRecord, {}) || {}) };
+}
+
+function updateSoloRecord(result) {
+  const record = loadSoloRecord();
+  record.games += 1;
+  if (result.winner === 'me') {
+    record.wins += 1;
+    record.streak += 1;
+    record.bestStreak = Math.max(record.bestStreak, record.streak);
+  } else if (result.winner === 'cpu') {
+    record.losses += 1;
+    record.streak = 0;
+  } else {
+    record.draws += 1;
+    record.streak = 0;
+  }
+  gfStorageSet(GF_STORAGE.soloRecord, record);
+  return record;
+}
+
+function soloRecordText(record = loadSoloRecord()) {
+  if (!record.games) return '';
+  return `On this phone · <strong>You ${record.wins}</strong> – ${record.losses} CPU${record.draws ? ` · ${record.draws} draw${record.draws === 1 ? '' : 's'}` : ''}${record.bestStreak > 1 ? ` · best streak ${record.bestStreak}` : ''}`;
+}
+
+function renderSetupRecord() {
+  const strip = el('setupRecordStrip');
+  if (!strip) return;
+  const text = soloRecordText();
+  strip.classList.toggle('hidden', !text);
+  strip.innerHTML = text;
+}
+
+function loadDuoRecord() {
+  return { louie: 0, ariel: 0, draws: 0, games: 0, ...(gfStorageGet(GF_STORAGE.duoRecord, {}) || {}) };
+}
+
+function updateDuoRecord(winnerName) {
+  const record = loadDuoRecord();
+  record.games += 1;
+  if (winnerName === 'Louie') record.louie += 1;
+  else if (winnerName === 'Ariel') record.ariel += 1;
+  else record.draws += 1;
+  gfStorageSet(GF_STORAGE.duoRecord, record);
+  return record;
+}
+
+function duoRecordText(record = loadDuoRecord()) {
+  if (!record.games) return '';
+  return `On this phone · <strong>Louie ${record.louie}</strong> – ${record.ariel} Ariel${record.draws ? ` · ${record.draws} draw${record.draws === 1 ? '' : 's'}` : ''}`;
+}
+
+let activeFinalOrder = [];
+function displayFinalName(name) {
+  if (name === 'me' || name === currentPlayerName() || name === myName) return 'You';
+  if (name === 'cpu') return 'CPU';
+  return name || 'Opponent';
+}
+
+function renderFinalOrder(order = activeFinalOrder, currentIndex = 0) {
+  activeFinalOrder = (order || []).map(displayFinalName);
+  const markup = activeFinalOrder.map((name, index) => {
+    const cls = index < currentIndex ? ' done' : index === currentIndex ? ' current' : '';
+    return `<span class="gf-final-order-step${cls}"><b>${index + 1}</b>${escapeResultText(name)}</span>`;
+  }).join('');
+  const overlay = el('finalRoundOrder');
+  if (overlay) overlay.innerHTML = markup;
+
+  const progress = el('finalProgress');
+  if (!progress) return;
+  if (!activeFinalOrder.length) {
+    progress.classList.add('hidden');
+    progress.innerHTML = '';
+    return;
+  }
+  progress.classList.remove('hidden');
+  progress.innerHTML = activeFinalOrder.map((name, index) => {
+    const cls = index < currentIndex ? ' done' : index === currentIndex ? ' current' : '';
+    return `<span class="gf-final-progress-step${cls}"><b>${index + 1}</b>${escapeResultText(name)}</span>`;
+  }).join('');
+}
+
+let lastTurnFocus = null;
+function updateTurnFocus(data) {
+  if (!data) return;
+  gameArea.classList.toggle('gf-turn-me', !!data.isMyTurn);
+  gameArea.classList.toggle('gf-turn-them', !data.isMyTurn);
+  const focus = data.turnName || (data.isMyTurn ? currentPlayerName() : 'opponent');
+  if (focus && lastTurnFocus && focus !== lastTurnFocus && !actionAnimating) gfSound('turn');
+  lastTurnFocus = focus;
+}
+
+function updatePondPressure(count) {
+  gameArea.classList.toggle('gf-pond-low', count > 0 && count <= 5);
+  gameArea.classList.toggle('gf-pond-critical', count > 0 && count <= 3);
+  gameArea.classList.toggle('gf-last-card', count === 1);
+
+  const warning = el('pondWarning');
+  const title = el('pondTitle');
+  if (!warning || !title) return;
+  warning.classList.toggle('hidden', count > 5);
+  title.textContent = count === 0 ? 'Pond empty' : 'Fish pond';
+  if (count === 1) warning.textContent = 'LAST CARD';
+  else if (count > 1 && count <= 3) warning.textContent = `${count} LEFT`;
+  else if (count > 3 && count <= 5) warning.textContent = 'GETTING LOW';
+  else if (count === 0) warning.textContent = 'FINAL ROUND';
+  else warning.textContent = '';
+}
+
+function updateFinalProgressFromState(data) {
+  if (mode === 'solo') {
+    if (typeof soloFinal !== 'undefined' && soloFinal && soloFinal.active) {
+      renderFinalOrder(soloFinal.order, soloFinal.index);
+    } else {
+      renderFinalOrder([], 0);
+    }
+    return;
+  }
+
+  if (data && (data.gamePhase === 'FINAL_ROUND' || data.gamePhase === 'FINAL_ROUND_INTRO')) {
+    const index = Number.isInteger(data.finalRoundIndex) ? data.finalRoundIndex : 0;
+    renderFinalOrder(activeFinalOrder, index);
+  } else {
+    renderFinalOrder([], 0);
+  }
+}
+
+const soundButton = el('soundBtn');
+soundButton.setAttribute('aria-pressed', gfSoundMuted ? 'true' : 'false');
+soundButton.textContent = gfSoundMuted ? '×' : '♪';
+soundButton.setAttribute('aria-label', gfSoundMuted ? 'Turn Go Fish sounds on' : 'Mute Go Fish sounds');
+soundButton.addEventListener('click', () => {
+  gfSoundMuted = !gfSoundMuted;
+  gfStorageSet(GF_STORAGE.soundMuted, gfSoundMuted);
+  soundButton.setAttribute('aria-pressed', gfSoundMuted ? 'true' : 'false');
+  soundButton.textContent = gfSoundMuted ? '×' : '♪';
+  soundButton.setAttribute('aria-label', gfSoundMuted ? 'Turn Go Fish sounds on' : 'Mute Go Fish sounds');
+  if (!gfSoundMuted) {
+    ensureGfAudio();
+    gfSound('turn');
+  }
+});
+
+renderSetupRecord();
+
+
 const GF_PHASES = Object.freeze({
   SETUP: 'SETUP',
   PLAYER_SELECTING: 'PLAYER_SELECTING',
@@ -101,23 +392,32 @@ function stateAllowsSelection(data) {
   return data.gamePhase === 'NORMAL' || data.gamePhase === 'FINAL_ROUND';
 }
 
-async function showFinalRoundIntro() {
+async function showFinalRoundIntro(info = pendingFinalRoundIntro || {}) {
   setGamePhase(GF_PHASES.FINAL_ROUND_INTRO);
   gameArea.classList.add('gf-resolving');
+
+  const fallbackSoloOrder = typeof soloFinal !== 'undefined' && soloFinal && soloFinal.active ? soloFinal.order : [];
+  const order = Array.isArray(info.order) && info.order.length ? info.order : fallbackSoloOrder;
+  renderFinalOrder(order, 0);
+
   const overlay = el('finalRoundOverlay');
   overlay.classList.remove('hidden');
+  gfSound('final');
   hapticSuccess();
-  await wait(1550);
+  await wait(1900);
   overlay.classList.add('hidden');
   gameArea.classList.remove('gf-resolving');
+
+  finishTutorial();
 }
 
 async function presentPendingFinalRoundIntro() {
   if (mode !== 'duo' || finalRoundIntroShowing || !pendingFinalRoundIntro) return;
   finalRoundIntroShowing = true;
+  const info = pendingFinalRoundIntro;
   pendingFinalRoundIntro = null;
   try {
-    await showFinalRoundIntro();
+    await showFinalRoundIntro(info);
     if (lastGameState) applyGameState(lastGameState);
   } finally {
     finalRoundIntroShowing = false;
@@ -207,18 +507,14 @@ function cardFaceMarkup(card) {
     </span>`;
 }
 
-function cardEl(card, { interactive = false } = {}) {
-  const node = document.createElement(interactive ? 'button' : 'div');
+function cardEl(card) {
+  const node = document.createElement('div');
   node.className = 'gf-card' + (RED_SUITS.has(card.suit) ? ' red' : '');
   node.dataset.rank = card.rank;
   node.dataset.suit = card.suit;
   node.dataset.cardKey = cardKey(card);
   node.innerHTML = cardFaceMarkup(card);
-  if (interactive) {
-    node.type = 'button';
-    node.setAttribute('aria-label', `Select ${rankPlural(card.rank)}`);
-    node.addEventListener('click', () => selectRank(card.rank));
-  }
+  node.setAttribute('aria-hidden', 'true');
   return node;
 }
 
@@ -228,17 +524,74 @@ function renderMyHand(hand, { interactive = false, askableRanks = [] } = {}) {
   const sorted = sortHand(hand);
   setHandOverlap(container, sorted.length, false);
   sorted.forEach((card, i) => {
-    // The visible card is a real tap target. The rank chips below are a
-    // second way to select, not a displaced substitute for the card.
-    const canSelect = interactive && askableRanks.includes(card.rank);
-    const node = cardEl(card, { interactive: canSelect });
+    const node = cardEl(card);
     const isSelected = selectedRank === card.rank;
     node.style.transform = fanTransform(i, sorted.length, false) + (isSelected ? ' translateY(-10px)' : '');
     node.style.zIndex = String(i + 1 + (isSelected ? 30 : 0));
     node.classList.toggle('selected', isSelected);
-    if (!canSelect) node.classList.add('is-disabled');
+    node.classList.toggle('is-disabled', !(interactive && askableRanks.includes(card.rank)));
     container.appendChild(node);
   });
+  scheduleHandHitLayer(interactive ? askableRanks : []);
+}
+
+let handHitLayerFrame = 0;
+let handHitLayerTimer = 0;
+let handHitRanks = [];
+
+function handHitLayer() {
+  let layer = document.getElementById('myHandHitLayer');
+  if (!layer) {
+    layer = document.createElement('div');
+    layer.id = 'myHandHitLayer';
+    layer.className = 'gf-hand-hit-layer';
+    layer.setAttribute('aria-label', 'Your hand');
+    el('myHand').appendChild(layer);
+  }
+  return layer;
+}
+
+function rebuildHandHitLayer() {
+  const container = el('myHand');
+  const layer = handHitLayer();
+  layer.innerHTML = '';
+
+  if (!lastGameState || !stateAllowsSelection(lastGameState) || actionAnimating || askPending) return;
+
+  const containerRect = container.getBoundingClientRect();
+  const cards = Array.from(container.children).filter((node) => node.classList && node.classList.contains('gf-card'));
+  cards.forEach((card, index) => {
+    const rank = card.dataset.rank;
+    if (!handHitRanks.includes(rank)) return;
+
+    const rect = card.getBoundingClientRect();
+    const hit = document.createElement('button');
+    hit.type = 'button';
+    hit.className = 'gf-card-hit';
+    hit.dataset.rank = rank;
+    hit.setAttribute('aria-label', `Select ${rankPlural(rank)}`);
+    hit.style.left = `${rect.left - containerRect.left}px`;
+    hit.style.top = `${rect.top - containerRect.top}px`;
+    hit.style.width = `${rect.width}px`;
+    hit.style.height = `${rect.height}px`;
+    hit.style.zIndex = String(index + 1 + (selectedRank === rank ? 30 : 0));
+    hit.addEventListener('click', (event) => {
+      event.preventDefault();
+      selectRank(rank);
+    });
+    layer.appendChild(hit);
+  });
+}
+
+function scheduleHandHitLayer(askableRanks = handHitRanks) {
+  handHitRanks = Array.from(new Set(askableRanks || []));
+  cancelAnimationFrame(handHitLayerFrame);
+  clearTimeout(handHitLayerTimer);
+  handHitLayerFrame = requestAnimationFrame(() => {
+    requestAnimationFrame(rebuildHandHitLayer);
+  });
+  // Safari can finish transform interpolation a frame later than paint.
+  handHitLayerTimer = setTimeout(rebuildHandHitLayer, 230);
 }
 
 function renderOpponentBacks(count) {
@@ -353,13 +706,14 @@ function updateAskControls(data) {
     hint.textContent = 'Pick any rank you already hold.';
   }
 
-  const handCards = Array.from(document.querySelectorAll('#myHand .gf-card'));
+  const handCards = Array.from(document.querySelectorAll('#myHand > .gf-card'));
   handCards.forEach((card, index) => {
     const on = !!selectedRank && card.dataset.rank === selectedRank;
     card.classList.toggle('selected', on);
     card.style.transform = fanTransform(index, handCards.length, false) + (on ? ' translateY(-10px)' : '');
     card.style.zIndex = String(index + 1 + (on ? 30 : 0));
   });
+  scheduleHandHitLayer(data.askableRanks || []);
   document.querySelectorAll('#rankChoices .gf-rank-chip').forEach((button) => {
     const on = button.textContent === selectedRank;
     button.classList.toggle('selected', on);
@@ -372,7 +726,15 @@ function selectRank(rank) {
   if (!stateAllowsSelection(lastGameState)) return;
   if (!(lastGameState.askableRanks || []).includes(rank)) return;
   selectedRank = selectedRank === rank ? null : rank;
+  hapticTap();
   updateAskControls(lastGameState);
+  if (selectedRank) {
+    showCoach(
+      'ask',
+      `Good. ${rankPlural(selectedRank)} are selected — now press the Ask button. Nothing happens until you do.`,
+      { autoHide: 3000 }
+    );
+  }
 }
 
 function applyGameState(data, { freezeTurn = false } = {}) {
@@ -389,13 +751,20 @@ function applyGameState(data, { freezeTurn = false } = {}) {
   el('pondCount').textContent = data.pondCount;
   updateIdentity(data);
   updateDuelHud(data);
+  updatePondPressure(data.pondCount);
   if (!freezeTurn) {
+    updateTurnFocus(data);
+    updateFinalProgressFromState(data);
     syncPhaseFromState(data);
     updateTurnPill(data.isMyTurn, data.turnName);
   }
   renderRankChoices(data);
   updateAskControls(data);
   gameArea.classList.toggle('gf-resolving', !!data.actionLocked || actionAnimating || askPending);
+
+  if (!freezeTurn && stateAllowsSelection(data)) {
+    showCoach('select', 'Choose a rank you already hold. Tap the card itself or the rank below.');
+  }
 }
 
 function lockVisibleHand() {
@@ -486,6 +855,7 @@ async function flyBetweenRects(startRect, endRect, {
   const midTransform = `translate3d(${dx * .56}px,${dy * .48 - 24}px,0) scale(${(sx + 1) / 2},${(sy + 1) / 2}) rotate(-4deg)`;
   const endTransform = `translate3d(${dx}px,${dy}px,0) scale(1,1) rotate(0deg)`;
 
+  gfSound('slide');
   const first = node.animate(
     [{ transform: startTransform }, { transform: midTransform }],
     { duration: 390, easing: 'cubic-bezier(.24,.75,.22,1)', fill: 'forwards' }
@@ -498,6 +868,7 @@ async function flyBetweenRects(startRect, endRect, {
       { duration: 95, easing: 'ease-in', fill: 'forwards' }
     );
     try { await close.finished; } catch (e) {}
+    gfSound('flip');
     setFlightAppearance(node, card, endBack);
     const open = node.animate(
       [{ transform: midTransform + ' scaleX(.06)' }, { transform: midTransform + ' scaleX(1)' }],
@@ -512,7 +883,15 @@ async function flyBetweenRects(startRect, endRect, {
   );
   try { await second.finished; } catch (e) {}
   node.remove();
-  if (targetNode) targetNode.classList.remove('gf-staging-hidden');
+  gfSound('land');
+  if (targetNode) {
+    targetNode.classList.remove('gf-staging-hidden');
+    targetNode.classList.remove('gf-landed');
+    void targetNode.offsetWidth;
+    targetNode.classList.add('gf-landed');
+    setTimeout(() => targetNode.classList.remove('gf-landed'), 330);
+  }
+  scheduleHandHitLayer();
 }
 
 function playLayoutAnimation(node, keyframes, options) {
@@ -526,6 +905,7 @@ function playLayoutAnimation(node, keyframes, options) {
       // rebuilt at the card's real DOM position.
       try { animation.cancel(); } catch (e) {}
       void node.offsetHeight;
+      scheduleHandHitLayer();
     });
 }
 
@@ -690,9 +1070,19 @@ async function animateStateTransition(action, nextState) {
   }
 
   await Promise.all([...layoutJobs, ...flightJobs]);
+  ['myHand', 'opponentHand'].forEach((id) => {
+    const hand = el(id);
+    hand.classList.remove('gf-hand-settle');
+    void hand.offsetWidth;
+    hand.classList.add('gf-hand-settle');
+    setTimeout(() => hand.classList.remove('gf-hand-settle'), 380);
+  });
+  updateTurnFocus(nextState);
+  updateFinalProgressFromState(nextState);
   updateTurnPill(nextState.isMyTurn, nextState.turnName);
   renderRankChoices(nextState);
   updateAskControls(nextState);
+  scheduleHandHitLayer(nextState.askableRanks || []);
 }
 
 let bannerTimer = null;
@@ -755,6 +1145,16 @@ async function playTurnAction(action) {
 
     if (action.kind === 'take') {
       setGamePhase(GF_PHASES.CARD_TRANSFER);
+      if (mode === 'solo' && mine) {
+        showCpuBubble(
+          cpuLine([
+            action.count === 1 ? 'Yep. I had one.' : `Yep. I had ${humanCount(action.count)}.`,
+            action.count === 1 ? 'You got one.' : `You got all ${humanCount(action.count)}.`,
+            'Fair enough.',
+          ]),
+          { duration: 980 }
+        );
+      }
       showEventBanner(
         mine
           ? `${targetName} had ${humanCount(action.count)}`
@@ -762,12 +1162,24 @@ async function playTurnAction(action) {
         { persist: true }
       );
     } else if (action.kind === 'final-miss') {
+      if (mode === 'solo' && mine) showCpuBubble('Nothing.', { duration: 850 });
       showEventBanner(mine ? 'Nothing there' : 'You have none', { persist: true, emphasis: true });
       await wait(260);
     } else {
       setGamePhase(GF_PHASES.GO_FISH);
+      gfSound('fish');
+      if (mode === 'solo' && mine) {
+        showCpuBubble(cpuLine(['Nope. Go fish.', 'Nothing. Fish.', 'Not this time. Go fish.']), { duration: 1150 });
+      }
       showEventBanner(mine ? 'GO FISH' : `${action.askerName} goes fishing`, { persist: true, emphasis: true });
-      await wait(260);
+      if (mine) {
+        showCoach(
+          'fish',
+          'They had none, so one card comes from the pond. If it matches what you asked for, you keep the turn.',
+          { autoHide: 3300 }
+        );
+      }
+      await wait(300);
       setGamePhase(GF_PHASES.DRAWING);
     }
   }
@@ -791,7 +1203,14 @@ async function applyPendingAfterAction(action) {
 
   if (action.books && action.books.length) {
     const who = mine ? 'You' : action.askerName;
+    gfSound('book');
+    if (mode === 'solo' && !mine) showCpuBubble('That’s a book.', { duration: 1050 });
     showEventBanner(`${who} completed the book of ${rankPlural(action.books[0])}`, { book: true });
+    showCoach(
+      'book',
+      'Four of a rank becomes a book automatically. Those four cards are now locked out of play.',
+      { autoHide: 3300 }
+    );
     await wait(TURN_TIMING.book);
   }
 
@@ -818,9 +1237,24 @@ async function applyPendingAfterAction(action) {
       showEventBanner(`${action.askerName} is back in`);
     }
   } else if (action.kind === 'take') {
+    if (mode === 'solo' && !mine) {
+      showCpuBubble(
+        lastCpuDecision && lastCpuDecision.reason === 'memory'
+          ? cpuLine(['Knew it.', 'I remembered that.', 'Thought so.'])
+          : cpuLine(['I’ll take those.', 'Got them.', 'That works.']),
+        { memory: !!(lastCpuDecision && lastCpuDecision.reason === 'memory'), duration: 980 }
+      );
+    }
     showEventBanner(mine ? 'Got them — your turn again' : `${action.askerName} goes again`);
   } else if (action.luckyCatch || action.matched) {
+    gfSound('lucky');
+    if (mode === 'solo' && !mine) showCpuBubble('That’ll do.', { duration: 900 });
     showEventBanner('LUCKY CATCH — go again', { emphasis: true });
+    showCoach(
+      'lucky',
+      'Exact match. That’s a Lucky Catch, so the same player gets another turn.',
+      { autoHide: 3200 }
+    );
   } else if (mine && action.drawnCard) {
     showEventBanner(`You drew ${action.drawnCard.rank}${action.drawnCard.suit} — ${action.opponentName}’s turn`);
   } else {
@@ -903,6 +1337,7 @@ document.querySelectorAll('#modeToggle .mode-btn').forEach((btn) => {
     document.querySelectorAll('#modeToggle .mode-btn').forEach((b) => b.classList.toggle('active', b === btn));
     el('soloFields').classList.toggle('hidden', mode !== 'solo');
     el('duoFields').classList.toggle('hidden', mode !== 'duo');
+    if (mode === 'solo') renderSetupRecord();
   });
 });
 
@@ -1028,6 +1463,9 @@ socket.on('gofish:round:start', (data) => {
   pendingRoundResult = null;
   pendingGameOver = null;
   pendingFinalRoundIntro = null;
+  activeFinalOrder = [];
+  renderFinalOrder([], 0);
+  lastTurnFocus = null;
   actionQueue.length = 0;
   actionAnimating = false;
   askPending = false;
@@ -1042,6 +1480,7 @@ socket.on('gofish:round:start', (data) => {
   setupWrap.classList.add('hidden');
   lobby.classList.add('hidden');
   gameOver.classList.add('hidden');
+  el('finalRecordStrip').classList.add('hidden');
   gameArea.classList.remove('hidden');
   updateDuelHud();
 });
@@ -1140,6 +1579,10 @@ function handleDuoGameOver(data) {
     <div class="gf-result-row"><span class="gf-result-row-name">You</span><div class="gf-result-mini-cards">${resultHandMarkup(mineReveal.hand || [])}</div></div>
     <div class="gf-result-row"><span class="gf-result-row-name">${escapeResultText(opponentName)}</span><div class="gf-result-mini-cards">${resultHandMarkup(opponentReveal.hand || [])}</div></div>`;
 
+  const duoRecord = updateDuoRecord(data.winnerName || null);
+  el('finalRecordStrip').classList.remove('hidden');
+  el('finalRecordStrip').innerHTML = duoRecordText(duoRecord);
+
   const myStats = minePublic && minePublic.stats ? minePublic.stats : {};
   el('finalStats').classList.remove('hidden');
   el('finalStats').innerHTML = `
@@ -1180,6 +1623,7 @@ let soloLastBookOwner = null;
 let soloCpuMemory = new Map();
 let soloMemoryClock = 0;
 let soloStats = null;
+let lastCpuDecision = null;
 
 function freshSoloStats() {
   return {
@@ -1286,6 +1730,13 @@ el('soloStartBtn').addEventListener('click', () => {
 
 function startSoloGame() {
   mode = 'solo';
+  startTutorialIfNeeded();
+  lastCpuDecision = null;
+  lastTurnFocus = null;
+  activeFinalOrder = [];
+  renderFinalOrder([], 0);
+  clearTimeout(cpuBubbleTimer);
+  el('cpuBubble').classList.add('hidden');
   actionQueue.length = 0;
   actionAnimating = false;
   askPending = false;
@@ -1335,6 +1786,8 @@ function chooseCpuRank() {
   // Deliberately only reads CPU cards + public memory. It never inspects
   // soloHands.me, so the CPU cannot cheat.
   decayCpuMemory();
+  soloMemoryClock += 1;
+
   const counts = new Map();
   for (const card of soloHands.cpu) counts.set(card.rank, (counts.get(card.rank) || 0) + 1);
   const options = [...counts.entries()];
@@ -1342,22 +1795,32 @@ function chooseCpuRank() {
 
   const weighted = options.map(([rank, count]) => {
     const memory = soloCpuMemory.get(rank);
+    const age = memory ? Math.max(0, soloMemoryClock - memory.seenAt) : 0;
+    const recency = memory ? Math.max(.36, 1 - age * .10) : 0;
+    const memoryScore = memory ? memory.confidence * recency : 0;
+
     let weight = 1 + count * 3;
-    if (count >= 2) weight += 2;
-    if (count >= 3) weight += 4;
-    if (memory) weight += memory.confidence * 7;
-    // Small noise keeps identical positions from feeling scripted.
-    weight += Math.random() * 2.5;
-    return { rank, weight };
+    if (count >= 2) weight += 2.5;
+    if (count >= 3) weight += 4.5;
+    if (memory) weight += memoryScore * 7.5;
+    weight += Math.random() * 2.4;
+
+    return {
+      rank,
+      count,
+      memoryScore,
+      weight,
+      reason: memoryScore >= 2.2 ? 'memory' : count >= 2 ? 'cluster' : 'probe',
+    };
   });
 
   const total = weighted.reduce((sum, item) => sum + item.weight, 0);
   let roll = Math.random() * total;
   for (const item of weighted) {
     roll -= item.weight;
-    if (roll <= 0) return item.rank;
+    if (roll <= 0) return item;
   }
-  return weighted[weighted.length - 1].rank;
+  return weighted[weighted.length - 1];
 }
 
 async function soloBeginTurn() {
@@ -1446,18 +1909,30 @@ function runCpuTurn() {
     ![GF_PHASES.CPU_THINKING, GF_PHASES.FINAL_ROUND_CPU].includes(gamePhase)
   ) return;
 
-  const rank = chooseCpuRank();
-  if (!rank) {
-    if (soloFinal.active) {
-      soloSkipFinalTurn('cpu');
-    } else {
-      soloBeginTurn();
-    }
+  const decision = chooseCpuRank();
+  if (!decision) {
+    if (soloFinal.active) soloSkipFinalTurn('cpu');
+    else soloBeginTurn();
     return;
   }
 
+  lastCpuDecision = decision;
+  if (decision.reason === 'memory') {
+    showCpuBubble(
+      cpuLine([`I remember ${rankPlural(decision.rank)}.`, `You showed me ${rankPlural(decision.rank)} earlier.`, `I haven't forgotten ${rankPlural(decision.rank)}.`]),
+      { memory: true, duration: 1150 }
+    );
+  } else if (decision.reason === 'cluster' && Math.random() < .72) {
+    showCpuBubble(cpuLine(['This feels promising.', 'Worth asking.', 'I like this one.']), { duration: 900 });
+  } else if (Math.random() < .34) {
+    showCpuBubble(cpuLine(['Let’s see.', 'Hmm.', 'Worth a try.']), { duration: 760 });
+  }
+
   setGamePhase(GF_PHASES.CPU_ASKING);
-  soloResolveAsk('cpu', 'me', rank, 'CPU', soloName);
+  setTimeout(() => {
+    if (!soloGameActive || soloTurn !== 'cpu') return;
+    soloResolveAsk('cpu', 'me', decision.rank, 'CPU', soloName);
+  }, decision.reason === 'memory' ? 420 : 260);
 }
 
 async function soloResolveAsk(askerKey, targetKey, rank, askerName, targetName) {
@@ -1596,9 +2071,9 @@ async function soloEnterFinalRound(starterKey) {
     index: 0,
   };
   selectedRank = null;
-  pendingFinalRoundIntro = { starter: starterKey };
+  pendingFinalRoundIntro = { starter: starterKey, order: soloFinal.order.slice() };
   soloRenderState();
-  await showFinalRoundIntro();
+  await showFinalRoundIntro(pendingFinalRoundIntro);
   pendingFinalRoundIntro = null;
   await soloBeginFinalTurn();
 }
@@ -1611,6 +2086,7 @@ async function soloSkipFinalTurn(who) {
   showEventBanner(who === 'me' ? 'No cards — your final ask is skipped' : 'CPU has no cards — final ask skipped');
   await wait(950);
   soloFinal.index += 1;
+  renderFinalOrder(soloFinal.order, soloFinal.index);
   await soloBeginFinalTurn();
 }
 
@@ -1624,6 +2100,7 @@ async function soloBeginFinalTurn() {
   const who = soloFinal.order[soloFinal.index];
   soloTurn = who;
   selectedRank = null;
+  renderFinalOrder(soloFinal.order, soloFinal.index);
 
   if (soloHands[who].length === 0) {
     await soloSkipFinalTurn(who);
@@ -1694,6 +2171,8 @@ function soloFinishGame() {
   syncSoloHud();
 
   const result = soloDetermineWinner();
+  const record = updateSoloRecord(result);
+  renderSetupRecord();
   gameArea.classList.add('hidden');
   gameOver.classList.remove('hidden');
   el('playAgainBtn').classList.remove('hidden');
@@ -1740,6 +2219,9 @@ function soloFinishGame() {
     <div class="gf-stat"><strong>${soloStats.me.luckyCatches}</strong><span>Lucky catches</span></div>
     <div class="gf-stat"><strong>${soloStats.me.successfulAsks}</strong><span>Successful asks</span></div>
     <div class="gf-stat"><strong>${soloStats.me.longestTurnStreak}</strong><span>Longest streak</span></div>`;
+
+  el('finalRecordStrip').classList.remove('hidden');
+  el('finalRecordStrip').innerHTML = soloRecordText(record);
 }
 
 // --- Party Mashup: auto-join and auto-start a single-round leg ------------
@@ -1754,5 +2236,6 @@ function soloFinishGame() {
 window.addEventListener('resize', () => {
   if (!gameArea.classList.contains('hidden') && lastGameState && !actionAnimating) {
     applyGameState(lastGameState);
+    scheduleHandHitLayer(lastGameState.askableRanks || []);
   }
 });

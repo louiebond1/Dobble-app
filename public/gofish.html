@@ -38,6 +38,7 @@
       <div id="soloFields">
         <label for="soloNameInput">Your name</label>
         <input type="text" id="soloNameInput" maxlength="20" placeholder="Louie" />
+        <div class="gf-record-strip hidden" id="setupRecordStrip" aria-live="polite"></div>
         <button class="gf-primary-btn" id="soloStartBtn">Play CPU</button>
       </div>
 
@@ -75,7 +76,14 @@
         <span class="gf-final-eyebrow">THE POND IS EMPTY</span>
         <strong>FINAL ROUND</strong>
         <p>No more fishing. One last turn each.</p>
+        <div class="gf-final-order" id="finalRoundOrder" aria-label="Final round order"></div>
       </div>
+    </div>
+
+    <div class="gf-coach hidden" id="coachCard" role="status">
+      <div class="gf-coach-kicker" id="coachKicker">FIRST GAME</div>
+      <div class="gf-coach-text" id="coachText"></div>
+      <button type="button" class="gf-coach-dismiss" id="coachDismiss">Got it</button>
     </div>
     <header class="gf-topbar">
       <a href="/gofish" class="gf-topbar-back duel-quit">‹ Games</a>
@@ -83,10 +91,13 @@
         <strong>Go Fish</strong>
         <span id="phaseLabel">Classic · 52 cards</span><span id="roundNum" class="hidden"></span><span id="totalRounds" class="hidden"></span>
       </div>
-      <div class="gf-match-score" id="duelHud" aria-label="Match score">
-        <div id="hudP1"><span id="hudP1Name">Louie</span> <b id="hudP1Score">0</b></div>
-        <span class="gf-score-divider">·</span>
-        <div id="hudP2"><b id="hudP2Score">0</b> <span id="hudP2Name">Ariel</span></div>
+      <div class="gf-topbar-right">
+        <div class="gf-match-score" id="duelHud" aria-label="Book score">
+          <div id="hudP1"><span id="hudP1Name">Louie</span> <b id="hudP1Score">0</b></div>
+          <span class="gf-score-divider">·</span>
+          <div id="hudP2"><b id="hudP2Score">0</b> <span id="hudP2Name">Ariel</span></div>
+        </div>
+        <button type="button" class="gf-sound-btn" id="soundBtn" aria-label="Mute Go Fish sounds" aria-pressed="false">♪</button>
       </div>
     </header>
 
@@ -100,11 +111,13 @@
           </div>
           <div class="gf-books" id="opponentBooks" aria-label="Opponent books"></div>
         </div>
+        <div class="gf-cpu-bubble hidden" id="cpuBubble" aria-live="polite"></div>
         <div class="gf-hand gf-opponent-hand" id="opponentHand" aria-label="Opponent hand"></div>
       </section>
 
       <section class="gf-action-stage" id="actionStage">
         <div class="gf-turn-pill" id="turnPill">Waiting…</div>
+        <div class="gf-final-progress hidden" id="finalProgress" aria-label="Final round progress"></div>
         <div class="gf-pond-wrap">
           <div class="gf-pond-shadow gf-pond-shadow-two"></div>
           <div class="gf-pond-shadow gf-pond-shadow-one"></div>
@@ -112,8 +125,9 @@
             <span class="gf-card-back-mark">A+L</span>
           </div>
           <div class="gf-pond-copy">
-            <strong>Fish pond</strong>
-            <span><span id="pondCount">0</span> cards</span>
+            <strong id="pondTitle">Fish pond</strong>
+            <span id="pondMeta"><span id="pondCount">0</span> cards</span>
+            <span class="gf-pond-warning hidden" id="pondWarning"></span>
           </div>
         </div>
         <div class="gf-event-banner" id="eventBanner" role="status" aria-live="polite" aria-atomic="true"></div>
@@ -149,6 +163,7 @@
       <div class="gf-final-books hidden" id="finalBooks"></div>
       <div class="gf-final-hands hidden" id="finalHands"></div>
       <div class="gf-final-stats hidden" id="finalStats"></div>
+      <div class="gf-record-strip hidden" id="finalRecordStrip"></div>
       <div class="leaderboard hidden" id="finalBoard"></div>
       <button class="gf-primary-btn hidden" id="playAgainBtn">Play again</button>
       <a href="/" class="gf-secondary-btn">Back to games</a>
