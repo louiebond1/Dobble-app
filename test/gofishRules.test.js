@@ -6,6 +6,7 @@ const {
   buildFinalOrder,
   legalAskRanks,
   isLuckyCatch,
+  shouldEnterClosingPhase,
   shouldKeepTurn,
   determineGoFishWinner,
 } = require('../lib/gofishRules');
@@ -24,6 +25,18 @@ test('only ranks held may be asked for', () => {
 test('successful asks keep the turn only in normal play', () => {
   assert.equal(shouldKeepTurn({ successfulAsk: true }), true);
   assert.equal(shouldKeepTurn({ successfulAsk: true, finalRound: true }), false);
+});
+
+test('Closing Phase starts at five pond cards and removes chain turns', () => {
+  assert.equal(shouldEnterClosingPhase(6), false);
+  assert.equal(shouldEnterClosingPhase(5), true);
+  assert.equal(shouldEnterClosingPhase(1), true);
+  assert.equal(shouldEnterClosingPhase(0), false);
+  assert.equal(shouldKeepTurn({ successfulAsk: true, closingPhase: true }), false);
+  assert.equal(
+    shouldKeepTurn({ askedRank: '8', drawnCard: { rank: '8', suit: '♣' }, closingPhase: true }),
+    false
+  );
 });
 
 test('only the exact requested draw is a Lucky Catch', () => {
