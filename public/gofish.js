@@ -1560,6 +1560,7 @@ let soloLastBookOwner = null;
 let soloCpuMemory = new Map();
 let soloMemoryClock = 0;
 let soloStats = null;
+let lastCpuDecision = null;
 
 function freshSoloStats() {
   return {
@@ -1715,6 +1716,8 @@ function chooseCpuRank() {
   // Deliberately only reads CPU cards + public memory. It never inspects
   // soloHands.me, so the CPU cannot cheat.
   decayCpuMemory();
+  soloMemoryClock += 1;
+
   const counts = new Map();
   for (const card of soloHands.cpu) counts.set(card.rank, (counts.get(card.rank) || 0) + 1);
   const options = [...counts.entries()];
@@ -1722,22 +1725,32 @@ function chooseCpuRank() {
 
   const weighted = options.map(([rank, count]) => {
     const memory = soloCpuMemory.get(rank);
+    const age = memory ? Math.max(0, soloMemoryClock - memory.seenAt) : 0;
+    const recency = memory ? Math.max(.36, 1 - age * .10) : 0;
+    const memoryScore = memory ? memory.confidence * recency : 0;
+
     let weight = 1 + count * 3;
-    if (count >= 2) weight += 2;
-    if (count >= 3) weight += 4;
-    if (memory) weight += memory.confidence * 7;
-    // Small noise keeps identical positions from feeling scripted.
-    weight += Math.random() * 2.5;
-    return { rank, weight };
+    if (count >= 2) weight += 2.5;
+    if (count >= 3) weight += 4.5;
+    if (memory) weight += memoryScore * 7.5;
+    weight += Math.random() * 2.4;
+
+    return {
+      rank,
+      count,
+      memoryScore,
+      weight,
+      reason: memoryScore >= 2.2 ? 'memory' : count >= 2 ? 'cluster' : 'probe',
+    };
   });
 
   const total = weighted.reduce((sum, item) => sum + item.weight, 0);
   let roll = Math.random() * total;
   for (const item of weighted) {
     roll -= item.weight;
-    if (roll <= 0) return item.rank;
+    if (roll <= 0) return item;
   }
-  return weighted[weighted.length - 1].rank;
+  return weighted[weighted.length - 1];
 }
 
 async function soloBeginTurn() {
@@ -1826,18 +1839,30 @@ function runCpuTurn() {
     ![GF_PHASES.CPU_THINKING, GF_PHASES.FINAL_ROUND_CPU].includes(gamePhase)
   ) return;
 
-  const rank = chooseCpuRank();
-  if (!rank) {
-    if (soloFinal.active) {
-      soloSkipFinalTurn('cpu');
-    } else {
-      soloBeginTurn();
-    }
+  const decision = chooseCpuRank();
+  if (!decision) {
+    if (soloFinal.active) soloSkipFinalTurn('cpu');
+    else soloBeginTurn();
     return;
   }
 
+  lastCpuDecision = decision;
+  if (decision.reason === 'memory') {
+    showCpuBubble(
+      cpuLine([`I remember ${rankPlural(decision.rank)}.`, `You showed me ${rankPlural(decision.rank)} earlier.`, `I haven't forgotten ${rankPlural(decision.rank)}.`]),
+      { memory: true, duration: 1150 }
+    );
+  } else if (decision.reason === 'cluster' && Math.random() < .72) {
+    showCpuBubble(cpuLine(['This feels promising.', 'Worth asking.', 'I like this one.']), { duration: 900 });
+  } else if (Math.random() < .34) {
+    showCpuBubble(cpuLine(['Let’s see.', 'Hmm.', 'Worth a try.']), { duration: 760 });
+  }
+
   setGamePhase(GF_PHASES.CPU_ASKING);
-  soloResolveAsk('cpu', 'me', rank, 'CPU', soloName);
+  setTimeout(() => {
+    if (!soloGameActive || soloTurn !== 'cpu') return;
+    soloResolveAsk('cpu', 'me', decision.rank, 'CPU', soloName);
+  }, decision.reason === 'memory' ? 420 : 260);
 }
 
 async function soloResolveAsk(askerKey, targetKey, rank, askerName, targetName) {
