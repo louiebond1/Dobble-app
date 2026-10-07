@@ -473,12 +473,16 @@ async function presentPendingClosingRoundIntro() {
   pendingClosingRoundIntro = null;
   try {
     await showClosingRoundIntro(info);
-    const state = pendingGameState || lastGameState;
-    pendingGameState = null;
-    if (state) applyGameState(state);
   } finally {
+    // Clear the intro lock before re-rendering the playable Closing Phase.
+    // Otherwise applyGameState() sees closingRoundIntroShowing === true,
+    // re-adds .gf-resolving and leaves the ask tray untappable.
     closingRoundIntroShowing = false;
   }
+
+  const state = pendingGameState || lastGameState;
+  pendingGameState = null;
+  if (state) applyGameState(state);
 }
 
 async function showFinalRoundIntro(info = pendingFinalRoundIntro || {}) {
@@ -511,12 +515,14 @@ async function presentPendingFinalRoundIntro() {
   pendingFinalRoundIntro = null;
   try {
     await showFinalRoundIntro(info);
-    const state = pendingGameState || lastGameState;
-    pendingGameState = null;
-    if (state) applyGameState(state);
   } finally {
+    // Same rule as Closing Phase: unlock before applying the interactive state.
     finalRoundIntroShowing = false;
   }
+
+  const state = pendingGameState || lastGameState;
+  pendingGameState = null;
+  if (state) applyGameState(state);
 }
 
 const RANKS = ['A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K'];
