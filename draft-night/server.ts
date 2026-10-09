@@ -44,7 +44,7 @@ function buildPrompt(r:R,p:number,count=r.players[p].items.length,previous=0){
  const settings:Record<string,string>={house:'A modest realistic UK '+base+' with no swimming pool, vast grounds or mansion. Every player starts with an identical plain property.',holiday:'A holiday collection.',fast:'An editorial tabletop food collection.',countries:'A travel collection.',sports:'A sports collection.'};
  return 'Photorealistic high-quality game collection. '+(settings[r.theme]||'The base is specifically '+base+'. Every player starts with this exact same base. If pancakes show pancakes. If a car show a car. Never reinterpret the base as a house or as a person.')+
  ' Show the whole base at a realistic subject-appropriate camera angle. No default aerial estate shot. Keep the same base, composition and scale throughout. Include ONLY purchased additions from the manifest. Never add an unpurchased mansion, pool, garden, house, object, vehicle, person or luxury feature. '+
- (previous?'Edit the prior image faithfully, preserving the base and ALL previous additions. Add only the latest item.':'Show the plain base with the first purchased addition.')+
+ (previous?'Edit the prior image faithfully. Preserve camera, framing, scale, the base and ALL previous additions. Add only the latest item.':'Show the plain base with the first purchased addition.')+
  '\\nCOMPLETE PURCHASED INVENTORY:\\n'+manifest.join('\\n')+
  '\\nNEW ADDITIONS: '+manifest.slice(previous).join('; ')+'. Each addition is visually separate and correctly attached to the base. No unlisted upgrades.';
 
