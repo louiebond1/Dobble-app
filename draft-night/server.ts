@@ -45,7 +45,7 @@ function buildPrompt(r:R,p:number,count=r.players[p].items.length,previous=0){
  ' Fixed elevated three-quarter camera, natural light, realistic materials, uncluttered composition. No emojis, invented upgrades, text or UI. '+
  (previous?'Edit the supplied previous world. Preserve camera, architecture, lighting and ALL existing purchased features in their positions. Add only the newly acquired features; extend the scene if necessary.':'Create the initial world, leaving room for future additions.')+
  '\nCOMPLETE PURCHASED INVENTORY (each must be individually recognisable):\n'+manifest.join('\n')+
- '\nNEW ADDITIONS: '+manifest.slice(previous).join('; ')+'. Depict items literally: a lake is a lake, a guest villa is a separate villa, go-karting requires a kart circuit and karts. Do not substitute a generic pool, house or road.';
+ '\nNEW ADDITIONS: '+manifest.slice(previous).join('; ')+'. Treat the inventory as an exact whitelist. Nothing outside it may appear as an upgrade. Use the supplied descriptions literally; do not substitute unrelated features.';
 }
 async function aiImage(r:R,p:number){
  const worker=r.code+':'+p; r.aiStates??=Array(r.joined).fill('idle');
