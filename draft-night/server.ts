@@ -1,88 +1,704 @@
-type P={name:string;budget:number;items:Array<{index:number;price:number}>};
-type R={code:string;theme:string;status:string;round:number;phase:string;bid:number;leader:number|null;passed:boolean[];wonBy:number|null;soldFor:number;players:P[];cpu?:boolean;skipCount?:number;skippedNames?:string[];revision:number;tokens:string[];capacity:number;joined:number;quotas:number[];history:Array<{index:number;winner:number;price:number}>;created:number;twistIndex:number;startingBudget:number;itemDeck:string[][];aiStates?:string[];aiVersions:number[];aiVerdict:string|null;customTitle?:string;customItems?:string[][];houseBase?:string};
-const houseTypes:string[][]=[['Terraced House','','A modest brick terraced house with a small rear garden'],['Semi-detached House','','A conventional UK semi-detached house with a driveway'],['Detached House','','A normal suburban detached home and ordinary garden'],['Country Cottage','','A cosy stone cottage with a modest garden'],['Modern Townhouse','','A narrow contemporary townhouse on a residential street'],['Bungalow','','A single-storey bungalow with a small garden'],['Lakeside Cabin','','A compact timber cabin beside a small lake'],['Small Villa','','A modest single-family villa without luxury amenities'],['Farmhouse','','A traditional farmhouse with a practical garden'],['City Apartment','','A stylish city apartment with a small balcony']];
-const rooms=new Map<string,R>();
-const lastDraws=new Map<string,Set<string>>();
-const itemPools={"house":[["Swimming Pool","photo-1576013551627-0cc20b96c2a7","A resort-style infinity pool"],["Home Cinema","photo-1489599849927-2ee91cede3ba","Private cinema with plush seating"],["Football Pitch","photo-1522778119026-d647f0596c20","Your very own floodlit football pitch"],["Games Room","https://img.chooseacottage.co.uk/property/112/1200/11269250.jpg","A dedicated games room with a full-size pool table."],["Rooftop Terrace","photo-1493246318656-5bfd4cfb29b8","An open-air lounge with panoramic city views."],["Private Gym","photo-1534438327276-14e5300c3a48","Everything for your dream workout"],["Hot Tub","https://www.kutjevo.com/img/restaurant/accommodation-gallery/image-01.jpg","A bubbling outdoor spa for evenings under the sky."],["Tennis Court","photo-1595435934249-5df7ed86e1c0","Your own full-size tennis court"],["Wine Cellar","photo-1554598286-ed7bfd1dedca","Rows of bottles in your own temperature-controlled cellar."],["Private Beach","photo-1507525428034-b723cf961d3e","A stretch of beach just for you"],["Outdoor Cinema","https://www.thelivingroomcinema.co.uk/articleimages/unnamed-6.png","A garden screen and deckchairs for film nights outdoors."],["Go-Kart Track","photo-1560990817-2a0037ed1246","A private circuit with tight corners and racing karts."],["Private Lake","photo-1501785888041-af3ef285b470","A mountain-framed lake for quiet swims and rowing."],["Basketball Court","photo-1546519638-68e109498ffc","A private hoop and court for daily games."],["Supercar Garage","https://s.yimg.com/ny/api/res/1.2/cccEoMyJL99Rl9Xl_UTuHg--/YXBwaWQ9aGlnaGxhbmRlcjt3PTk2MDtoPTY0MDtjZj13ZWJw/https%3A/media.zenfs.com/en/tri_city_herald_mcclatchy_articles_655/e5d951892a5744321a1d80a73a8421e0","A showroom garage filled with performance cars."],["Guest Villa","photo-1613490493576-7fde63acd811","A separate modern villa with its own pool for visiting friends."],["Secret Bunker","https://www.creativetourist.com/app/uploads/2016/08/AMG_3081-800x533.jpg","An underground command room hidden beneath the estate."],["Indoor Waterpark","photo-1576013551627-0cc20b96c2a7","A private waterpark with slides"],["Recording Studio","photo-1598488035139-bdbb2231ce04","Your own professional music studio"],["Library Lounge","photo-1507842217343-583bb7270b66","A beautiful two-storey library"],["Private Bowling Alley","photo-1511512578047-dfb367046420","A bowling lane at home"],["Home Observatory","photo-1446776811953-b23d57bd21aa","Stargazing from your own dome"],["Garden Maze","photo-1470252649378-9c29740c9fa8","An elaborate garden labyrinth"],["Outdoor Kitchen","photo-1600607687920-4e2a09cf159d","A chef-ready terrace kitchen"],["Climbing Wall","photo-1522163182402-834f871fd851","A towering indoor climbing wall"],["Music Festival Garden","photo-1459749411175-04bf5292ceea","Your own backyard concert stage"],["Glass Greenhouse","photo-1416879595882-3373a0480b5b","A tropical greenhouse"],["Infinity Slide","photo-1530549387789-4c1017266635","A huge slide into your pool"],["Padel Courts","photo-1554068865-24cecd4e34b8","Private padel complex"],["Indoor Ice Rink","photo-1515703407324-5f753afd8be8","Skate at home"],["Underground Aquarium","photo-1544551763-46a013bb70d5","An enormous marine aquarium"],["Arcade Hall","photo-1511512578047-dfb367046420","Retro and modern games"],["Mini Golf Course","photo-1535131749006-b7f58c99034b","Your own putting challenge"],["Forest Zipline","photo-1448375240586-882707db888b","Fly across your grounds"],["Floating Dock","photo-1501785888041-af3ef285b470","A private lakeside jetty"],["Indoor Spa","photo-1540555700478-4be289fbecef","Sauna, steam and plunge pools"],["Private Art Gallery","photo-1577083552431-6e5fd01aa342","A gallery for your collection"]],"holiday":[["Private Yacht","https://www.centralyachtagent.com/yachtadmin/yachtlg/yacht10184/10184brochure1.jpg","Your own crewed yacht for a day on open water."],["Helicopter Ride","photo-1589907915524-b7375479c569","A helicopter flight above snow-covered mountain peaks."],["Michelin Dinner","photo-1414235077428-338989a2e8c0","Unforgettable fine dining"],["Safari","photo-1516426122078-c23e76319801","A once-in-a-lifetime adventure"],["Scuba Diving","photo-1544551763-46a013bb70d5","Explore the reef"],["Sunset Cruise","https://media.tacdn.com/media/attractions-splice-spp-674x446/06/6e/ed/d1.jpg","An evening sailing trip as the sun drops over the ocean."],["Spa Retreat","https://www.aquasana.ie/content/as/ie/en/news-and-offers/news/returning-to-our-roots/jcr%3Acontent/root/container/hero.coreimg.jpeg/1779449395688/outdoor-pool-ie-hero.jpeg","A forest spa with a heated pool and space to unwind."],["Hot Air Balloon","photo-1634578344521-f7eb2d27df68","A colourful balloon flight with wide-open sky views."],["VIP Concert","photo-1459749411175-04bf5292ceea","Front row under the lights"],["Private Island","https://aerialbvi.com/wp-content/uploads/2023/07/secluded-Caribbean-Island.jpg","A secluded tropical island surrounded by shallow turquoise sea."],["Overwater Villa","photo-1514282401047-d79a71a590e8","A lagoon villa with direct access to the water."],["Private Chef","https://images.squarespace-cdn.com/content/v1/67285211683ded21fb6391d6/b2edd1b3-4a66-4ad8-8eed-2236b1723085/8U8A8782.jpg","A chef prepares a personalised dinner in your own kitchen."],["Luxury Train","https://img.belmond.com/f_auto/t_3600x2806/photos/vso/vso-acc-cabin-suite-paris06.jpg","A private railway suite with polished wood and velvet seating."],["Supercar Rental","photo-1503376780353-7e6692767b70","Take a high-performance sports car out for the day."],["Jungle Treehouse","https://images.trvl-media.com/lodging/107000000/106250000/106240300/106240295/0e769214.jpg?impolicy=resizecrop&ra=fill&rh=575&rw=575","A bamboo retreat raised above the tropical forest floor."],["Desert Glamping","https://autentic.world/content/uploads/sites/3/2024/04/Autentic-Jack-Bell-Tent-5.2.jpg-768x538.jpg","A furnished canvas tent among desert dunes."],["Beach Club","https://dynamic-media-cdn.tripadvisor.com/media/photo-o/25/27/51/c6/west-bay.jpg?h=-1&s=1&w=700","Shaded daybeds and drinks beside the sea."],["Northern Lights Cabin","photo-1531366936337-7c912a4589a7","Watch the aurora from bed"],["Italian Road Trip","photo-1533105079780-92b9be482077","A scenic coastal drive"],["Alpine Chalet","photo-1510798831971-661eb04b3739","A chalet with mountain views"],["Volcano Hike","photo-1464822759023-fed622ff2c3b","Adventure on volcanic slopes"],["Luxury Sleeper Train","photo-1474487548417-781cb71495f3","Cross a continent in a sleeper cabin"],["Private Waterfall","photo-1433086966358-54859d0ed716","A waterfall all to yourself"],["Seaplane Arrival","photo-1474302770737-173ee21bab63","Fly straight to the islands"],["Vineyard Escape","photo-1506377585622-bedcbb027afc","Stay among the vineyards"],["Snowmobile Safari","photo-1517299321609-52687d1bc55a","Race across snowy landscapes"],["Desert Stargazing","photo-1500534623283-312aade485b7","A night beneath the desert sky"],["Antarctic Expedition","photo-1517299321609-52687d1bc55a","An expedition into the ice"],["Japan Cherry Blossom Trip","photo-1493976040374-85c8e12f0c0e","Spring among the cherry blossoms"],["Greek Island Villa","photo-1533105079780-92b9be482077","A cliffside escape"],["African Safari Lodge","photo-1516426122078-c23e76319801","A lodge beside wild animals"],["Maldives Bungalow","photo-1514282401047-d79a71a590e8","A villa above turquoise water"],["Norwegian Fjord Cruise","photo-1501785888041-af3ef285b470","Sail through dramatic fjords"],["Bali Jungle Pool","photo-1576013551627-0cc20b96c2a7","An infinity pool in the jungle"],["Swiss Mountain Helicopter","photo-1474302770737-173ee21bab63","See the Alps from above"],["French Riviera Yacht","photo-1544551763-46a013bb70d5","Sail the Mediterranean"],["Iceland Hot Springs","photo-1540555700478-4be289fbecef","Soak in geothermal water"]],"fast":[["McDonald’s","https://runews24.ru/assets/components/phpthumbof/cache/c941c75294d2b614038db0e778d0707d.6a856ca6cd9ae14d34cf1b572b5935db.jpg","Golden arches, burgers and fries."],["KFC","https://www.mashed.com/img/gallery/kentuckys-favorite-fried-chicken-restaurant-chain-might-surprise-you/if-not-kentucky-then-where-1609863827.jpg","The Colonel’s fried chicken restaurant."],["Five Guys","https://dynl.mktgcdn.com/p/gLIECK525Z7SyoYar19mSfvqxAW-IwEuCe_0II7Rfqg/1330x1330.jpg","Burgers, hand-cut fries and custom toppings."],["Nando’s","https://i.insider.com/611eb50b348087001968321e?auto=webp&format=jpeg&width=600","Flame-grilled peri-peri chicken."],["Taco Bell","https://eu-images.contentstack.com/v3/assets/bltea7aee2fca050a19/blt232b491656909725/6748784fe82afa1786682175/taco_20bell_20UK.jpg?width=1000","Tacos, burritos and late-night cravings."],["Subway","https://www.joonsquare.co.uk/usermanage/image/business/subway-isle-of-wight-eng-17841/subway-isle-of-wight-eng-subway-providence-corner-01.jpg","Freshly assembled subs with your choice of fillings."],["Domino’s","https://xtb.scdn5.secure.raxcdn.com/default/0104/16/60b33f96-76f5-42ac-adff-f41ad0993be6/shutterstock-2480623481.jpg","Pizza delivery and garlic dips."],["Shake Shack","https://images1.loopnet.com/i2/nHVPDAIF3AwOatK4w1PdKhifc6ZdwUH1AndxjTHoA7I/110/1371-Huguenot-Rd-Midlothian-VA-Primary-Photo-1-Large.jpg","ShackBurgers, crinkle-cut fries and shakes."],["Burger King","https://s.yimg.com/ny/api/res/1.2/fPrmRKfcoxxYAGVdHZvPfQ--/YXBwaWQ9aGlnaGxhbmRlcjt3PTEyMDA7aD02NzU-/https%3A/media.zenfs.com/en/verdict_food_service_772/281b80895d26c1c202892077df5f65db","The flame-grilled home of the Whopper."],["Greggs","https://media.timeout.com/images/105951669/image.jpg","Sausage rolls, bakes and coffee on the go."],["Wingstop","https://images.prismic.io/hammerson/aAtN5fIqRLdaBm03_Wing-Stop.jpg?auto=format%2Ccompress","Wings, tenders and seasoned fries."],["Popeyes","https://www.foodserviceequipmentjournal.com/cloud/2024/01/22/V3XAjnOY-Popeyes-UK-1200x800.jpg","Louisiana-style fried chicken and sandwiches."],["Pizza Hut","https://image.demorgen.be/57319080/feature-crop/1200/675/pizza-hut-in-wemmel-opnieuw-overvallen","Pan pizzas and a sit-down pizza night."],["Pret A Manger","https://s.yimg.com/ny/api/res/1.2/4a9sKpL8uN0AUPd_aehx4g--/YXBwaWQ9aGlnaGxhbmRlcjt3PTI0MDA7aD0xMzUw/https%3A/media.zenfs.com/en/snappa.ukfinance/c857c5f0fff547f9698e6952c10fe749","Sandwiches, pastries and freshly made coffee."],["Chipotle","https://upload.wikimedia.org/wikipedia/commons/e/e9/Chipotle_Mexican_Grill_Restaurant.jpg","Burritos and bowls assembled to order."],["Wagamama","https://dynamic-media-cdn.tripadvisor.com/media/photo-o/14/f1/d8/ba/wagamama-whiteley.jpg?h=800&s=1&w=800","Ramen, rice bowls and Japanese-inspired dishes."],["Leon","https://www.daikin.eu/en_us/about/case-studies/leon/_jcr_content/root/main_container/header/image-and-text.coreimg.jpeg/1651304133749/header-leon-restaurant-1645px1080px.jpeg","Rice boxes, wraps and naturally fast food."],["In-N-Out","photo-1568901346375-23c9450c58cd","California-style burgers"],["Cinnabon","photo-1509440159596-0249088772ff","Warm cinnamon rolls"],["Krispy Kreme","photo-1551024506-0bccd828d307","Fresh glazed doughnuts"],["Jollibee","photo-1562967914-608f82629710","Crispy fried chicken"],["PizzaExpress","photo-1513104890138-7c749659a591","Freshly baked pizza"],["German Doner Kebab","photo-1529006557810-274b9b2fc783","A loaded döner kebab"],["Tortilla","photo-1512621776951-a57141f2eefd","Burrito and taco bowls"],["Tim Hortons","photo-1509042239860-f550ce710b93","Coffee and doughnuts"],["Itsu","photo-1569718212165-3a8278d5f624","Rice bowls and noodles"],["Little Caesars","photo-1513104890138-7c749659a591","Fresh hot pizza"],["Chick-fil-A","photo-1562967914-608f82629710","Chicken sandwiches and waffle fries"],["Wendy's","photo-1568901346375-23c9450c58cd","Burgers and frosty desserts"],["Taco John's","photo-1551504734-5ee1c4a1479b","Crunchy tacos and sides"],["Shakeaway","photo-1572490122747-3968b75cc699","Thick milkshakes"],["Wasabi","photo-1569718212165-3a8278d5f624","Sushi and hot rice bowls"],["Papa Johns","photo-1513104890138-7c749659a591","Hot pizza and garlic dip"],["Fireaway Pizza","photo-1513104890138-7c749659a591","Fast-fired pizza"],["Gail's Bakery","photo-1509440159596-0249088772ff","Fresh pastries"],["Joe & The Juice","photo-1544145945-f90425340c7e","Fresh juice and sandwiches"],["Baskin-Robbins","photo-1501446529957-6226bd447c46","Scoops of ice cream"]],"countries":[["Japan","photo-1493976040374-85c8e12f0c0e","Neon cities and mountain escapes"],["Italy","photo-1748040187622-4886c2783369","Venetian canals, historic cities and Mediterranean coastlines."],["Maldives","photo-1514282401047-d79a71a590e8","Overwater villas"],["United States","photo-1485738422979-f5c462d49f74","Everything from NYC to Hawaii"],["Greece","photo-1613395877344-13d4a8e0d49e","Sun-drenched islands"],["Switzerland","photo-1664954628844-a83af173ce74","Snow-covered Alpine peaks and mountain villages."],["Brazil","photo-1544989165-6648f2e0224c","Rio, Sugarloaf Mountain and sweeping Atlantic bays."],["Thailand","photo-1528181304800-259b08848526","Tropical adventures"],["Australia","photo-1506973035872-a4ec16b8e8d9","Wild coastlines"],["Iceland","photo-1476610182048-b716b8518aae","Waterfalls and northern lights"],["Norway","photo-1505731324189-3d0afbeafcbf","Deep fjords beneath steep, forested mountains."],["New Zealand","photo-1531804226530-70f8004aa44e","South Island lakes framed by the Southern Alps."],["Canada","photo-1590080603530-ab883f5f5763","Turquoise lakes and forest trails in the Canadian Rockies."],["South Korea","photo-1637070901110-c06a08018c35","Seoul after dark, riverside neighbourhoods and mountain escapes."],["Portugal","photo-1726182408945-3bbed11afa2c","Lisbon rooftops, Atlantic beaches and winding old streets."],["South Africa","https://cnn-arabic-images.cnn.io/cloudinary/image/upload/w_1600%2Ch_900%2Cc_fill%2Cq_auto%2Cg_center/cnnarabic/2023/04/05/images/237005.jpg","Cape Town, Table Mountain and the Atlantic coastline."],["Icelandic Highlands","https://media.tacdn.com/media/attractions-splice-spp-720x480/0f/1c/73/ea.jpg","Remote volcanic valleys covered in bright green moss."],["Vietnam","photo-1528127269322-539801943592","Food and dramatic scenery"],["Morocco","photo-1500530855697-b586d89ba3ee","Markets and desert adventures"],["Finland","photo-1517299321609-52687d1bc55a","Lakes, forests and northern lights"],["Argentina","photo-1464822759023-fed622ff2c3b","Patagonia and Buenos Aires"],["Chile","photo-1501785888041-af3ef285b470","The Andes and desert landscapes"],["Peru","photo-1531065208531-4036c0dba3ca","Machu Picchu and mountain trails"],["Mexico","photo-1512813195386-6cf811ad3542","Cuisine, coast and culture"],["Indonesia","photo-1537996194471-e657df975ab4","Tropical islands and volcanoes"],["Philippines","photo-1507525428034-b723cf961d3e","Turquoise lagoons and islands"],["Turkey","photo-1570939274717-7eda259b50ed","Istanbul and Cappadocia"],["Egypt","photo-1503177119275-0aa32b3a9368","Ancient pyramids and desert"],["Kenya","photo-1516426122078-c23e76319801","Wildlife and safari plains"],["Tanzania","photo-1516426122078-c23e76319801","Serengeti and Kilimanjaro"],["Nepal","photo-1464822759023-fed622ff2c3b","Himalayan mountain trails"],["Ireland","photo-1473448912268-2022ce9509d8","Green cliffs and countryside"],["Croatia","photo-1500375592092-40eb2168fd21","Adriatic coastline"],["Slovenia","photo-1501785888041-af3ef285b470","Alpine lakes and forests"],["Singapore","photo-1519501025264-65ba15a82390","City skyline and food"],["Malaysia","photo-1537996194471-e657df975ab4","Rainforests and islands"],["Denmark","photo-1513622470522-26c3c8a854bc","Copenhagen and coastlines"],["Austria","photo-1510798831971-661eb04b3739","Alpine towns and skiing"],["Colombia","photo-1512813195386-6cf811ad3542","Caribbean coasts and colourful cities"]],"sports":[["Football","photo-1522778119026-d647f0596c20","The beautiful game"],["Formula 1","https://cdn-1.motorsport.com/images/amp/2d1vB5nY/s6/lewis-hamilton-ferrari.jpg","Grand Prix racing at the limit of speed and precision."],["Basketball","photo-1546519638-68e109498ffc","The court is yours"],["Tennis","photo-1595435934249-5df7ed86e1c0","Grand Slam energy"],["Golf","photo-1535131749006-b7f58c99034b","The perfect round"],["Cricket","photo-1540747913346-19e32dc3e97e","A summer classic"],["Boxing","photo-1549719386-74dfcbf7dbed","The big fight"],["Rugby","https://images.squarespace-cdn.com/content/v1/5874942e5016e1722bc622f3/1634806169405-FACGYZR89OXB215DU6XL/rugby-sport-28.jpg","Tackles, tries and a full team driving for the line."],["Skiing","photo-1664436341001-b02974ae7524","Fresh powder and steep Alpine descents."],["Swimming","photo-1530549387789-4c1017266635","Poolside glory"],["Darts","photo-1704823822189-7a4cc1bc3fab","A dartboard, a steady hand and a finish on the double."],["Volleyball","photo-1765108922700-6d6f37f582c2","Fast rallies, powerful spikes and blocks at the net."],["Cycling","photo-1747933663734-e033973a5498","A road-racing peloton battling for the finish."],["Ice Hockey","https://images.squarespace-cdn.com/content/v1/647dbaab92cabe153e61b6e7/1685961427843-0FUVEJQ40P2MQJCYOWAQ/pexels-pixabay-33286.jpg","Skates, sticks and fast puck battles on the ice."],["Surfing","photo-1760755958528-10fcf3d972c1","Catch a clean wave and ride it to shore."],["Baseball","photo-1624375664562-fff61869fe8f","Batters, pitchers and the chase for a home run."],["Badminton","photo-1729166241032-5b339506a0d7","Quick footwork and shuttlecock rallies across the net."],["Rock Climbing","photo-1522163182402-834f871fd851","Climb a sheer rock face"],["Snowboarding","photo-1486911278844-a81c5267e227","Ride fresh mountain powder"],["Sailing","photo-1544551763-46a013bb70d5","Race across open water"],["Table Tennis","photo-1622279457486-62dcc4a431d6","A quick reflex showdown"],["Horse Riding","photo-1534307671554-38a6d9b7f1bb","Ride across beautiful trails"],["Kayaking","photo-1507525428034-b723cf961d3e","Paddle along dramatic coastline"],["Skateboarding","photo-1520045892732-304bc3ac5d8e","Tricks at the skatepark"],["American Football","photo-1504016798967-59a258e9386d","Touchdowns and big plays"],["Fencing","photo-1517836357463-d25dfeac3438","Fast reflexes and technique"],["Gymnastics","photo-1540539234-c14a20fb7c7b","Balance and agility"],["Rowing","photo-1500534623283-312aade485b7","Race across the lake"],["Triathlon","photo-1552674605-db6ffd4facb5","Swim, ride and run"],["Martial Arts","photo-1517836357463-d25dfeac3438","Discipline and competition"],["Motor Racing","photo-1552674605-db6ffd4facb5","Speed around the circuit"],["Squash","photo-1554068865-24cecd4e34b8","Fast court rallies"],["Water Polo","photo-1530549387789-4c1017266635","Team sport in the pool"],["Surf Lifesaving","photo-1502680390469-be75c86b636f","Ocean skills and endurance"],["Archery","photo-1511512578047-dfb367046420","Precision at the target"],["BMX","photo-1485965120184-e220f721d03e","Tricks and bike racing"]]};
-const photoCorrections={"Go-Kart Track": ["photo-1560990817-2a0037ed1246", "A private circuit with tight corners and racing karts."], "Wine Cellar": ["photo-1554598286-ed7bfd1dedca", "Rows of bottles in your own temperature-controlled cellar."], "Rooftop Terrace": ["photo-1493246318656-5bfd4cfb29b8", "An open-air lounge with panoramic city views."], "Hot Tub": ["https://www.kutjevo.com/img/restaurant/accommodation-gallery/image-01.jpg", "A bubbling outdoor spa for evenings under the sky."], "Outdoor Cinema": ["https://www.thelivingroomcinema.co.uk/articleimages/unnamed-6.png", "A garden screen and deckchairs for film nights outdoors."], "Secret Bunker": ["https://www.creativetourist.com/app/uploads/2016/08/AMG_3081-800x533.jpg", "An underground command room hidden beneath the estate."], "Italy": ["photo-1748040187622-4886c2783369", "Venetian canals, historic cities and Mediterranean coastlines."], "Switzerland": ["photo-1664954628844-a83af173ce74", "Snow-covered Alpine peaks and mountain villages."], "Brazil": ["photo-1544989165-6648f2e0224c", "Rio, Sugarloaf Mountain and sweeping Atlantic bays."], "Norway": ["photo-1505731324189-3d0afbeafcbf", "Deep fjords beneath steep, forested mountains."], "Canada": ["photo-1590080603530-ab883f5f5763", "Turquoise lakes and forest trails in the Canadian Rockies."], "New Zealand": ["photo-1531804226530-70f8004aa44e", "South Island lakes framed by the Southern Alps."], "South Korea": ["photo-1637070901110-c06a08018c35", "Seoul after dark, riverside neighbourhoods and mountain escapes."], "Portugal": ["photo-1726182408945-3bbed11afa2c", "Lisbon rooftops, Atlantic beaches and winding old streets."], "South Africa": ["https://cnn-arabic-images.cnn.io/cloudinary/image/upload/w_1600%2Ch_900%2Cc_fill%2Cq_auto%2Cg_center/cnnarabic/2023/04/05/images/237005.jpg", "Cape Town, Table Mountain and the Atlantic coastline."], "Icelandic Highlands": ["https://media.tacdn.com/media/attractions-splice-spp-720x480/0f/1c/73/ea.jpg", "Remote volcanic valleys covered in bright green moss."], "Formula 1": ["https://cdn-1.motorsport.com/images/amp/2d1vB5nY/s6/lewis-hamilton-ferrari.jpg", "Grand Prix racing at the limit of speed and precision."], "Rugby": ["https://images.squarespace-cdn.com/content/v1/5874942e5016e1722bc622f3/1634806169405-FACGYZR89OXB215DU6XL/rugby-sport-28.jpg", "Tackles, tries and a full team driving for the line."], "Skiing": ["photo-1664436341001-b02974ae7524", "Fresh powder and steep Alpine descents."], "Darts": ["photo-1704823822189-7a4cc1bc3fab", "A dartboard, a steady hand and a finish on the double."], "Volleyball": ["photo-1765108922700-6d6f37f582c2", "Fast rallies, powerful spikes and blocks at the net."], "Cycling": ["photo-1747933663734-e033973a5498", "A road-racing peloton battling for the finish."], "Ice Hockey": ["https://images.squarespace-cdn.com/content/v1/647dbaab92cabe153e61b6e7/1685961427843-0FUVEJQ40P2MQJCYOWAQ/pexels-pixabay-33286.jpg", "Skates, sticks and fast puck battles on the ice."], "Surfing": ["photo-1760755958528-10fcf3d972c1", "Catch a clean wave and ride it to shore."], "Baseball": ["photo-1624375664562-fff61869fe8f", "Batters, pitchers and the chase for a home run."], "Badminton": ["photo-1729166241032-5b339506a0d7", "Quick footwork and shuttlecock rallies across the net."], "Private Yacht": ["https://www.centralyachtagent.com/yachtadmin/yachtlg/yacht10184/10184brochure1.jpg", "Your own crewed yacht for a day on open water."], "Helicopter Ride": ["photo-1589907915524-b7375479c569", "A helicopter flight above snow-covered mountain peaks."], "Hot Air Balloon": ["photo-1634578344521-f7eb2d27df68", "A colourful balloon flight with wide-open sky views."], "Private Chef": ["https://images.squarespace-cdn.com/content/v1/67285211683ded21fb6391d6/b2edd1b3-4a66-4ad8-8eed-2236b1723085/8U8A8782.jpg", "A chef prepares a personalised dinner in your own kitchen."], "Luxury Train": ["https://img.belmond.com/f_auto/t_3600x2806/photos/vso/vso-acc-cabin-suite-paris06.jpg", "A private railway suite with polished wood and velvet seating."], "Jungle Treehouse": ["https://images.trvl-media.com/lodging/107000000/106250000/106240300/106240295/0e769214.jpg?impolicy=resizecrop&ra=fill&rh=575&rw=575", "A bamboo retreat raised above the tropical forest floor."], "Desert Glamping": ["https://autentic.world/content/uploads/sites/3/2024/04/Autentic-Jack-Bell-Tent-5.2.jpg-768x538.jpg", "A furnished canvas tent among desert dunes."], "Sunset Cruise": ["https://media.tacdn.com/media/attractions-splice-spp-674x446/06/6e/ed/d1.jpg", "An evening sailing trip as the sun drops over the ocean."], "Private Island": ["https://aerialbvi.com/wp-content/uploads/2023/07/secluded-Caribbean-Island.jpg", "A secluded tropical island surrounded by shallow turquoise sea."], "Beach Club": ["https://dynamic-media-cdn.tripadvisor.com/media/photo-o/25/27/51/c6/west-bay.jpg?h=-1&s=1&w=700", "Shaded daybeds and drinks beside the sea."], "Private Lake": ["photo-1501785888041-af3ef285b470", "A mountain-framed lake for quiet swims and rowing."], "Guest Villa": ["photo-1613490493576-7fde63acd811", "A separate modern villa with its own pool for visiting friends."], "Basketball Court": ["photo-1546519638-68e109498ffc", "A private hoop and court for daily games."], "Supercar Garage": ["https://s.yimg.com/ny/api/res/1.2/cccEoMyJL99Rl9Xl_UTuHg--/YXBwaWQ9aGlnaGxhbmRlcjt3PTk2MDtoPTY0MDtjZj13ZWJw/https%3A/media.zenfs.com/en/tri_city_herald_mcclatchy_articles_655/e5d951892a5744321a1d80a73a8421e0", "A showroom garage filled with performance cars."], "Supercar Rental": ["photo-1503376780353-7e6692767b70", "Take a high-performance sports car out for the day."], "Overwater Villa": ["photo-1514282401047-d79a71a590e8", "A lagoon villa with direct access to the water."], "McDonald’s": ["https://runews24.ru/assets/components/phpthumbof/cache/c941c75294d2b614038db0e778d0707d.6a856ca6cd9ae14d34cf1b572b5935db.jpg", "Golden arches, burgers and fries."], "KFC": ["https://www.mashed.com/img/gallery/kentuckys-favorite-fried-chicken-restaurant-chain-might-surprise-you/if-not-kentucky-then-where-1609863827.jpg", "The Colonel’s fried chicken restaurant."], "Five Guys": ["https://dynl.mktgcdn.com/p/gLIECK525Z7SyoYar19mSfvqxAW-IwEuCe_0II7Rfqg/1330x1330.jpg", "Burgers, hand-cut fries and custom toppings."], "Nando’s": ["https://i.insider.com/611eb50b348087001968321e?auto=webp&format=jpeg&width=600", "Flame-grilled peri-peri chicken."], "Taco Bell": ["https://eu-images.contentstack.com/v3/assets/bltea7aee2fca050a19/blt232b491656909725/6748784fe82afa1786682175/taco_20bell_20UK.jpg?width=1000", "Tacos, burritos and late-night cravings."], "Subway": ["https://www.joonsquare.co.uk/usermanage/image/business/subway-isle-of-wight-eng-17841/subway-isle-of-wight-eng-subway-providence-corner-01.jpg", "Freshly assembled subs with your choice of fillings."], "Domino’s": ["https://xtb.scdn5.secure.raxcdn.com/default/0104/16/60b33f96-76f5-42ac-adff-f41ad0993be6/shutterstock-2480623481.jpg", "Pizza delivery and garlic dips."], "Shake Shack": ["https://images1.loopnet.com/i2/nHVPDAIF3AwOatK4w1PdKhifc6ZdwUH1AndxjTHoA7I/110/1371-Huguenot-Rd-Midlothian-VA-Primary-Photo-1-Large.jpg", "ShackBurgers, crinkle-cut fries and shakes."], "Burger King": ["https://s.yimg.com/ny/api/res/1.2/fPrmRKfcoxxYAGVdHZvPfQ--/YXBwaWQ9aGlnaGxhbmRlcjt3PTEyMDA7aD02NzU-/https%3A/media.zenfs.com/en/verdict_food_service_772/281b80895d26c1c202892077df5f65db", "The flame-grilled home of the Whopper."], "Greggs": ["https://media.timeout.com/images/105951669/image.jpg", "Sausage rolls, bakes and coffee on the go."], "Wingstop": ["https://images.prismic.io/hammerson/aAtN5fIqRLdaBm03_Wing-Stop.jpg?auto=format%2Ccompress", "Wings, tenders and seasoned fries."], "Popeyes": ["https://www.foodserviceequipmentjournal.com/cloud/2024/01/22/V3XAjnOY-Popeyes-UK-1200x800.jpg", "Louisiana-style fried chicken and sandwiches."], "Pizza Hut": ["https://image.demorgen.be/57319080/feature-crop/1200/675/pizza-hut-in-wemmel-opnieuw-overvallen", "Pan pizzas and a sit-down pizza night."], "Pret A Manger": ["https://s.yimg.com/ny/api/res/1.2/4a9sKpL8uN0AUPd_aehx4g--/YXBwaWQ9aGlnaGxhbmRlcjt3PTI0MDA7aD0xMzUw/https%3A/media.zenfs.com/en/snappa.ukfinance/c857c5f0fff547f9698e6952c10fe749", "Sandwiches, pastries and freshly made coffee."], "Chipotle": ["https://upload.wikimedia.org/wikipedia/commons/e/e9/Chipotle_Mexican_Grill_Restaurant.jpg", "Burritos and bowls assembled to order."], "Wagamama": ["https://dynamic-media-cdn.tripadvisor.com/media/photo-o/14/f1/d8/ba/wagamama-whiteley.jpg?h=800&s=1&w=800", "Ramen, rice bowls and Japanese-inspired dishes."], "Leon": ["https://www.daikin.eu/en_us/about/case-studies/leon/_jcr_content/root/main_container/header/image-and-text.coreimg.jpeg/1651304133749/header-leon-restaurant-1645px1080px.jpeg", "Rice boxes, wraps and naturally fast food."], "Games Room": ["https://img.chooseacottage.co.uk/property/112/1200/11269250.jpg", "A dedicated games room with a full-size pool table."], "Mouldy Shed": ["https://thatsnotmyage.com/wp-content/uploads/2013/04/Old-Shed-1024x768.jpg", "A weathered garden shed in need of serious repairs."], "Broken Pedalo": ["https://www.exquisitecoasts.com/images/Pedalo-resized.jpg", "A pedal boat that needs fixing before your first outing."], "Soggy Sandwich": ["https://www.cobsbread.com/cdn/shop/files/CAPROD000226_000_004_4feec51a-1f5b-440e-b085-7fffe5b00578.webp?v=1762887164&width=1024", "An ordinary sandwich, sadly left out in the rain."], "Competitive Queueing": ["https://media.elbalad.news/2024/10/large/720/2/944.jpg", "Your grand prize: a place in a very long queue."], "Spa Retreat": ["https://www.aquasana.ie/content/as/ie/en/news-and-offers/news/returning-to-our-roots/jcr%3Acontent/root/container/hero.coreimg.jpeg/1779449395688/outdoor-pool-ie-hero.jpeg", "A forest spa with a heated pool and space to unwind."]};
-const themes=new Set(['house','fast','countries','sports','holiday']);
-function reply(v:any,status=200){return Response.json(v,{status,headers:{'Cache-Control':'no-store','Access-Control-Allow-Origin':'*'}})}
-function err(m:string){return reply({error:m},400)}
-function cleanName(x:any,fallback:string){const v=String(x||'').trim().replace(/[^a-zA-Z0-9 '-]/g,'').slice(0,20);return v||fallback}
-function createCode(){let c='';do{c=Math.random().toString(36).slice(2,8).toUpperCase()}while(rooms.has(c));return c}
-function eligible(r:R,i:number){return i>=0&&i<r.joined&&r.players[i].items.length<r.quotas[i]&&(r.theme!=='house'||r.round>=r.joined||!r.players[i].items.some(x=>x.index<r.joined))}
-function award(r:R,w:number,price:number){if(!eligible(r,w)||price>r.players[w].budget)throw Error('Invalid allocation');r.players[w].budget-=price;r.players[w].items.push({index:r.round,price});r.history.push({index:r.round,winner:w,price});r.wonBy=w;r.soldFor=price;r.bid=price;r.phase='sold';void aiImage(r,w)}
-function settle(r:R){if(r.leader!==null){award(r,r.leader,r.bid);return}if((r.skipCount||0)<5){r.skipCount=(r.skipCount||0)+1;(r.skippedNames||=[]).push(itemName(r,r.round));r.phase='skipped';return}const options=r.players.map((_,i)=>i).filter(i=>eligible(r,i));if(!options.length)throw Error('No eligible players');options.sort((a,b)=>(r.quotas[b]-r.players[b].items.length)-(r.quotas[a]-r.players[a].items.length)||a-b);award(r,options[0],0)}
-function auto(r:R){
- if(r.phase!=='bidding'||r.status!=='playing')return;
- const eligibleSeats=r.players.map((_,i)=>i).filter(i=>eligible(r,i));
- if(eligibleSeats.length===1&&r.leader===null){award(r,eligibleSeats[0],0);return}
- for(let i=0;i<r.joined;i++)if(!eligible(r,i)||r.players[i].budget<=r.bid&&i!==r.leader)r.passed[i]=true;
- const challengers=eligibleSeats.filter(i=>!r.passed[i]&&i!==r.leader);
- if(!challengers.length)settle(r);
-}
-function cpuTurn(r:R){
- if(!r.cpu||r.status!=='playing'||r.phase!=='bidding')return;
- auto(r);if(r.phase!=='bidding'||r.passed[1]||!eligible(r,1)||r.leader===1)return;
- const cpu=r.players[1],you=r.players[0],b=cpu.budget,need=r.quotas[1]-cpu.items.length,remaining=r.itemDeck.length-r.round;
- const name=itemName(r,r.round).toLowerCase();
- const trash=/mouldy|broken|soggy|layover|queueing|damp|terrible/.test(name)||r.round===r.twistIndex;
- const strong=/private|luxury|supercar|island|yacht|helicopter|villa|pool|lake|waterpark|cinema|festival|studio|go-kart|tennis|maze|rink|spa/.test(name);
- const behind=Math.max(0,you.items.length-cpu.items.length),pressure=remaining<=need+2;
- const target=trash?0:Math.min(b,Math.max(1,Math.floor((b/Math.max(1,need))*(strong?1.9:1.35))+(behind>0?Math.min(behind*3,7):0)+(pressure?3:0)));
- if(!trash&&b>r.bid&&r.bid<target){r.bid=Math.min(target,r.bid+1);r.leader=1}
- else r.passed[1]=true;
- auto(r);
-}
-function publicRoom(r:R){const {tokens,...state}=r;return state}
-function shuffle<T>(items:T[]):T[]{const a=[...items];for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]]}return a}
-function next(r:R){if(r.phase==='skipped'){const seen=new Set([...r.itemDeck.map(x=>x[0]),...(r.skippedNames||[])]);const pool=r.theme==='house'&&r.round<r.joined?houseTypes:r.theme==='custom'?(r.customItems||[]):itemPools[r.theme]||[];const fresh=shuffle(pool.filter(x=>!seen.has(x[0])));const alternatives=fresh.length?fresh:shuffle(pool.filter(x=>x[0]!==itemName(r,r.round)));if(alternatives.length)r.itemDeck[r.round]=alternatives[0];r.phase='bidding';r.bid=0;r.leader=null;r.passed=Array(r.joined).fill(false);auto(r);return}if(r.round>=r.itemDeck.length-1){r.status='finished';void aiJudge(r);return}r.round++;r.phase='bidding';r.bid=0;r.leader=null;r.passed=Array(r.joined).fill(false);r.wonBy=null;r.soldFor=0;auto(r)}
-const imageCache=new Map<string,Uint8Array>();const jobs=new Set<string>();
-function itemName(r:R,i:number){return r.itemDeck[i]?.[0]||'Mystery item'}
-function buildPrompt(r:R,p:number,count=r.players[p].items.length,previous=0){
- const houseDraft=r.theme==='house'&&r.itemDeck.slice(0,r.joined).every(x=>houseTypes.some(h=>h[0]===x[0]));
- const manifest=r.players[p].items.slice(0,count).filter(x=>!houseDraft||x.index>=r.joined).map(x=>{const it=r.itemDeck[x.index];return it[0]+': '+it[2]});
- const ownedHouse=houseDraft?r.players[p].items.find(x=>x.index<r.joined):undefined;
- const base=r.theme==='custom'?String(r.customTitle||'object'):r.theme==='house'?(ownedHouse?itemName(r,ownedHouse.index):'a modest home'):r.theme;
- const settings:Record<string,string>={house:'A modest realistic UK '+base+' with no swimming pool, vast grounds or mansion. Each player must have the specific house they won at auction, shown at realistic scale, without invented features.',holiday:'A holiday collection.',fast:'An editorial tabletop food collection.',countries:'A travel collection.',sports:'A sports collection.'};
- return 'Photorealistic high-quality game collection. '+(settings[r.theme]||'The base is specifically '+base+'. Every player starts with this exact same base. If pancakes show pancakes. If a car show a car. Never reinterpret the base as a house or as a person.')+
- ' Show the whole base at a realistic subject-appropriate camera angle. No default aerial estate shot. Keep the same base, composition and scale throughout. Include ONLY purchased additions from the manifest. Never add an unpurchased mansion, pool, garden, house, object, vehicle, person or luxury feature. '+
- (previous?'Edit the prior image faithfully. Preserve camera, framing, scale, the base and ALL previous additions. Add only the latest item.':'Show the exact purchased base house without upgrades if the inventory is empty; otherwise show the base with the first purchased addition.')+
- '\\nCOMPLETE PURCHASED INVENTORY:\\n'+manifest.join('\\n')+
- '\\nNEW ADDITIONS: '+manifest.slice(previous).join('; ')+'. Each addition is visually separate and correctly attached to the base. No unlisted upgrades.';
+// Draft Night API. Runs as a single-file Railway Function (Bun).
+// The client lives in Dobble-app/public/draft-night.html and calls this API cross-origin.
+// Keep this file well under 96KB: Railway passes it to the container as one base64 argument.
 
+type Item = { name: string; blurb: string; visual: string };
+type Mode = 'property' | 'build' | 'collection';
+type Theme = { id: string; title: string; emoji: string; mode: Mode; noun: string; label: string; base: Item | null; scene: string; bases: Item[]; items: Item[]; created: number };
+type Lot = Item & { kind: 'base' | 'add' };
+type Player = { name: string; color: string; budget: number; won: number[]; base: number | null; cpu: boolean; seen: number };
+type Entry = { p: number; a: number | null; why?: string };
+type Auction = { bid: number; leader: number | null; turn: number | null; passed: boolean[]; phase: 'bidding' | 'sold' | 'unsold'; deadline: number; log: Entry[]; result: { winner: number | null; price: number; note: string } | null };
+type World = { v: number; state: string; busy: boolean; tries: number };
+type Room = {
+  code: string; rev: number; created: number; status: 'lobby' | 'playing' | 'finished'; theme: Theme; budget: number; capacity: number; cpu: boolean;
+  players: Player[]; tokens: string[]; deckBases: Item[]; deckAdds: Item[]; lots: Lot[]; lot: number; auction: Auction;
+  history: Array<{ lot: number; winner: number | null; price: number }>; lotImg: Record<string, string>; baseImg: string; worlds: World[]; verdict: string | null;
+};
+
+const env = (k: string, d: string) => String(Bun.env[k] || d);
+const TURN_MS = Number(env('DRAFT_TURN_MS', '30000'));
+const AWAY_MS = Number(env('DRAFT_AWAY_MS', '20000'));
+const SOLD_MS = Number(env('DRAFT_SOLD_MS', '2400'));
+const UNSOLD_MS = Number(env('DRAFT_UNSOLD_MS', '1600'));
+const CPU_MS = Number(env('DRAFT_CPU_MS', '900'));
+const LOTS_PER_PLAYER = 5;
+const MAX_PLAYERS = 6;
+const COLORS = ['#FF7A59', '#4EA8FF', '#3FD4A2', '#FFC145', '#B48CFF', '#FF6FAE'];
+const API = env('OPENAI_BASE_URL', 'https://api.openai.com/v1');
+const CLIENT_URL = env('DRAFT_CLIENT_URL', 'https://dobble-app-production.up.railway.app/draft-night.html');
+let clock = () => Date.now();
+
+// ---------- Curated themes ----------
+// Each line: Name|short blurb shown to players|visual description used for image generation (what it looks like and where it goes).
+const parse = (s: string): Item[] => s.trim().split('\n').map(l => { const [name, blurb, visual] = l.split('|').map(x => x.trim()); return { name, blurb, visual: visual || blurb }; });
+
+const HOUSES = parse(`
+Victorian Terrace|Two-up two-down with a tiny front yard|a modest two-storey red-brick Victorian mid-terrace house, one of a continuous row of near-identical terraced houses on a narrow residential street, with a low brick front wall and a tiny paved front yard
+Semi-detached Home|A 1930s family semi with a driveway|an ordinary 1930s two-storey semi-detached house with a bay window, cream render, a short driveway and a small front lawn, joined to its neighbour on one side
+Modern Townhouse|Three slim storeys of brick and glass|a narrow three-storey modern townhouse in grey brick with tall black-framed windows and a small front courtyard, between similar townhouses on a city street
+Country Cottage|Stone walls, roses and a garden gate|a small detached stone cottage with a slate roof, a wooden front door, climbing roses and a modest cottage garden behind a low stone wall on a quiet village lane
+Lakefront Cabin|A timber cabin on a quiet shore|a small single-storey timber cabin with a covered porch on a gently sloping grassy clearing at the edge of a calm lake, pine trees behind
+Contemporary Villa|Clean white lines and big glass doors|a modern two-storey white-rendered villa with flat roofs, large glass sliding doors, a small paved terrace and a neat lawn in a sunny Mediterranean setting
+Large Detached House|Five bedrooms on a leafy avenue|a large but realistic red-brick detached family house with a double garage, a gravel driveway and a mature front garden on a leafy suburban avenue
+Seaside Bungalow|Single storey, sea breeze|a white-painted single-storey bungalow with a blue front door and a small gravel front garden, beside a coastal road with the sea behind
+Converted Barn|Oak beams and a farmyard view|a converted timber-clad barn with a pitched roof, a tall glazed entrance and a gravel courtyard, set among green fields`);
+
+const PRESETS: Theme[] = [
+  { id: 'house', title: 'Dream House', emoji: '🏡', mode: 'property', noun: 'home', label: 'Upgrade', base: null, scene: 'Eye-level estate-agent photograph from across the street or lawn, showing the whole front of the property and its plot boundaries with a little space around it', bases: HOUSES, created: 0, items: parse(`
+Swimming Pool|A sparkling outdoor pool|a rectangular outdoor swimming pool with stone edging in the garden beside the house
+Hot Tub|Bubbles under the stars|a round cedar hot tub with steam rising, on a patio beside the house
+Supercar|Red, loud and Italian|a glossy red Italian supercar parked on the driveway or kerb directly outside the house
+Paddleboard|For calm-water mornings|a turquoise stand-up paddleboard and paddle leaning against the front wall of the house
+Outdoor Kitchen|Grill, pizza oven and bar stools|a stone outdoor kitchen with a grill, a dome pizza oven and two bar stools on a patio beside the house
+Landscaped Garden|Lush planting and stone paths|lush landscaped flower beds, clipped box hedges and a stone path, replacing the plain planting within the existing plot
+Treehouse|Every kid's dream (and yours)|a wooden treehouse with a rope ladder in a tree beside the house
+Home Cinema|Huge screen, reclining seats|a home cinema with a huge glowing screen and red reclining seats, clearly visible through a large ground-floor window
+Games Room|Pool table and arcade machines|a games room with a green pool table and retro arcade cabinets, clearly visible through a large ground-floor window
+Rooftop Terrace|Loungers with a view|a rooftop terrace with a glass balustrade, two sun loungers and potted olive trees on the roof
+Luxury Garage|Sleek glass-fronted garage|a modern single garage with a sleek glass door attached to the side of the house
+Classic Mini|A 1960s British icon|a classic 1960s Mini Cooper in British racing green with a white roof parked outside the house
+Campervan|Weekends, sorted|a two-tone orange and white vintage VW campervan parked outside the house
+Trampoline|Bounce off the stress|a round garden trampoline with a black safety net beside the house
+Fire Pit|Marshmallow nights|a stone fire pit with low flames surrounded by four wooden Adirondack chairs beside the house
+Greenhouse|Grow your own tomatoes|a small Victorian-style glass greenhouse beside the house
+Garden Office|The shortest commute|a small modern timber garden office pod with a glass front beside the house
+Solar Panels|Free sunshine|a neat array of black solar panels fitted on the roof
+Golden Retriever|Best friend included|a happy golden retriever sitting on the front step
+Basketball Hoop|Shoot hoops on the drive|a basketball hoop on a black pole beside the driveway or front path
+Pergola & Lights|Golden-hour dinners|a wooden pergola strung with warm festoon lights over a small dining table beside the house
+Koi Pond|Calm, colourful fish|a small koi pond with orange fish and lily pads in front of the house
+Tennis Court|Your own Centre Court|a green hard tennis court with a net squeezed in beside the house
+Sauna Cabin|Scandinavian steam|a small barrel-shaped cedar sauna beside the house
+Hammock|Do absolutely nothing|a striped rope hammock strung between two posts beside the house
+Helipad|Arrive in style|a small circular helipad marked with a white H next to the house, with a small white helicopter on it
+Climbing Frame|Swings and a slide|a wooden climbing frame with two swings and a slide beside the house
+Chicken Coop|Fresh eggs every morning|a wooden chicken coop with three brown hens pecking around it beside the house
+Water Slide|Pure summer chaos|a bright blue twisting inflatable water slide on the lawn beside the house
+Speedboat|Ready for the water|a white speedboat on a trailer parked beside the house
+E-bikes|Two bikes, zero sweat|two electric bikes in a bike rack by the front door
+Yellow Front Door|First impressions count|a glossy bright yellow front door with a brass knocker, replacing the existing front door
+Electric Gates|Very private|black metal electric gates at the entrance to the property
+Rose Arch|Romance at the gate|an arched trellis covered in pink climbing roses over the front path`) },
+  { id: 'pancakes', title: 'Pancakes', emoji: '🥞', mode: 'build', noun: 'pancake stack', label: 'Topping', created: 0, bases: [],
+    base: { name: 'Plain pancake stack', blurb: 'Three plain buttermilk pancakes', visual: 'a plain stack of three golden buttermilk pancakes on a round white ceramic plate, completely plain with nothing on top' },
+    scene: 'Food photograph on a pale oak table, three-quarter view from slightly above, soft window daylight, the whole plate in frame with space around it', items: parse(`
+Fresh Strawberries|Sweet, sliced, scattered|sliced fresh strawberries scattered over the top of the stack
+Nutella|The chocolate-hazelnut classic|a thick glossy swirl of Nutella chocolate-hazelnut spread across the top pancake
+Maple Syrup|Poured until it drips|amber maple syrup poured over the stack and dripping down the sides
+Whipped Cream|A cloud on top|a tall swirl of whipped cream on top of the stack
+Crushed Oreos|Cookies-and-cream crunch|crushed Oreo cookie pieces sprinkled over the top
+Vanilla Ice Cream|A melting scoop|a scoop of vanilla ice cream melting on top of the stack
+Caramelised Bananas|Golden and sticky|glossy caramelised banana slices on top of the stack
+Crispy Bacon|Sweet meets salty|three rashers of crispy streaky bacon laid across the top
+Chocolate Chips|Little pockets of joy|dark chocolate chips scattered over the stack
+Lotus Biscoff|Spiced caramel spread|a drizzle of Lotus Biscoff spread with a crumbled Biscoff biscuit on top
+Blueberries|Bursting and fresh|fresh blueberries scattered over the stack and plate
+Lemon & Sugar|The pancake-day classic|a lemon wedge on the plate and a dusting of sugar on top
+Golden Syrup|Sticky and sweet|glossy golden syrup drizzled over the stack
+Raspberries|Tart and bright|fresh raspberries on top of the stack
+Salted Caramel|Rich and glossy|salted caramel sauce drizzled over the stack
+Peanut Butter|Thick and creamy|a thick layer of peanut butter melting on the top pancake
+Toasted Marshmallows|Gooey and golden|toasted mini marshmallows on top of the stack
+Rainbow Sprinkles|Party mode on|colourful rainbow sprinkles scattered over the top
+Fried Egg|Brunch, sorted|a sunny-side-up fried egg on top of the stack
+Honey|Straight from the comb|honey drizzled over the stack with a wooden honey dipper on the plate
+Greek Yoghurt|Tangy and thick|a dollop of thick Greek yoghurt on top
+Pistachio Cream|Green and luxurious|a pistachio cream drizzle with chopped pistachios on top
+White Chocolate Sauce|Creamy drizzle|white chocolate sauce drizzled in lines over the stack
+Cinnamon Apples|Warm apple-pie vibes|warm cinnamon-spiced apple slices on top
+Clotted Cream|A proper Cornish dollop|a dollop of clotted cream on top
+Fresh Mango|Tropical sunshine|fresh mango cubes on top of the stack
+Toasted Coconut|Crunchy golden flakes|toasted coconut flakes sprinkled over the top
+Extra Pancake|A taller stack|one extra pancake added to the stack, making it four pancakes tall
+Butter|Simple perfection|a melting square pat of butter on the top pancake
+Hot Fudge|Thick and molten|hot fudge sauce poured over the top
+Pomegranate Seeds|Jewel-like crunch|ruby pomegranate seeds scattered on top
+Kinder Bueno|Wafer and hazelnut|broken Kinder Bueno bar pieces on top`) },
+  { id: 'burger', title: 'Burgers', emoji: '🍔', mode: 'build', noun: 'burger', label: 'Topping', created: 0, bases: [],
+    base: { name: 'Plain burger', blurb: 'One patty in a plain bun', visual: 'a plain beef burger: one grilled beef patty in a simple sesame-seed bun with nothing else inside' },
+    scene: 'Food photograph on a dark slate board, eye-level side view so every layer of the burger is visible, warm restaurant lighting, the whole burger in frame', items: parse(`
+Crispy Bacon|Smoky streaky rashers|crispy streaky bacon rashers layered on the patty
+Mature Cheddar|Melted right over the edge|a slice of melted orange cheddar draped over the patty
+American Cheese|The classic melt|a melted slice of yellow American cheese on the patty
+Blue Cheese|Bold and tangy|crumbled blue cheese melting on the patty
+Extra Patty|Double trouble|a second grilled beef patty stacked in the burger
+Pickles|Sharp and crunchy|sliced dill pickles layered in the burger
+Caramelised Onions|Sweet and jammy|a layer of soft brown caramelised onions
+Onion Rings|Crunchy battered rings|two golden battered onion rings stacked in the burger
+Jalapeños|Bring the heat|sliced green jalapeños layered on the patty
+Fried Egg|Runny yolk guaranteed|a fried egg with a runny yolk on top of the patty
+Avocado|Creamy green slices|sliced avocado layered in the burger
+Lettuce|Fresh crunch|crisp iceberg lettuce leaves in the burger
+Beef Tomato|Thick juicy slices|thick slices of red beef tomato in the burger
+Burger Sauce|Secret pink sauce|creamy pink burger sauce dripping from the burger
+BBQ Sauce|Sticky and smoky|sticky dark BBQ sauce dripping from the patty
+Truffle Mayo|Fancy and garlicky|a smear of truffle mayonnaise on the bun
+Brioche Bun|Glossy and soft|a glossy golden brioche bun replacing the sesame bun
+Pretzel Bun|Dark and salty|a dark pretzel bun with salt flakes replacing the sesame bun
+Garlic Mushrooms|Earthy and buttery|sautéed garlic mushrooms piled on the patty
+Hash Brown|Crispy potato layer|a crispy golden hash brown inside the burger
+Pineapple Ring|Controversial sweetness|a grilled pineapple ring on the patty
+Mac & Cheese|Gloriously messy|a slab of fried mac and cheese inside the burger
+Pulled Pork|Slow-cooked and saucy|a pile of saucy pulled pork on the patty
+Halloumi|Squeaky grilled cheese|a thick slice of grilled halloumi on the patty
+Ketchup|The essential|ketchup oozing from the burger
+American Mustard|Bright yellow tang|a zigzag of yellow mustard on the patty
+Red Onion|Sharp raw rings|thin rings of raw red onion in the burger
+Fries on the Side|Golden and salted|a pile of golden fries on the board beside the burger
+Milkshake on the Side|Thick vanilla shake|a tall glass of vanilla milkshake on the board beside the burger
+Chilli Con Carne|Spicy beef topping|a spoonful of chilli con carne spilling over the patty
+Coleslaw|Creamy and crunchy|creamy coleslaw piled on the patty
+Crispy Chicken|Surf the turf|a crispy fried chicken fillet stacked in the burger`) },
+  { id: 'pizza', title: 'Pizza', emoji: '🍕', mode: 'build', noun: 'pizza', label: 'Topping', created: 0, bases: [],
+    base: { name: 'Margherita base', blurb: 'Tomato and mozzarella only', visual: 'a plain round Neapolitan pizza with only tomato sauce and a few melted mozzarella patches, nothing else on it' },
+    scene: 'Overhead flat-lay food photograph of the whole pizza on a wooden pizza peel on a light stone counter, soft daylight', items: parse(`
+Pepperoni|Crispy-edged cups|crispy pepperoni slices spread across the pizza
+Mushrooms|Sliced chestnut mushrooms|sliced chestnut mushrooms scattered across the pizza
+Fresh Basil|Bright green leaves|fresh basil leaves scattered on top
+Burrata|A creamy centrepiece|a whole torn burrata in the centre of the pizza
+Nduja|Spicy spreadable salami|dollops of red spicy nduja across the pizza
+Pineapple|The great debate|chunks of pineapple across the pizza
+Ham|Thin pink slices|pieces of cooked ham across the pizza
+Black Olives|Salty little rings|sliced black olives scattered across the pizza
+Green Peppers|Fresh and crunchy|strips of green pepper across the pizza
+Red Onion|Sweet and sharp|thin red onion slices across the pizza
+Jalapeños|Proper heat|sliced green jalapeños across the pizza
+Hot Honey|Sweet heat drizzle|a glossy drizzle of chilli hot honey over the pizza
+Rocket|Peppery leaves|a pile of fresh rocket leaves on the centre of the pizza
+Parma Ham|Silky cured slices|draped slices of Parma ham across the pizza
+Anchovies|Salty and bold|anchovy fillets laid across the pizza
+Sweetcorn|Little golden pops|sweetcorn kernels scattered across the pizza
+Extra Mozzarella|Maximum stretch|extra melted mozzarella covering more of the pizza
+Goat's Cheese|Tangy white rounds|rounds of goat's cheese across the pizza
+Sun-dried Tomatoes|Rich and chewy|sun-dried tomatoes scattered across the pizza
+Artichokes|Tender hearts|quartered artichoke hearts across the pizza
+Truffle Oil|A fancy drizzle|a glossy drizzle of truffle oil with a few truffle shavings
+Garlic Dip|For the crusts|a small pot of garlic and herb dip on the peel beside the pizza
+Meatballs|Little Italian meatballs|halved beef meatballs across the pizza
+King Prawns|Juicy and pink|pink king prawns across the pizza
+Chilli Flakes|A fiery dusting|red chilli flakes sprinkled over the pizza
+Parmesan Shavings|Nutty and salty|thin parmesan shavings across the pizza
+Cherry Tomatoes|Sweet and blistered|halved roasted cherry tomatoes across the pizza
+Pesto Drizzle|Basil and pine nut|swirls of green pesto across the pizza
+Spicy Chicken|Tandoori-style pieces|pieces of spicy red chicken across the pizza
+Cracked Egg|A runny centre|a baked egg with a runny yolk in the centre of the pizza
+Stuffed Crust|Cheese in the crust|a fatter stuffed crust with cheese oozing from a cut in the crust edge
+Caramelised Figs|Sweet and jammy|halved caramelised figs across the pizza`) },
+  { id: 'gaming', title: 'Gaming Setup', emoji: '🎮', mode: 'build', noun: 'gaming setup', label: 'Upgrade', created: 0, bases: [],
+    base: { name: 'Basic desk setup', blurb: 'A plain desk, one screen, an office chair', visual: 'a basic gaming setup: a plain white desk with one ordinary 24-inch monitor, a basic black keyboard and mouse, and a plain grey office chair, against a bare white wall in a small room' },
+    scene: 'Wide interior photograph from behind and slightly to the side of the chair, showing the whole desk, the wall above it and the floor around it, evenly lit', items: parse(`
+Ultrawide Monitor|A huge curved screen|a huge curved ultrawide monitor replacing the ordinary monitor
+Second Monitor|Double the screens|a second monitor beside the first on the desk
+RGB Light Strips|Glowing everything|glowing purple and blue LED strips along the back of the desk and wall
+Racing Gaming Chair|Bucket seat comfort|a black and red racing-style gaming chair replacing the office chair
+Mechanical Keyboard|Clicky RGB keys|a mechanical keyboard with glowing RGB keys on the desk
+Wireless Headset|Pro-level sound|a black wireless gaming headset resting on a stand on the desk
+PlayStation 5|Sony's console|a white PlayStation 5 console standing on the desk
+Xbox Series X|Microsoft's console|a black Xbox Series X standing on the desk
+Nintendo Switch|Handheld and docked|a Nintendo Switch in its dock on the desk with red and blue controllers
+Racing Wheel|Sim-racing kit|a racing wheel and pedals clamped to the desk
+Streaming Mic|Podcast-quality voice|a studio microphone on a boom arm over the desk
+Ring Light & Webcam|Ready to stream|a ring light and webcam mounted above the monitor
+Mini Fridge|Cold drinks on tap|a small glass-door mini fridge full of cans under the desk
+Gaming PC|Glass tower, glowing fans|a glass-sided gaming PC tower with glowing fans on the desk
+Bean Bag|For couch co-op|a large grey bean bag on the floor beside the desk
+Hexagon Light Panels|Wall art that glows|colourful glowing hexagon light panels on the wall above the desk
+Acoustic Panels|Studio-grade quiet|dark grey acoustic foam panels on the wall
+Desk Plants|A little greenery|a few potted green plants on the desk and shelf
+VR Headset|Step inside the game|a white VR headset and controllers on the desk
+Arcade Cabinet|Retro classics|a retro arcade cabinet standing in the corner beside the desk
+Projector Screen|Cinema-size gaming|a projector on a shelf and a large pull-down screen on the side wall
+Bookshelf Speakers|Room-filling sound|two bookshelf speakers either side of the monitor
+Standing Desk|Up and down|a larger dark wooden standing desk replacing the white desk
+Figure Shelf|Collectible figures|a wall shelf lined with collectible game figures above the desk
+Cat|Supervisor on duty|a ginger cat sitting on the desk beside the keyboard
+Snack Station|Crisps and sweets|a small shelf of crisps, sweets and energy drinks beside the desk
+Big Desk Mat|Edge to edge|a large black desk mat covering the desk under the keyboard and mouse
+Flight Stick|Take to the skies|a flight stick and throttle on the desk
+Gaming Laptop|A second rig|an open gaming laptop with glowing keys on the side of the desk
+Lava Lamp|Groovy glow|an orange lava lamp glowing on the desk
+Neon Lightning Bolt|Pure vibes|a neon lightning-bolt light glowing on the wall
+Controller Charging Dock|Always topped up|a charging dock with two controllers on the desk`) },
+  { id: 'garage', title: 'Dream Garage', emoji: '🏎️', mode: 'collection', noun: 'garage', label: 'Car', created: 0, bases: [],
+    base: { name: 'Empty garage', blurb: 'A spotless garage with room for the collection', visual: 'an empty, spotless modern private garage with a polished grey concrete floor, white walls and soft overhead strip lighting, with space for several cars' },
+    scene: 'Wide interior photograph from the open garage entrance, the whole garage floor visible, even soft lighting', items: parse(`
+Porsche 911|The timeless sports car|a silver Porsche 911 sports car parked in the garage
+Lamborghini Huracán|Wild, bright and loud|a lime-green Lamborghini Huracán parked in the garage
+Ferrari F8|Italian red perfection|a red Ferrari F8 parked in the garage
+McLaren 720S|Dihedral doors up|an orange McLaren 720S with its doors raised, parked in the garage
+Land Rover Defender|Go anywhere|a classic green Land Rover Defender parked in the garage
+1967 Ford Mustang|American muscle|a blue 1967 Ford Mustang fastback with white stripes parked in the garage
+Classic Mini|Small but mighty|a red classic Mini Cooper with a white roof parked in the garage
+Tesla Model S|Silent speed|a white Tesla Model S parked in the garage
+Aston Martin DB5|Very secret agent|a silver birch Aston Martin DB5 parked in the garage
+Bugatti Chiron|The hypercar|a two-tone blue Bugatti Chiron parked in the garage
+Mercedes G-Wagon|The boxy icon|a black Mercedes G-Class parked in the garage
+Nissan GT-R|Godzilla|a grey Nissan GT-R parked in the garage
+Toyota Supra|Tuner legend|an orange 1990s Toyota Supra parked in the garage
+Audi R8|Everyday supercar|a white Audi R8 parked in the garage
+VW Beetle|Cheerful classic|a pale blue classic VW Beetle parked in the garage
+Rolls-Royce Phantom|Pure luxury|a black Rolls-Royce Phantom parked in the garage
+Ford GT40|Le Mans legend|a blue and orange Ford GT40 race car parked in the garage
+Lotus Elise|Light and nimble|a yellow Lotus Elise parked in the garage
+Fiat 500 Classic|Tiny Italian charm|a cream classic Fiat 500 parked in the garage
+Jeep Wrangler|Roof off, ready|a red Jeep Wrangler parked in the garage
+Range Rover|Country-house cool|a dark green Range Rover parked in the garage
+Ducati Panigale|Superbike on two wheels|a red Ducati Panigale motorbike parked in the garage
+Vespa|La dolce vita|a mint-green Vespa scooter parked in the garage
+Racing Go-Kart|Small car, big grin|a racing go-kart parked in the garage
+Car Lift|Show-off storage|a hydraulic two-post car lift installed in the garage
+Tool Wall|Every spanner in place|a pegboard wall of neatly organised tools above a workbench
+Chequered Floor|Race-day style|a black and white chequered floor replacing the grey concrete floor
+Delorean|Time-travel optional|a stainless steel DeLorean with gull-wing doors open, parked in the garage
+Mini Moke|Beach buggy fun|a white Mini Moke beach car parked in the garage
+Bentley Continental|Grand tourer|a dark blue Bentley Continental GT parked in the garage
+Golf Buggy|For the estate|a white electric golf buggy parked in the garage
+Vintage Petrol Pump|Retro decoration|a red vintage petrol pump standing in the corner of the garage`) },
+];
+const ALIASES: Record<string, string> = { house: 'house', home: 'house', 'dream house': 'house', 'dream home': 'house', property: 'house', mansion: 'house', pancake: 'pancakes', pancakes: 'pancakes', 'pancake stack': 'pancakes', burger: 'burger', burgers: 'burger', hamburger: 'burger', cheeseburger: 'burger', pizza: 'pizza', pizzas: 'pizza', 'gaming setup': 'gaming', 'gaming set up': 'gaming', 'gaming station': 'gaming', 'gaming room': 'gaming', 'gaming desk': 'gaming', garage: 'garage', 'dream garage': 'garage', 'car collection': 'garage', 'supercar collection': 'garage' };
+function presetFor(topic: string) {
+  const t = topic.toLowerCase().replace(/[^a-z ]/g, ' ').replace(/\b(the|my|a|an|our|best|ultimate|perfect|dream|build|your|of)\b/g, ' ').replace(/\s+/g, ' ').trim();
+  const id = ALIASES[t] || ALIASES[topic.toLowerCase().trim()];
+  return PRESETS.find(p => p.id === id) || null;
 }
-async function aiImage(r:R,p:number){
- const worker=r.code+':'+p; r.aiStates??=Array(r.joined).fill('idle');
- if(!Bun.env.OPENAI_API_KEY){r.aiStates[p]='unavailable';return}
- if(jobs.has(worker)||!r.players[p].items.length)return;
- jobs.add(worker);
- try{
-  while(r.aiVersions[p]<r.players[p].items.length){
-   const count=r.players[p].items.length,previous=r.aiVersions[p],key=worker+':'+count;
-   if(imageCache.has(key)){r.aiVersions[p]=count;continue}
-   r.aiStates[p]='generating';
-   const reference=imageCache.get(worker+':'+previous);
-   const params={model:Bun.env.DRAFT_IMAGE_MODEL||'gpt-image-2.5-flare',prompt:buildPrompt(r,p,count,reference?previous:0),size:'1536x1024',quality:'low',output_format:'jpeg',output_compression:85};
-   const headers:Record<string,string>={Authorization:'Bearer '+Bun.env.OPENAI_API_KEY};let body:BodyInit;
-   if(reference){const form=new FormData();for(const [k,v] of Object.entries(params))form.append(k,String(v));form.append('image',new Blob([reference as BlobPart],{type:'image/jpeg'}),'previous-world.jpg');body=form}
-   else{headers['Content-Type']='application/json';body=JSON.stringify(params)}
-   const response=await fetch('https://api.openai.com/v1/images/'+(reference?'edits':'generations'),{method:'POST',signal:AbortSignal.timeout(90000),headers,body});
-   if(!response.ok)throw Error('Image service status '+response.status);
-   const d=await response.json() as any,raw=d.data?.[0]?.b64_json;if(!raw)throw Error('Empty image response');
-   imageCache.set(key,Uint8Array.from(atob(raw),x=>x.charCodeAt(0)));r.aiVersions[p]=count;r.aiStates[p]='ready';
+
+// ---------- State ----------
+const rooms = new Map<string, Room>();
+const themes = new Map<string, Theme>();
+const images = new Map<string, Uint8Array>();
+const timers = new Map<string, any>();
+const retries = new Map<string, number>();
+
+const shuffle = <T>(a: T[]): T[] => { const x = [...a]; for (let i = x.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [x[i], x[j]] = [x[j], x[i]]; } return x; };
+const cleanName = (x: any, d: string) => String(x || '').replace(/[^\p{L}\p{N} '\-]/gu, '').trim().slice(0, 16) || d;
+const clamp = (n: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, n));
+function newCode() { let c = ''; do { c = Array.from({ length: 4 }, () => 'ABCDEFGHJKMNPQRSTUVWXYZ'[Math.floor(Math.random() * 23)]).join(''); } while (rooms.has(c)); return c; }
+function sweep() { const cut = clock() - 8 * 3600e3; for (const [k, r] of rooms) if (r.created < cut) { rooms.delete(k); clearTimeout(timers.get(k)); for (const key of images.keys()) if (key.startsWith(k + '/')) images.delete(key); } for (const [k, t] of themes) if (t.created < clock() - 3600e3) themes.delete(k); }
+
+// ---------- Auction engine ----------
+const bump = (r: Room) => { r.rev++; };
+const isBaseLot = (r: Room) => r.lots[r.lot]?.kind === 'base';
+function eligible(r: Room, p: number) { return r.status === 'playing' && p >= 0 && p < r.players.length && (isBaseLot(r) ? r.players[p].base === null : r.theme.mode !== 'property' || r.players[p].base !== null); }
+const eligibleSeats = (r: Room) => r.players.map((_, i) => i).filter(i => eligible(r, i));
+const canAct = (r: Room, p: number) => eligible(r, p) && !r.auction.passed[p] && r.auction.leader !== p;
+const away = (r: Room, p: number) => !r.players[p].cpu && clock() - r.players[p].seen > AWAY_MS;
+
+function beginLot(r: Room) {
+  const n = r.players.length;
+  r.auction = { bid: 0, leader: null, turn: null, passed: Array(n).fill(false), phase: 'bidding', deadline: 0, log: [], result: null };
+  const seats = eligibleSeats(r);
+  if (isBaseLot(r) && seats.length === 1) { award(r, seats[0], 0, 'Last home left: theirs for free'); return; }
+  if (!seats.length) { closeLot(r); return; }
+  passTo(r, (r.lot % n) - 1);
+}
+// Moves the turn to the next player who can still raise; resolves the lot when nobody can.
+function passTo(r: Room, from: number) {
+  const a = r.auction, n = r.players.length;
+  for (let i = 0; i < n; i++) if (canAct(r, i) && r.players[i].budget < a.bid + 1) { a.passed[i] = true; a.log.push({ p: i, a: null, why: 'out of money' }); }
+  let next: number | null = null;
+  for (let k = 1; k <= n; k++) { const p = (((from + k) % n) + n) % n; if (canAct(r, p)) { next = p; break; } }
+  if (next === null) { closeLot(r); return; }
+  a.turn = next;
+  a.deadline = clock() + (r.players[next].cpu ? CPU_MS : away(r, next) ? 0 : TURN_MS);
+}
+function closeLot(r: Room) {
+  const a = r.auction;
+  if (a.leader !== null) return award(r, a.leader, a.bid, '');
+  const seats = eligibleSeats(r);
+  if (isBaseLot(r) && seats.length) return award(r, seats[Math.floor(Math.random() * seats.length)], 0, 'No bids: drawn at random');
+  a.phase = 'unsold'; a.turn = null; a.result = { winner: null, price: 0, note: 'No bids' }; a.deadline = clock() + UNSOLD_MS;
+  r.history.push({ lot: r.lot, winner: null, price: 0 });
+}
+function award(r: Room, p: number, price: number, note: string) {
+  const pl = r.players[p], a = r.auction;
+  if (!eligible(r, p) || price > pl.budget || price < 0) throw Error('Invalid allocation');
+  pl.budget -= price; pl.won.push(r.lot); if (r.lots[r.lot].kind === 'base') pl.base = r.lot;
+  r.history.push({ lot: r.lot, winner: p, price });
+  a.phase = 'sold'; a.turn = null; a.bid = price; a.leader = p; a.result = { winner: p, price, note }; a.deadline = clock() + SOLD_MS;
+  void ensureWorld(r, p);
+}
+function nextLot(r: Room) {
+  r.lot++;
+  if (r.lot >= r.lots.length) { r.status = 'finished'; r.auction.turn = null; void judge(r); return; }
+  beginLot(r);
+}
+function bid(r: Room, p: number, amount: number) {
+  const a = r.auction;
+  if (a.phase !== 'bidding' || a.turn !== p) throw Error('It is not your turn');
+  if (!Number.isSafeInteger(amount) || amount <= a.bid || amount > r.players[p].budget) throw Error('Invalid bid');
+  a.bid = amount; a.leader = p; a.log.push({ p, a: amount });
+  passTo(r, p);
+}
+function pass(r: Room, p: number, why?: string) {
+  const a = r.auction;
+  if (a.phase !== 'bidding' || a.turn !== p) throw Error('It is not your turn');
+  a.passed[p] = true; a.log.push(why ? { p, a: null, why } : { p, a: null });
+  passTo(r, p);
+}
+function cpuMove(r: Room, p: number) {
+  const pl = r.players[p], a = r.auction, lot = r.lots[r.lot];
+  const left = r.lots.length - r.lot, share = Math.max(1, Math.round(left / r.players.length));
+  let value = lot.kind === 'base' ? pl.budget * (0.25 + Math.random() * 0.3) : (pl.budget / share) * (0.6 + Math.random() * 0.9);
+  value = Math.floor(Math.min(value, pl.budget));
+  if (a.bid < value) bid(r, p, Math.min(pl.budget, a.bid + (value - a.bid > 5 && Math.random() < 0.5 ? 2 : 1)));
+  else pass(r, p);
+}
+// Advances any timers that have expired. Called on every request and by a per-room timeout.
+function tick(r: Room) {
+  let guard = 0;
+  while (r.status === 'playing' && guard++ < 200) {
+    const a = r.auction, now = clock();
+    if (a.phase === 'bidding' && a.turn !== null) {
+      const p = a.turn;
+      if (a.deadline > now && !away(r, p)) break;
+      if (r.players[p].cpu) { if (a.deadline > now) break; cpuMove(r, p); }
+      else pass(r, p, away(r, p) ? 'away' : 'time ran out');
+    } else if (a.deadline <= now) nextLot(r);
+    else break;
+    bump(r);
   }
- }catch(e){r.aiStates[p]='error';console.error('World image failed',e instanceof Error?e.message:'Unknown error')}
- finally{jobs.delete(worker)}
+  schedule(r);
 }
-async function aiJudge(r:R){if(!Bun.env.OPENAI_API_KEY){r.aiVerdict='Judge unavailable. Compare your collections and choose your favourite.';return}try{const lists=r.players.map((p,i)=>'Player '+(i+1)+': '+p.items.map(x=>itemName(r,x.index)).join(', '));const x=await fetch('https://api.openai.com/v1/chat/completions',{method:'POST',signal:AbortSignal.timeout(20000),headers:{Authorization:'Bearer '+Bun.env.OPENAI_API_KEY,'Content-Type':'application/json'},body:JSON.stringify({model:'gpt-4.1-nano',max_tokens:130,messages:[{role:'system',content:'Judge this fantasy auction with 2 to 5 players fairly based on desirability and synergy of their items, not item count. Declare a winning player and give one entertaining sentence under 35 words.'},{role:'user',content:'Theme: '+(r.customTitle||r.theme)+'\n'+lists.join('\n')}]})});if(!x.ok)throw Error('Judge unavailable');if(x.ok){const d=await x.json() as any;r.aiVerdict=String(d.choices?.[0]?.message?.content||'').slice(0,350)||null}}catch(e){console.error('AI judge error');r.aiVerdict='Judge unavailable. Compare your collections and choose your favourite.'}}
-async function generateTheme(topic:string,total:number):Promise<string[][]>{if(!Bun.env.OPENAI_API_KEY)throw Error('AI key not available');const count=total+Math.max(4,Math.ceil(total/4));const x=await fetch('https://api.openai.com/v1/chat/completions',{method:'POST',signal:AbortSignal.timeout(30000),headers:{Authorization:'Bearer '+Bun.env.OPENAI_API_KEY,'Content-Type':'application/json'},body:JSON.stringify({model:'gpt-4.1-nano',response_format:{type:'json_object'},max_tokens:Math.max(1800,count*85),messages:[{role:'system',content:'Design a draft where everyone begins with the same user-specified BASE subject, and bids on five visible additions. Return JSON "items" array of EXACTLY '+count+' objects with short "name" and "description". All options MUST be PHYSICAL VISIBLE additions, toppings, accessories or modifications to the specific subject. For pancakes use chocolate sauce, chips, berries, whipped cream or sprinkles. For a car use paint, wheels, spoiler, seats or lights. For a terrace use realistic terrace renovations, never mansion-scale grounds. Do not make characters, guards, buildings unrelated to the subject, or wholly different objects. Include a few amusing bad choices. The subject itself is the starting BASE and must never be auctioned.'},{role:'user',content:topic.slice(0,65)}]})});if(!x.ok)throw Error('AI theme failed');const d=await x.json() as any;const j=JSON.parse(d.choices?.[0]?.message?.content||'{}');if(!Array.isArray(j.items)||j.items.length<count)throw Error('AI created an invalid draft');return j.items.slice(0,count).map((v:any)=>[String(v.name||'Surprise').slice(0,36),'',String(v.description||'Surprise reveal').slice(0,90)])}
+function schedule(r: Room) {
+  clearTimeout(timers.get(r.code));
+  if (r.status !== 'playing') return;
+  const wait = clamp(r.auction.deadline - clock(), 0, 60000) + 25;
+  const t = setTimeout(() => { if (rooms.get(r.code) === r) tick(r); }, wait);
+  t?.unref?.(); timers.set(r.code, t);
+}
+function start(r: Room) {
+  const n = r.players.length;
+  r.lots = r.theme.mode === 'property'
+    ? [...r.deckBases.slice(0, n).map(x => ({ ...x, kind: 'base' as const })), ...r.deckAdds.slice(0, 4 * n).map(x => ({ ...x, kind: 'add' as const }))]
+    : r.deckAdds.slice(0, LOTS_PER_PLAYER * n).map(x => ({ ...x, kind: 'add' as const }));
+  r.status = 'playing'; r.lot = 0;
+  prefetch(r, r.lots.filter(l => l.kind === 'add').length);
+  r.worlds = r.players.map(() => ({ v: r.theme.mode === 'property' ? -1 : (r.baseImg === 'ready' ? 0 : -1), state: 'idle', busy: false, tries: 0 }));
+  beginLot(r);
+}
 
-const html="<!doctype html><html lang=\"en\"><head><meta charset=\"UTF-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1,viewport-fit=cover\"><meta name=\"theme-color\" content=\"#070c18\"><title>Draft Night</title><style>:root{font-family:Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;color:#f3f1e9;background:#10191d;font-synthesis:none}*{box-sizing:border-box}html,body{margin:0;height:100%;overscroll-behavior:none}body{background:#10191d}button,input{font:inherit}button{cursor:pointer;touch-action:manipulation}button:disabled{opacity:.35;cursor:default}button:focus-visible,input:focus-visible{outline:2px solid #f5d49b;outline-offset:2px}.shell,.shell:has(.arena),.shell:has(.compact-home),.shell:has(.compact-lobby){height:100dvh;min-height:0;max-width:620px;margin:auto;padding:max(10px,env(safe-area-inset-top)) 16px max(10px,env(safe-area-inset-bottom));overflow:hidden}.logo{font:25px Georgia,serif;letter-spacing:-.8px;white-space:nowrap}.spark{color:#ddc699}.eyebrow{font-size:9px;font-weight:650;letter-spacing:1.8px;text-transform:uppercase;color:#bbb8a9}.small,.mini{font-size:12px;color:#adbbb9}.primary,.arena-next{border:0;border-radius:8px;background:#e6d2a9;color:#192326;font-weight:700;padding:13px;width:100%;box-shadow:none}.secondary{border:1px solid #53615f;border-radius:8px;background:#1c292d;color:#eee9db;padding:12px}.link{border:0;background:none;color:#d4c4a6;font-size:11px;padding:8px}.arena,.compact-home,.compact-lobby{height:100%;display:flex;flex-direction:column;gap:9px;min-height:0}.arena-head,.home-brand,.bar{display:flex;align-items:center;justify-content:space-between;gap:8px;flex:none;min-height:30px}.arena-round{color:#d7c49e;font-size:11px;font-variant-numeric:tabular-nums}.home-tag{font-size:8px;max-width:110px;line-height:1.5;letter-spacing:1px;text-align:right;color:#97aaa5}.home-title,.hero{font:clamp(25px,4.4dvh,39px)/1.07 Georgia,serif;letter-spacing:-.8px;margin:6px 0}.home-title em{font-style:normal;color:#ddc699}.home-sub{margin:0;color:#aab9b5;font-size:12px}.home-picked{position:relative;min-height:55px;flex:1;max-height:220px;background-position:center;background-size:cover;border-radius:10px;overflow:hidden}.home-picked:before,.home-tile:before{content:'';position:absolute;inset:0;background:linear-gradient(0deg,#071014e8,transparent)}.home-picked-text{position:absolute;left:14px;bottom:12px;right:10px}.home-picked h2{font:26px Georgia;margin:4px 0}.home-picked p{font-size:11px;color:#eee;margin:0}.home-choose{display:flex;flex-direction:column;gap:6px}.home-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}.home-tile{height:clamp(42px,8dvh,75px);position:relative;overflow:hidden;background-position:center;background-size:cover;border:1px solid #4e5b59;border-radius:7px;text-align:left;color:white}.home-tile.picked{outline:2px solid #d9bf8a;outline-offset:-2px}.home-tile span{position:absolute;bottom:7px;left:7px;right:4px;font-size:11px;font-weight:600}.home-actions{display:flex;flex-direction:column;gap:6px}.home-join{border:0;color:#d2dcd8;background:none;padding:7px;font-size:12px}.home-actions .home-join:first-of-type{border:1px solid #c1ae88;border-radius:8px}.budget-picker{display:flex;gap:5px;align-items:center}.budget-picker>span{width:55px;flex:none;font-size:9px;color:#aab8b4;letter-spacing:.8px}.budget-picker button{flex:1;padding:7px 3px;border:1px solid #465754;background:#19292c;border-radius:5px;color:#eee;font-size:12px}.budget-picker button.chosen{background:#d8c8a5;color:#152024;border-color:#d8c8a5}.budget-picker input{width:55px;padding:7px 3px;background:#19292c;color:#eee;border:1px solid #465754;border-radius:5px;font-size:12px}.scoreboard{display:grid;grid-template-columns:repeat(var(--players),minmax(0,1fr));gap:6px;flex:none}.score{border-bottom:2px solid #45524f;padding:6px 3px;display:flex;flex-direction:column;gap:3px;min-width:0}.score.is-you{border-color:#d9c08e}.score strong{font-size:11px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.score b{font-size:clamp(19px,3dvh,25px);font-variant-numeric:tabular-nums;font-weight:650}.score span{font-size:10px;color:#a9b9b3}.auction-stage{position:relative;flex:1;min-height:115px;overflow:hidden;border-radius:10px;background:#263439}.photo-frame{position:relative;overflow:hidden;background:#263439;min-height:0;height:100%}.photo-frame img{position:relative;z-index:1;width:100%;height:100%;object-fit:cover;display:block}.photo-fallback{position:absolute;inset:0;display:flex;justify-content:center;align-items:center;color:#a7b9b3;font-size:11px}.lot-photo{position:absolute;inset:0}.lot-copy{position:absolute;inset:auto 0 0;padding:40px 15px 14px;background:linear-gradient(transparent,#070e11e8);z-index:2;pointer-events:none}.lot-copy h1{font:clamp(22px,3.8dvh,32px)/1.07 Georgia;margin:5px 0;color:#fff}.lot-copy p{font-size:12px;color:#e1e5df;margin:0;line-height:1.35}.bid-line{display:flex;justify-content:space-between;align-items:center;flex:none;padding:0 3px;min-height:48px}.bid-line span{font-size:13px}.bid-line small{display:block;color:#a5b6b0;font-size:11px;margin-top:4px}.bid-line>strong{font-size:33px;font-weight:600;color:#e6d2a9;font-variant-numeric:tabular-nums}.arena-control{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px;flex:none}.arena-control button{min-height:44px;border:1px solid #a29374;background:#e6d2a9;color:#182527;border-radius:7px;font-size:13px;font-weight:650;padding:7px 2px}.arena-control button:last-child{background:#213035;color:#e0e6df;border-color:#53625e}.collection-label{font-size:10px;text-transform:uppercase;letter-spacing:1px;display:flex;justify-content:space-between;color:#d1c6ad}.collection-label span{font-size:10px;text-transform:none;letter-spacing:0;color:#97aaa3}.collection-tabs{display:flex;gap:4px;flex:none}.collection-tabs button{flex:1;min-width:0;border:0;border-bottom:2px solid transparent;border-radius:0;background:transparent;color:#9aafa6;font-size:11px;padding:6px 2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.collection-tabs button[aria-selected=true]{border-color:#d8c49f;color:#eee9df}.auction-collection{height:98px;flex:none}.collection-grid{height:100%;display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:5px}.collection-grid figure{margin:0;min-height:0;display:flex;flex-direction:column;overflow:hidden;border-radius:5px}.collection-grid .photo-frame{flex:1;min-height:20px}.collection-grid figcaption{font-size:9px;line-height:1.2;padding:5px 0 0;min-height:28px;color:#dbe3db}.collection-grid figcaption small{display:block;color:#9aafa7;font-size:9px;margin-top:2px}.collection-empty{grid-column:1/-1;border:1px dashed #425650;border-radius:7px;display:grid;place-items:center;font-size:12px;color:#94aaa0}.arena-note{font-size:10px;text-align:center;color:#8ea69b;min-height:12px}.final-title h1{font:30px Georgia;margin:6px 0}.final-collection{flex:1;min-height:0}.final-collection .collection-grid{grid-template-columns:repeat(2,minmax(0,1fr));grid-auto-rows:minmax(0,1fr);gap:9px}.final-collection figure:last-child:nth-child(odd){grid-column:1/-1}.final-collection figcaption{font-size:12px;display:flex;justify-content:space-between;min-height:24px}.verdict{font-size:12px;line-height:1.45;color:#d9d4c5;flex:none;border-top:1px solid #42514c;padding:10px 0}.end-buttons{display:flex;gap:8px;flex:none}.end-buttons button{flex:1;font-size:12px}.lobby-picture{flex:1;min-height:50px;max-height:220px;background-position:center;background-size:cover;position:relative;border-radius:9px}.lobby-picture span{position:absolute;inset:auto 0 0;padding:30px 14px 12px;background:linear-gradient(transparent,#091417);font:25px Georgia}.lobby-room{display:flex;align-items:center;justify-content:space-between;padding:10px 0}.lobby-room strong{font-size:28px;letter-spacing:4px;color:#e1cda5}.players{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}.player{border-bottom:1px solid #475c52;padding:6px}.player strong{font-size:12px}.wallet{font-size:22px;color:#ddcea9;margin-top:3px}.lobby-help{font-size:12px;line-height:1.4;color:#a9bdb2;margin:0}.lobby-actions{margin-top:auto}.lobby-actions .home-join{width:100%}.input{width:100%;background:#20312e;color:#fff;border:1px solid #53685d;border-radius:8px;padding:15px}.lead{font-size:13px;color:#a7b9b0;line-height:1.5}.world-sheet-backdrop{position:fixed;inset:0;background:#000b;z-index:20;display:flex;align-items:flex-end;justify-content:center}.world-sheet{max-width:560px;width:100%;padding:22px 18px;background:#1b2a29;border-radius:15px 15px 0 0}.world-sheet-top{display:flex;justify-content:space-between}.world-sheet-top button{background:none;border:0;color:#eee;font-size:20px}.world-sheet h2{font:28px Georgia;margin:10px 0}.world-sheet p{font-size:13px;color:#adc1b5}.world-sheet input{width:100%;padding:14px;margin:10px 0;font-size:16px;background:#0f1f1d;border:1px solid #5b7565;color:#eee;border-radius:7px}.world-ideas{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:12px}.world-ideas button{background:#30473d;color:#eee;border:0;border-radius:5px;padding:7px;font-size:11px}#toast{position:fixed;z-index:50;bottom:16px;left:50%;transform:translateX(-50%);width:calc(100% - 32px);max-width:560px;padding:13px;background:#eee0c4;color:#172624;border:1px solid #b0a080;border-radius:8px;font-size:12px;box-shadow:0 4px 24px #0008}#toast[hidden]{display:none}@media(max-height:650px){.shell,.shell:has(.arena),.shell:has(.compact-home),.shell:has(.compact-lobby){padding:6px 12px}.arena,.compact-home,.compact-lobby{gap:6px}.home-title{font-size:25px}.home-picked p{display:none}.home-picked h2{font-size:22px}.home-tile{height:43px}.home-join{padding:5px}.budget-picker button,.budget-picker input{padding:5px 3px}.home-tag{display:none}.auction-collection{height:76px}.collection-grid figcaption{font-size:8px}.lot-copy{padding:28px 12px 10px}.lot-copy p{font-size:11px}.final-title h1{font-size:24px}.verdict{padding:5px 0}.score{padding:3px}.logo{font-size:22px}.lobby-room{padding:4px 0}.player{padding:3px}.wallet{font-size:19px}}@media(max-height:480px){.home-picked{display:none}.home-grid{grid-template-columns:repeat(5,1fr)}.home-title{font-size:20px}.home-choose>.eyebrow{display:none}.home-actions{gap:3px}.auction-collection{display:none}.collection-label,.premium:not(.final) .collection-tabs{display:none}.lot-copy p{display:none}.auction-stage{min-height:75px}.score b{font-size:18px}.bid-line{min-height:35px}.final-title{display:none}}\n.collection-content{height:100%;display:flex;flex-direction:column;gap:6px;min-height:0}.built-scene{position:relative;flex:1;min-height:115px;background-size:cover;background-position:center;border-radius:9px;border:1px solid #817658;overflow:hidden}.built-scene:after{content:'';position:absolute;inset:45% 0 0;background:linear-gradient(transparent,#080f15cc)}.built-scene span{position:absolute;z-index:1;bottom:8px;left:10px;font-size:10px;letter-spacing:1px;font-weight:750;color:#f6e4c4}.auction-collection:has(.built-scene){height:clamp(160px,25dvh,230px)}.auction-collection:has(.built-scene) .collection-grid{height:54px;flex:none}.auction-collection:has(.built-scene) .collection-grid figcaption{font-size:8px;min-height:18px;padding:2px 0}.auction-collection:has(.built-scene) .collection-grid figcaption small{display:none}.final-collection:has(.built-scene) .built-scene{min-height:35%;flex:1}.final-collection:has(.built-scene) .collection-grid{height:42%;flex:none;grid-template-columns:repeat(5,minmax(0,1fr))}.final-collection:has(.built-scene) .collection-grid figure{grid-column:auto!important}.final-collection:has(.built-scene) .collection-grid figcaption{font-size:9px}@media(max-height:650px){.auction-collection:has(.built-scene){height:140px}.built-scene{min-height:65px}}.bid-line{background:#19282b;border:1px solid #40524c;border-radius:11px;padding:9px 13px!important;min-height:70px!important}.bid-line .bid-status{font-weight:750;font-size:15px;color:#fff}.bid-line small{font-size:11px}.bid-money{text-align:right;display:flex;flex-direction:column;align-items:flex-end;gap:0}.bid-money span{font-size:9px;letter-spacing:1.3px;color:#9fb3aa}.bid-money strong{font-size:30px;line-height:1.1;color:#e6d2a9;font-variant-numeric:tabular-nums}.arena-control button{display:flex;flex-direction:column;justify-content:center;align-items:center;gap:3px;min-height:52px!important}.arena-control button small{font-size:9px;letter-spacing:.3px;opacity:.7}.arena-control button strong{font-size:16px}.arena-control button:last-child{font-weight:800}.arena-control button:active:not(:disabled){transform:scale(.96)}.bid-line{transition:background .18s ease}@media(max-height:720px){.bid-line{min-height:58px!important;padding:6px 10px!important}.arena-control button{min-height:44px!important}}.shell:has(.lux-arena){padding:0!important;max-width:620px;background:#0c1719;overflow:hidden!important}.lux-arena{gap:0!important;height:100%;color:#f7f0df;background:#0c1719}.lux-header{display:flex;align-items:center;gap:12px;padding:10px 17px 6px;flex:none}.lux-brand{font:18px Georgia,serif;letter-spacing:3.5px;flex:1;white-space:nowrap}.lux-round{font-size:10px;letter-spacing:1.2px;color:#c7c3bb}.lux-sound{border:0;background:transparent;color:#e3d5bd;font-size:16px;padding:5px}.lux-estate{position:relative;height:clamp(112px,26dvh,255px);min-height:95px;flex:1 1 22%;overflow:hidden}.lux-estate-photo{position:absolute;inset:0;background-size:cover;background-position:center}.lux-estate:after{content:'';position:absolute;inset:30% 0 0;background:linear-gradient(transparent,#0c1719e8)}.lux-estate-caption{position:absolute;z-index:2;bottom:12px;left:18px;right:18px;display:flex;justify-content:space-between;align-items:end;gap:5px;font-size:10px;letter-spacing:1.8px;font-weight:700;text-transform:uppercase}.lux-estate-caption span:last-child{font-size:10px;letter-spacing:0;color:#e9cf94}.lux-score{display:grid;grid-template-columns:repeat(var(--players,2),minmax(0,1fr));grid-auto-flow:column;gap:0;padding:8px 13px 12px;flex:none}.lux-score button{border:0;background:transparent;color:#e5e4de;text-align:left;padding:4px 12px;min-width:0;opacity:.68}.lux-score button.selected{opacity:1}.lux-score span{display:block;font:15px Georgia,serif;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.lux-score strong{display:block;font:25px Georgia,serif;margin:2px 0}.lux-score small{display:block;font-size:11px;color:#a6b3ad}.lux-lot{position:relative;flex:1 1 30%;min-height:100px;max-height:285px;overflow:hidden}.lux-lot-photo{position:absolute!important;inset:0}.lux-lot:after{content:'';position:absolute;inset:0;background:linear-gradient(90deg,#071114d9,transparent 85%);pointer-events:none}.lux-lot-info{position:absolute;z-index:2;left:17px;bottom:14px;right:20%;pointer-events:none}.lux-lot-info small{font-size:9px;letter-spacing:2.6px}.lux-lot-info h1{font:clamp(23px,4.4dvh,43px) Georgia,serif;margin:7px 0}.lux-lot-info p{font:clamp(11px,1.8dvh,14px)/1.35 Georgia,serif;margin:0;max-width:300px}.lux-auction{display:flex;flex-direction:column;align-items:center;justify-content:center;flex:none;min-height:88px;padding:12px 0 3px;gap:0}.lux-auction small{color:#c4c7c3;font-size:11px;letter-spacing:3px}.lux-auction strong{font:clamp(40px,7dvh,63px)/1.1 Georgia,serif;color:#eacb8f}.lux-actions{flex:none;padding:2px 19px 14px}.lux-bid{width:100%;border:0;border-radius:999px;padding:clamp(11px,2dvh,19px) 20px;background:#e8cf9c;color:#14201e;font:22px Georgia,serif;min-height:49px}.lux-bid span{padding-left:12px}.lux-options{display:grid;grid-template-columns:repeat(4,1fr);gap:9px;margin-top:13px}.lux-options button{border:1px solid #706c5e;background:transparent;color:#e9ddc5;border-radius:999px;padding:11px 0;font:17px Georgia,serif;min-height:44px}.lux-options button:last-child{border-color:#343f3b;color:#b6c0ba}.lux-actions button:disabled,.lux-bid:disabled{opacity:.28}.lux-arena>.lux-bid{width:calc(100% - 36px);margin:0 18px 18px}.lux-arena>.arena-note{padding:14px}.lux-score{--players:2}@media(max-height:660px){.lux-header{padding:5px 14px}.lux-estate{min-height:85px}.lux-score{padding:3px 12px}.lux-score strong{font-size:20px}.lux-lot{min-height:75px}.lux-lot-info h1{margin:3px 0}.lux-auction{min-height:68px;padding:4px 0}.lux-options{margin-top:6px}.lux-actions{padding-bottom:7px}}.lux-lot-photo img{filter:brightness(.76)}.lux-lot:after{background:linear-gradient(90deg,#071114f0 0%,#071114be 40%,transparent 95%)!important}.lux-lot-info{right:12%!important}.lux-lot-info h1{font-size:clamp(22px,3.7dvh,34px)!important;line-height:1.03!important;max-width:92%}.lux-lot-info p{max-width:80%;text-shadow:0 1px 6px #071114}.lux-auction strong{transition:color .2s,transform .2s}.lux-options button:active,.lux-bid:active{transform:scale(.97)}.photo-fallback{background:linear-gradient(120deg,#263333,#162527);color:#d4c7ae;text-align:center;padding:12px;font:16px Georgia,serif}.lux-estate-caption{background:transparent}.lux-estate-caption span:first-child{color:white}@media(max-height:720px){.lux-lot-info h1{font-size:25px!important}.lux-estate{flex:1 1 22%}.lux-lot{flex:1 1 24%}}@keyframes luxuryArrival{from{opacity:.5;transform:translateY(7px)}to{opacity:1;transform:translateY(0)}}@keyframes soldArrival{0%{opacity:.35;transform:translateY(3px)}100%{opacity:1;transform:translateY(0)}}.lux-arena.lot-sold .lux-auction{animation:soldArrival .28s ease both}.lux-arena.lot-open .lux-lot-info{animation:luxuryArrival .35s ease-out both}.lux-options button{transition:opacity .12s,transform .12s}.lux-lot-photo{background:#1c2928}.lux-score button.selected span{color:#e6cf9d}.world-status{font-size:10px;color:#dacbaa;padding:4px}.lux-estate-caption span:last-child{font-size:9px}.photo-wrap:has(img) .photo-fallback{display:none}\n.lux-estate{flex:1.6 1 35%!important;min-height:120px;height:auto;background:#101e20;padding-bottom:26px}\n.lux-estate:after{display:none}\n.lux-world-image{display:block;position:absolute;inset:0 0 26px;width:100%;height:calc(100% - 26px);object-fit:contain;background:#101e20}\n.lux-estate-caption{bottom:0;left:0;right:0;min-height:26px;padding:6px 13px;background:#122124;letter-spacing:1px;font-size:9px;align-items:center}\n.lux-estate-caption span:last-child{font-size:8px;text-align:right}\n.lux-lot{flex:.8 1 21%!important;max-height:175px;min-height:85px}\n.lux-score{padding:5px 12px}.lux-score strong{font-size:23px}\n.lux-auction{min-height:68px;padding:5px 0 2px}.lux-auction strong{font-size:45px}.lux-auction small{font-size:10px;letter-spacing:2px}\n.lux-options{margin-top:8px}.lux-actions{padding-bottom:max(9px,env(safe-area-inset-bottom))}\n.world-preview{position:absolute;inset:7px 10px 32px;display:flex;align-items:center;justify-content:center;gap:7px}\n.world-preview figure{margin:0;flex:1;max-width:160px;min-width:0;height:100%;display:flex;flex-direction:column;justify-content:center;gap:5px}\n.world-preview figure .photo-frame{min-height:0;flex:1}\n.world-preview figure img{width:100%;height:100%;object-fit:cover}\n.world-preview figcaption{font-size:10px;text-align:center;color:#e3dbc8}\n.world-empty{margin:auto;color:#b2c2bf;font-size:12px;text-align:center;padding:15px}.world-empty[hidden],.lux-world-image[hidden]{display:none}\n.built-scene{background-size:contain;background-repeat:no-repeat;background-color:#101e20;background-origin:content-box;padding-bottom:22px}.built-scene:after{display:none}.built-scene span{background:#122124;bottom:0;left:0;right:0;padding:5px;font-size:9px}\n@media(max-height:570px){.lux-estate{min-height:94px}.lux-score{padding:2px 10px}.lux-score strong{font-size:19px}.lux-score span{font-size:13px}.lux-lot{min-height:72px}.lux-lot-info{bottom:9px}.lux-lot-info p{font-size:10px}.lux-auction{min-height:53px}.lux-auction strong{font-size:34px}.lux-bid{min-height:44px;padding:10px}.lux-options button{padding:8px;min-height:40px}.lux-options{margin-top:5px}}\n</style></head><body><main id=\"app\" class=\"shell\"></main><script>\nvar selectedHouseBase='Terraced house';\nvar themes={\nhouse:{name:'Dream House',desc:'Start with a house. Auction one home per player, then build it with upgrades.',cover:'photo-1600596542815-ffad4c1539a9',items:[['Swimming Pool','photo-1576013551627-0cc20b96c2a7','A resort-style infinity pool'],['Home Cinema','photo-1489599849927-2ee91cede3ba','Private cinema with plush seating'],['Football Pitch','photo-1522778119026-d647f0596c20','Your very own floodlit football pitch'],['Games Room','photo-1535223289827-42f1e9919769','Arcades, table tennis and pool'],['Rooftop Terrace','photo-1600607687920-4e2a09cf159d','An incredible view from above'],['Private Gym','photo-1534438327276-14e5300c3a48','Everything for your dream workout'],['Hot Tub','photo-1540555700478-4be289fbecef','Spa nights whenever you want'],['Tennis Court','photo-1595435934249-5df7ed86e1c0','Your own full-size tennis court'],['Wine Cellar','photo-1510812431401-41d2bd2722f3','An exquisite underground cellar'],['Private Beach','photo-1507525428034-b723cf961d3e','A stretch of beach just for you']]},\nfast:{name:'Fast Food Draft',desc:'Ten iconic chains. Who builds the tastier lineup?',cover:'photo-1568901346375-23c9450c58cd',items:[['McDonald’s','photo-1550547660-d9450f859349','The iconic golden arches'],['KFC','photo-1562967914-608f82629710','Fried chicken royalty'],['Five Guys','photo-1568901346375-23c9450c58cd','Burgers and loaded fries'],['Nando’s','photo-1532550907401-a500c9a57435','Peri-peri perfection'],['Taco Bell','photo-1551504734-5ee1c4a1479b','Tacos on demand'],['Subway','photo-1553909489-cd47e0ef937f','Build your own sub'],['Domino’s','photo-1513104890138-7c749659a591','Pizza night'],['Shake Shack','photo-1571091718767-18b5b1457add','The famous shack burger'],['Burger King','photo-1561758033-d89a9ad46330','Flame grilled classics'],['Greggs','photo-1509440159596-0249088772ff','British bakery icon']]},\ncountries:{name:'Countries Draft',desc:'Build the ultimate set of destinations.',cover:'photo-1748040187622-4886c2783369',items:[['Japan','photo-1493976040374-85c8e12f0c0e','Neon cities and mountain escapes'],['Italy','photo-1533105079780-92b9be482077','Coasts, culture and pasta'],['Maldives','photo-1514282401047-d79a71a590e8','Overwater villas'],['United States','photo-1485738422979-f5c462d49f74','Everything from NYC to Hawaii'],['Greece','photo-1613395877344-13d4a8e0d49e','Sun-drenched islands'],['Switzerland','photo-1531366936337-7c912a4589a7','The ultimate Alpine escape'],['Brazil','photo-1483728642387-6c3bdd6c93e5','Energy and breathtaking beaches'],['Thailand','photo-1528181304800-259b08848526','Tropical adventures'],['Australia','photo-1506973035872-a4ec16b8e8d9','Wild coastlines'],['Iceland','photo-1476610182048-b716b8518aae','Waterfalls and northern lights']]},\nsports:{name:'Sports Draft',desc:'Auction the sports you want on your team.',cover:'photo-1461896836934-ffe607ba8211',items:[['Football','photo-1522778119026-d647f0596c20','The beautiful game'],['Formula 1','photo-1504817343863-5092a923803e','Speed and spectacle'],['Basketball','photo-1546519638-68e109498ffc','The court is yours'],['Tennis','photo-1595435934249-5df7ed86e1c0','Grand Slam energy'],['Golf','photo-1535131749006-b7f58c99034b','The perfect round'],['Cricket','photo-1540747913346-19e32dc3e97e','A summer classic'],['Boxing','photo-1549719386-74dfcbf7dbed','The big fight'],['Rugby','photo-1515523110800-9415d13b84a8','Power and passion'],['Skiing','photo-1517299321609-52687d1bc55a','Down the mountain'],['Swimming','photo-1530549387789-4c1017266635','Poolside glory']]},\nholiday:{name:'Dream Holiday',desc:'Bid on ten unbelievable experiences.',cover:'photo-1514282401047-d79a71a590e8',items:[['Private Yacht','photo-1544551763-46a013bb70d5','A full day on the water'],['Helicopter Ride','photo-1474302770737-173ee21bab63','See it all from the sky'],['Michelin Dinner','photo-1414235077428-338989a2e8c0','Unforgettable fine dining'],['Safari','photo-1516426122078-c23e76319801','A once-in-a-lifetime adventure'],['Scuba Diving','photo-1544551763-46a013bb70d5','Explore the reef'],['Sunset Cruise','photo-1500534623283-312aade485b7','Golden-hour magic'],['Spa Retreat','photo-1540555700478-4be289fbecef','A day of pure relaxation'],['Hot Air Balloon','photo-1507699622108-4be3abd695ad','Float above the scenery'],['VIP Concert','photo-1459749411175-04bf5292ceea','Front row under the lights'],['Private Island','photo-1507525428034-b723cf961d3e','The ultimate island escape']]}\n};\nwindow.addEventListener('message',function(e){if(e.origin!=='https://dobble-app-production.up.railway.app'||!e.data||e.data.type!=='draft-night-identity')return;if(e.data.name==='Louie'||e.data.name==='Ariel'){identity=e.data.name;localStorage.setItem('draft-night-identity',identity)}});\nvar token='',busy=false,refreshing=false,collectionPlayer=0;\nvar identity=(new URLSearchParams(location.search).get('as')||localStorage.getItem('draft-night-identity')||'').slice(0,20),playerCount=2,startingBudget=20,narration=false,lastAnnounced='',customTopic='',selected='house',room=null,player=0,view='home',snapshot=null,poll=null,lastRound=-1;\nvar $=function(s){return document.querySelector(s)},photo=function(id,w){return !id?'':id.startsWith('https://')?id:'https://images.unsplash.com/'+id+'?auto=format&fit=crop&w='+(w||800)+'&q=80'},safe=function(s){return String(s||'').replace(/[&<>\"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',\"'\":'&#39;'}[c]})};\nfunction btn(t,fn,cl){return '<button class=\"'+(cl||'secondary')+'\" onclick=\"'+fn+'\">'+t+'</button>'}\nfunction header(right){return '<div class=\"bar\"><div class=\"logo\"><span class=\"spark\">✦</span> Draft Night</div><div class=\"small\">'+(right||'TWO PLAYER AUCTIONS')+'</div></div>'}\nfunction chooseIdentity(n){identity=n;localStorage.setItem('draft-night-identity',n);renderHome()}\nfunction renderHome(){view='home';var m=themes[selected];$('#app').innerHTML='<div class=\"compact-home\"><div class=\"home-brand\"><div class=\"logo\"><span class=\"spark\">✦</span> Draft Night</div><div class=\"home-tag\">THE FRIENDS & FAMILY AUCTION GAME</div></div><div><div class=\"eyebrow\">FIVE PICKS EACH. YOUR COLLECTION.</div><h1 class=\"home-title\">What will you <em>take home?</em></h1><p class=\"home-sub\">'+('£'+startingBudget+' each · '+(playerCount*5)+' items · '+playerCount+' players')+'</p></div><div class=\"home-picked\" style=\"background-image:url('+photo(m.cover,900)+')\"><div class=\"home-picked-text\"><div class=\"eyebrow\">YOUR WORLD</div><h2>'+safe(m.name)+'</h2><p>'+safe(m.desc)+'</p></div></div><div class=\"home-choose\"><div class=\"eyebrow\">CHOOSE YOUR DRAFT</div><div class=\"home-grid\">'+Object.entries(themes).map(function(k){return '<button class=\"home-tile '+(selected===k[0]?'picked':'')+'\" style=\"background-image:url('+photo(k[1].cover,360)+')\" onclick=\"pick(\\''+k[0]+'\\')\"><span>'+safe(k[1].name)+'</span></button>'}).join('')+'</div></div><div class=\"home-actions\"><div class=\"budget-picker\"><span>PLAYERS</span>'+[2,3,4,5].map(function(n){return '<button onclick=\"playerCount='+n+';renderHome()\" class=\"'+(playerCount===n?'chosen':'')+'\">'+n+'</button>'}).join('')+'</div><div class=\"budget-picker\"><span>BUDGET</span>'+[10,20,30,50,100].map(function(n){return '<button class=\"'+(startingBudget===n?'chosen':'')+'\" onclick=\"startingBudget='+n+';renderHome()\">£'+n+'</button>'}).join('')+'<input aria-label=\"Custom budget\" type=\"number\" min=\"5\" max=\"500\" placeholder=\"Other\" value=\"'+([10,20,30,50,100].includes(startingBudget)?'':startingBudget)+'\" oninput=\"startingBudget=Math.max(5,Math.min(500,Math.round(Number(this.value)||20)))\"></div><button class=\"primary\" onclick=\"create()\">Create room <span>→</span></button><button class=\"home-join\" onclick=\"cpuStart()\">Play vs CPU</button><button class=\"home-join\" onclick=\"customDraft()\">Create your own AI theme</button><button class=\"home-join\" onclick=\"joinScreen()\">Join your friend’s room</button></div></div>'}\nfunction pick(k){selected=k;renderHome()}\nfunction customDraft(){var existing=$('#worldSheet');if(existing){existing.remove();return}var sheet=document.createElement('div');sheet.className='world-sheet-backdrop';sheet.id='worldSheet';sheet.innerHTML='<div class=\"world-sheet\" role=\"dialog\" aria-modal=\"true\" aria-label=\"Create your own draft\"><div class=\"world-sheet-top\"><span class=\"eyebrow\">MAKE IT YOURS</span><button onclick=\"document.getElementById(\\'worldSheet\\').remove()\" aria-label=\"Close\">✕</button></div><h2>Create a new world</h2><p>Anything you can dream up. Ten surprise items, including one disaster.</p><input id=\"worldPrompt\" maxlength=\"65\" placeholder=\"e.g. Build a dream nightclub\" autocomplete=\"off\"/><div class=\"world-ideas\">'+['Dream Nightclub','Theme Park','Billionaire Island','Supervillain Lair'].map(function(t){return '<button onclick=\"document.getElementById(\\'worldPrompt\\').value=\\''+t+'\\'\">'+t+'</button>'}).join('')+'</div><button class=\"primary\" onclick=\"saveCustomWorld()\">Create this draft →</button></div>';document.body.appendChild(sheet);setTimeout(function(){var i=$('#worldPrompt');if(i)i.focus()},80)}\nfunction saveCustomWorld(){var input=$('#worldPrompt'),t=input&&input.value.trim();if(!t){if(input)input.focus();return}customTopic=t.slice(0,65);themes.custom={name:customTopic,desc:'Ten AI-created surprise auction items.',cover:'photo-1535223289827-42f1e9919769',items:[]};selected='custom';var sheet=$('#worldSheet');if(sheet)sheet.remove();renderHome()}\nfunction joinScreen(){view='join';$('#app').innerHTML=header()+'<h1 class=\"hero\">Join the<br><span class=\"spark\">showdown.</span></h1><p class=\"lead\">Enter the six-character code from your friend’s screen.</p><input class=\"input\" id=\"roomcode\" maxlength=\"6\" autocomplete=\"off\" placeholder=\"ROOM CODE\" style=\"text-transform:uppercase;text-align:center;letter-spacing:6px;font-size:25px;font-weight:800\"><div style=\"height:14px\"></div>'+btn('Join room →','join()','primary')+'<div style=\"height:10px\"></div>'+btn('← Back','renderHome()')+'<div id=\"error\" class=\"notice\" style=\"display:none\"></div>'}\nasync function api(path,data){var r=await fetch('/api/'+path,{signal:AbortSignal.timeout(25000),method:data?'POST':'GET',headers:{'Content-Type':'application/json'},body:data?JSON.stringify(data):undefined});var d=await r.json();if(!r.ok)throw new Error(d.error||'Something went wrong');return d}\nfunction oldError(e){var n=$('#error');if(n){n.textContent=e.message||String(e);n.style.display='block'}else alert(e.message||String(e))}\nfunction err(e){var n=document.getElementById('toast');if(!n){n=document.createElement('div');n.id='toast';n.setAttribute('role','status');document.body.appendChild(n)}n.textContent=e.message||String(e);n.hidden=false;clearTimeout(n.timer);n.timer=setTimeout(function(){n.hidden=true},5000)}\nfunction readBudget(){var input=document.querySelector('[aria-label=\"Custom budget\"]');if(input&&input.value!=='')startingBudget=Math.max(5,Math.min(500,Math.round(Number(input.value)||20)));return startingBudget}\nasync function cpuStart(){if(busy)return;busy=true;try{var d=await api('create',{theme:selected,topic:customTopic,budget:readBudget(),capacity:2,cpu:true,name:identity||'You',houseBase:selectedHouseBase});token=d.token;room=d.code;player=0;localStorage.setItem('draft-night-session',JSON.stringify({room:room,player:player,token:token}));await refresh()}catch(e){err(e)}finally{busy=false}}\nasync function create(){if(busy)return;busy=true;try{var d=await api('create',{theme:selected,topic:customTopic,budget:readBudget(),capacity:playerCount,name:identity,houseBase:selectedHouseBase});token=d.token;room=d.code;player=0;localStorage.setItem('draft-night-session',JSON.stringify({room:room,player:player,token:token}));await refresh()}catch(e){err(e)}finally{busy=false}}\nasync function join(){if(busy)return;busy=true;try{var c=$('#roomcode').value.trim().toUpperCase();var d=await api('join',{code:c,name:identity});token=d.token;room=d.code;player=d.player;localStorage.setItem('draft-night-session',JSON.stringify({room:room,player:player,token:token}));await refresh()}catch(e){err(e)}finally{busy=false}}\nasync function action(type,value){if(busy||!snapshot)return;busy=true;document.querySelectorAll('.arena-control button,.arena-next,.lux-actions button,.lux-bid').forEach(function(b){b.disabled=true});if(snapshot.cpu&&snapshot.phase==='bidding'&&(type==='bid'||type==='pass')){var statusEl=document.querySelector('.bid-status');if(statusEl)statusEl.textContent=type==='bid'?'Your bid placed · CPU thinking…':'You passed · CPU deciding…'}try{var d=await api('action',{code:room,player:player,token:token,revision:snapshot.revision,type:type,value:value});if(room===d.code){snapshot=d;renderRoom()}}catch(e){await refresh();err(e)}finally{busy=false;if(snapshot)renderRoom()}}\nasync function refresh(){if(!room||refreshing)return;refreshing=true;var requested=room;try{var d=await api('room?code='+encodeURIComponent(requested));if(room!==requested||snapshot&&d.revision<snapshot.revision)return;var changed=JSON.stringify(snapshot)!==JSON.stringify(d);snapshot=d;if(d.itemDeck&&themes[d.theme])themes[d.theme].items=d.itemDeck;if(d.theme==='custom'&&d.customItems){themes.custom={name:d.customTitle||'Your World',desc:'An AI-generated auction just for you.',cover:'',items:d.itemDeck||d.customItems};}if(changed)renderRoom()}catch(e){if(room!==requested)return;if(e.message==='Room not found'){leave();err('This room has expired. Start a new draft.')}else err('Connection interrupted. Retrying…')}finally{refreshing=false}}\nfunction session(){return '<div class=\"topline\"><span class=\"small\">ROOM <b style=\"color:#f5d18e;letter-spacing:2px\">'+safe(room)+'</b></span><button class=\"link\" onclick=\"share()\">Share invite ↗</button></div>'}\nasync function share(){var u=location.origin+'/?room='+encodeURIComponent(room);if(navigator.share){try{await navigator.share({title:'Draft Night',text:'Join my auction draft!',url:u})}catch(e){}}else{try{await navigator.clipboard.writeText(u);alert('Invite link copied!')}catch(e){prompt('Copy invite link',u)}}}\n\nvar houseIcons=['🏊','🎬','⚽','🎮','🌇','🏋️','♨️','🎾','🍷','🏝️'];\nfunction estate(p,mini){var its=p.items||[];return '<div class=\"'+(mini?'estate-mini':'')+'\"><div class=\"estate\"><div class=\"drive\"></div><div class=\"housebody\"><div class=\"roofline\"></div></div><div class=\"buildinglabel\">THE ORIGINAL HOUSE</div>'+its.map(function(x){var i=x.index;return '<div class=\"upgrade s'+i+'\" title=\"'+safe(themes.house.items[i][0])+'\"><b>'+houseIcons[i]+'</b><span>'+safe(themes.house.items[i][0])+'</span></div>'}).join('')+'</div></div>'}\nfunction estatesPanel(){if(!snapshot||snapshot.theme!=='house')return '';return '<div class=\"estate-head\"><h3>Building your worlds</h3><span class=\"rule-tag\">5 upgrades each</span></div><div class=\"cols\">'+snapshot.players.map(function(p,i){return '<div><div class=\"topline\"><strong>'+(i===player?'Your home':'Rival’s home')+'</strong><span class=\"mini\">'+p.items.length+'/'+(s.quotas[i]||5)+'</span></div>'+estate(p,true)+'</div>'}).join('')+'</div>'}\n\nvar badges={\nhouse:['🏊','🎬','⚽','🎮','🌇','🏋️','♨️','🎾','🍷','🏝️'],\nholiday:['🛥️','🚁','🍽️','🦒','🤿','⛵','🧖','🎈','🎤','🏝️'],\nfast:['🍟','🍗','🍔','🌶️','🌮','🥪','🍕','🍔','👑','🥐'],\ncountries:['🗻','🍝','🏝️','🗽','🏛️','🏔️','🥁','🐘','🦘','🌋'],\nsports:['⚽','🏎️','🏀','🎾','⛳','🏏','🥊','🏉','⛷️','🏊']};\nbadges.custom=['✨','🎭','🏗️','🪄','🚀','🎪','🎯','👑','🎲','🌟'];\nvar jokes={house:[['Mouldy Shed','photo-1473448912268-2022ce9509d8','A damp garden shed','🪵']],holiday:[['Airport Coach Transfer','photo-1509749837427-ac94a2553d0e','Three hours on a packed coach','🚌']],fast:[['Soggy Service Station Sandwich','photo-1553909489-cd47e0ef937f','The saddest sandwich','🥪']],countries:[['Airport Layover','photo-1436491865332-7a61a109cc05','Eight hours at the terminal','🧳']],sports:[['Competitive Queueing','photo-1529156069898-49953e39b3ac','A world-class wait','🧍']]};\nfunction itemAt(s,i){return s.itemDeck?s.itemDeck[i]:themes[s.theme].items[i]}\nfunction worldIcon(s,i){var name=itemAt(s,i)[0].toLowerCase();if(/pool|lake|scuba/.test(name))return '🏊';if(/yacht|boat|cruise|pedalo/.test(name))return '🛥️';if(/pitch|football/.test(name))return '⚽';if(/island|beach/.test(name))return '🏝️';if(/safari|jungle/.test(name))return '🌴';if(/helicopter/.test(name))return '🚁';if(/cinema/.test(name))return '🎬';if(/terrace|dinner|chef/.test(name))return '🍽️';if(/balloon/.test(name))return '🎈';return (badges[s.theme]||badges.custom)[i%10]}\nfunction imageTag(it,cl){return '<div class=\"photo-frame '+(cl||'')+'\">'+(it[1]?'<img src=\"'+safe(photo(it[1],800))+'\" alt=\"'+safe(it[0])+'\" onerror=\"this.remove();this.parentNode.classList.add(\\'unavailable\\')\">':'')+'<span class=\"photo-fallback\">'+safe(it[0])+'</span></div>'}\nfunction worldStatus(s,p){var n=s.players[p].items.length,v=s.aiVersions&&s.aiVersions[p]||0,state=s.aiStates&&s.aiStates[p];return state==='error'?'Image unavailable · collection saved':state==='unavailable'?'Collection saved':v<n?'Updating world · '+v+'/'+n+' items shown':v?'World · '+v+(v===1?' item':' items'):'Your first win starts your world'}\nfunction worldArt(s,p,idx){var version=s.aiVersions&&s.aiVersions[idx]||0;var scene=version?'<div class=\"built-scene\" style=\"background-image:url(/api/world?code='+encodeURIComponent(s.code)+'&p='+idx+'&v='+version+')\"><span>WORLD AFTER '+version+' '+(version===1?'WIN':'WINS')+'</span></div>':'';return '<div class=\"collection-content\"><div class=\"world-status\">'+safe(worldStatus(s,idx))+(s.aiStates&&s.aiStates[idx]==='error'&&idx===player?'<button class=\"link\" onclick=\"action(\\'retryImage\\')\">Retry image</button>':'')+'</div>'+scene+'<div class=\"collection-grid\">'+(p.items.length?p.items.map(function(x){var it=itemAt(s,x.index);return '<figure>'+imageTag(it)+'<figcaption>'+safe(it[0])+'<small>'+(x.price?'£'+x.price:'Free')+'</small></figcaption></figure>'}).join(''):'<div class=\"collection-empty\">Your first win starts the build.</div>')+'</div></div>'}\nfunction scoreboard(s){return '<div class=\"scoreboard\" style=\"--players:'+s.players.length+'\">'+s.players.map(function(p,i){return '<div class=\"score '+(i===player?'is-you':'')+'\"><strong>'+safe(p.name)+'</strong><b>£'+p.budget+'</b><span>'+p.items.length+'/'+(s.quotas[i]||Math.floor(10/s.capacity)+(i<10%s.capacity?1:0))+' items</span></div>'}).join('')+'</div>'}\nfunction chooseCollection(i){collectionPlayer=i;renderRoom()}\nfunction collectionTabs(s){return '<div class=\"collection-tabs\" role=\"tablist\">'+s.players.map(function(p,i){return '<button role=\"tab\" aria-selected=\"'+(collectionPlayer===i)+'\" onclick=\"chooseCollection('+i+')\">'+safe(p.name)+'</button>'}).join('')+'</div>'}\nfunction miniSlots(count){return '<div class=\"slots\">'+Array.from({length:5},function(_,i){return '<i class=\"'+(i<count?'owned':'')+'\"></i>'}).join('')+'</div>'}\nfunction toggleNarration(){narration=!narration;if(!narration&&window.speechSynthesis)window.speechSynthesis.cancel();if(snapshot)renderRoom()}\nfunction announceAuction(s){if(!narration||!window.speechSynthesis)return;var token=s.code+':'+s.round+':'+s.phase;if(token===lastAnnounced)return;lastAnnounced=token;var item=itemAt(s,s.round)[0];var words=s.phase==='sold'?s.players[s.wonBy].name+' takes '+item+' for '+s.soldFor+' pounds!': 'Round '+(s.round+1)+'. Up next, '+item+'. Place your bids!';try{window.speechSynthesis.cancel();var u=new SpeechSynthesisUtterance(words);u.rate=1.12;u.pitch=.92;window.speechSynthesis.speak(u)}catch(e){}}\nfunction renderArena(s,theme){\n announceAuction(s);\n var item=itemAt(s,s.round),me=s.players[player],skipped=s.phase==='skipped',sold=s.phase==='sold',leading=s.leader===player,canBid=!s.passed[player]&&!leading&&me.items.length<s.quotas[player];\n var owner=s.leader===null?'AWAITING FIRST BID':safe(s.players[s.leader].name.toUpperCase())+' LEADS AT';\n var headline=skipped?'ITEM PASSED':sold?(s.soldFor===0?'ALLOCATED TO '+safe(s.players[s.wonBy].name.toUpperCase()):'SOLD TO '+safe(s.players[s.wonBy].name.toUpperCase())):owner;\n var controls=skipped?(player===0?'<button class=\"lux-bid\" onclick=\"action(\\'next\\')\">Reveal replacement →</button>':'<div class=\"arena-note\">Waiting for next item</div>'):sold?(player===0?'<button class=\"lux-bid\" onclick=\"action(\\'next\\')\">'+(s.round===s.itemDeck.length-1?'See final collections':'Reveal next item')+' →</button>':'<div class=\"arena-note\">Waiting for host</div>'):'<div class=\"lux-actions\"><button class=\"lux-bid\" '+(!canBid||s.bid+1>me.budget?'disabled':'')+' onclick=\"action(\\'bid\\','+(s.bid+1)+')\">Bid £'+(s.bid+1)+' <span>→</span></button><div class=\"lux-options\">'+[1,2,5].map(function(n){return '<button '+(!canBid||s.bid+n>me.budget?'disabled':'')+' onclick=\"action(\\'bid\\','+(s.bid+n)+')\">+£'+n+'</button>'}).join('')+'<button '+(!canBid?'disabled':'')+' onclick=\"action(\\'pass\\')\">Pass</button></div></div>';\n var focus=collectionPlayer<s.players.length?collectionPlayer:player;\n var version=s.aiVersions&&s.aiVersions[focus]||0;\n var estate=version?'<img class=\"lux-world-image\" src=\"/api/world?code='+encodeURIComponent(s.code)+'&p='+focus+'&v='+version+'\" alt=\"'+safe(s.players[focus].name)+' world after '+version+' purchases\" onerror=\"this.hidden=true;this.nextElementSibling.hidden=false\"><div class=\"world-empty\" hidden>World image unavailable. Your items are saved.</div>':'<div class=\"world-preview\">'+(s.players[focus].items.length?s.players[focus].items.map(function(x){var owned=itemAt(s,x.index);return '<figure>'+imageTag(owned)+'<figcaption>'+safe(owned[0])+'</figcaption></figure>'}).join(''):'<div class=\"world-empty\">Your first purchase starts your world.</div>')+'</div>';\n $('#app').innerHTML='<div class=\"arena lux-arena '+(sold?'lot-sold':skipped?'lot-skipped':'lot-open')+'\"><header class=\"lux-header\"><div class=\"lux-brand\">DRAFT NIGHT</div><div class=\"lux-round\">ROUND '+(s.round+1)+' / 10</div><button class=\"lux-sound\" onclick=\"toggleNarration()\">'+(narration?'◖))':'◖')+'</button></header><div class=\"lux-estate\">'+estate+'<div class=\"lux-estate-caption\"><span>'+safe(s.players[focus].name)+'\\'S WORLD</span><span>'+safe(worldStatus(s,focus))+'</span></div></div><div class=\"lux-score\">'+s.players.map(function(p,i){return '<button onclick=\"chooseCollection('+i+')\" class=\"'+(focus===i?'selected':'')+'\"><span>'+safe(p.name)+'</span><strong>£'+p.budget+'</strong><small>'+p.items.length+' / '+s.quotas[i]+' items</small></button>'}).join('')+'</div><div class=\"lux-lot\">'+imageTag(item,'lux-lot-photo')+'<div class=\"lux-lot-info\"><small>ITEM '+(s.round+1)+' / 10</small><h1>'+safe(item[0])+'</h1><p>'+safe(item[2])+'</p></div></div><div class=\"lux-auction\" aria-live=\"polite\"><small class=\"bid-status\">'+headline+'</small><strong>£'+s.bid+'</strong></div>'+controls+'</div>';\n}\nfunction renderEnd(s,theme){var p=s.players[collectionPlayer]||s.players[0];$('#app').innerHTML='<div class=\"arena premium final\"><header class=\"arena-head\"><div class=\"logo\">Draft Night</div><span class=\"arena-round\">Complete</span></header>'+scoreboard(s)+'<div class=\"final-title\"><span class=\"eyebrow\">'+safe(theme.name)+'</span><h1>The final collections.</h1></div>'+collectionTabs(s)+'<div class=\"final-collection\">'+worldArt(s,p,collectionPlayer)+'</div><div class=\"verdict\" aria-live=\"polite\">'+safe(s.aiVerdict||'The judge is comparing your collections…')+'</div><div class=\"end-buttons\"><button class=\"arena-next\" onclick=\"leave()\">Play again</button><button class=\"secondary\" onclick=\"sharePoster()\">Share collection</button></div></div>'}\nfunction personCards(){return '<div class=\"players\">'+snapshot.players.map(function(p,i){return '<div class=\"player '+(i===player?'active':'')+'\"><div class=\"small\">'+(i===0?'HOST':'CHALLENGER')+(i===player?' · YOU':'')+'</div><strong>'+safe(p.name)+'</strong><div class=\"wallet\">£'+p.budget+'</div><div class=\"mini\">'+p.items.length+' wins</div></div>'}).join('')+'</div>'}\nfunction compactLobby(s,theme,ready){var host=player===0;$('#app').innerHTML='<div class=\"compact-lobby\"><div class=\"arena-head\"><div class=\"logo\">✦ Draft Night</div><span class=\"arena-round\">'+(ready?'READY TO PLAY':'WAITING ROOM')+'</span></div><div class=\"lobby-picture\" style=\"background-image:url('+photo(theme.cover,700)+')\"><span>'+safe(theme.name)+'</span></div><div class=\"lobby-room\"><div><div class=\"eyebrow\">ROOM CODE</div><strong>'+safe(room)+'</strong></div><button class=\"secondary\" onclick=\"share()\">Share invite ↗</button></div><div class=\"players\">'+s.players.map(function(p,i){return '<div class=\"player '+(i===player?'active':'')+'\"><div class=\"small\">'+(i===0?'HOST':'CHALLENGER')+'</div><strong>'+safe(p.name)+'</strong><div class=\"wallet\">£'+p.budget+'</div><div class=\"mini\">'+(i===player?'You':'Joined')+'</div></div>'}).join('')+'</div><p class=\"lobby-help\">'+(ready?'10 surprise items. Ten items divided among players.': ''+s.joined+' of '+s.capacity+' players joined.')+'</p><div class=\"lobby-actions\">'+(ready?(host?btn('Start the auction →',\"action('start')\",'primary'):'<div class=\"notice\">Waiting for the host to start.</div>'):btn('Copy invite link','share()','primary'))+'<button class=\"home-join\" onclick=\"leave()\">Leave room</button></div></div>'}\nfunction renderRoom(){if(!snapshot)return;var s=snapshot,theme=themes[s.theme]||themes.house;if(s.status==='waiting'){view='waiting';compactLobby(s,theme,false);return}if(s.status==='ready'){view='ready';compactLobby(s,theme,true);return}if(s.status==='finished'){view='finished';renderEnd(s,theme);return}view='playing';renderArena(s,theme)}\nasync function sharePoster(){if(!snapshot)return;var s=snapshot,p=s.players[collectionPlayer]||s.players[0],c=document.createElement('canvas');c.width=1000;c.height=240+p.items.length*190;var g=c.getContext('2d');g.fillStyle='#10191d';g.fillRect(0,0,c.width,c.height);g.fillStyle='#e8d4ac';g.font='36px Georgia';g.fillText('Draft Night · '+p.name,40,60);g.fillStyle='#fff';g.font='24px sans-serif';g.fillText('£'+p.budget+' remaining · '+p.items.length+' items',40,108);for(var j=0;j<p.items.length;j++){var x=p.items[j],it=itemAt(s,x.index),y=160+j*190;try{var im=await new Promise(function(ok,no){var img=new Image();img.crossOrigin='anonymous';img.onload=function(){ok(img)};img.onerror=no;img.src=photo(it[1],400);setTimeout(no,5000)});g.drawImage(im,40,y,230,160)}catch(e){g.fillStyle='#263439';g.fillRect(40,y,230,160)}g.fillStyle='#fff';g.font='28px sans-serif';g.fillText(it[0],300,y+65,650);g.fillStyle='#d2c4a8';g.font='24px sans-serif';g.fillText(x.price?'£'+x.price:'Free allocation',300,y+108)}try{var blob=await new Promise(function(ok){c.toBlob(ok,'image/png')});var file=new File([blob],'draft-night-collection.png',{type:'image/png'});if(navigator.canShare&&navigator.canShare({files:[file]}))await navigator.share({files:[file],title:'Draft Night collection'});else{var url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=file.name;a.click();setTimeout(function(){URL.revokeObjectURL(url)},1000)}}catch(e){if(e.name!=='AbortError')shareResult()}}\nasync function shareResult(){if(!snapshot)return;var s=snapshot,theme=themes[s.theme];var summary='DRAFT NIGHT • '+theme.name+'\\n'+s.players.map(function(p,i){return 'Player '+(i+1)+' (£'+p.budget+' left): '+p.items.map(function(x){return itemAt(s,x.index)[0]}).join(', ')}).join('\\n')+'\\n'+(s.aiVerdict||'Who wins? You decide.')+'\\n'+location.origin;try{if(navigator.share){await navigator.share({title:'Draft Night · Final Reveal',text:summary})}else{await navigator.clipboard.writeText(summary);alert('Result copied!')}}catch(e){}}\nfunction leave(){token='';collectionPlayer=0;room=null;snapshot=null;localStorage.removeItem('draft-night-session');renderHome()}\nvar urlRoom=new URLSearchParams(location.search).get('room');if(urlRoom){joinScreen();$('#roomcode').value=urlRoom.toUpperCase()}else{var saved=null;try{saved=JSON.parse(localStorage.getItem('draft-night-session'))}catch(e){}if(saved&&saved.room&&saved.token){room=saved.room;player=saved.player;token=saved.token||'';refresh()}else renderHome()}\npoll=setInterval(function(){if(room)refresh()},1200);\n</script></body></html>";
-Bun.serve({hostname:'0.0.0.0',port:Number(Bun.env.PORT||3000),async fetch(req){const u=new URL(req.url);if(u.pathname==='/'||u.pathname==='/index.html')return new Response(html,{headers:{'Content-Type':'text/html;charset=utf-8','Cache-Control':'no-store'}});if(u.pathname==='/health')return reply({ok:true});if(u.pathname==='/api/world'){let code=String(u.searchParams.get('code')||'').toUpperCase(),p=Number(u.searchParams.get('p'));if(!rooms.has(code)||!Number.isInteger(p)||p<0||p>=rooms.get(code)!.joined)return new Response('Not found',{status:404});const v=Number(u.searchParams.get('v')||0);const data=imageCache.get(code+':'+p+':'+v);return data?new Response(data,{headers:{'Content-Type':'image/jpeg','Cache-Control':'private,max-age=3600'}}):new Response('Not ready',{status:404})}if(!u.pathname.startsWith('/api/'))return new Response('Not found',{status:404});try{
-if(u.pathname==='/api/create'&&req.method==='POST'){const x=await req.json() as any;const title=String(x.topic||'').trim().slice(0,65);const theme=x.theme==='custom'&&title?'custom':themes.has(x.theme)?x.theme:'house';const budget=Math.max(5,Math.min(500,Math.round(Number(x.budget)||20)));const capacity=Math.max(2,Math.min(5,Math.round(Number(x.capacity)||2)));let customItems=theme==='custom'?await generateTheme(title,(x.cpu?2:capacity)*5):undefined;let deckSource=theme==='custom'?customItems!:itemPools[theme];let previous=lastDraws.get(theme)||new Set<string>();let fresh=shuffle(deckSource.filter(v=>!previous.has(v[0])));let recycled=shuffle(deckSource.filter(v=>previous.has(v[0])));const seats=x.cpu?2:capacity;let itemDeck=theme==='house'?[...shuffle(houseTypes).slice(0,seats),...[...fresh,...recycled].slice(0,seats*4-1)]:[...fresh,...recycled].slice(0,theme==='custom'?seats*5:Math.max(0,seats*5-1));if(theme!=='custom')lastDraws.set(theme,new Set(itemDeck.map(v=>v[0])));let rubbish:Record<string,string[]>={house:['Mouldy Shed','photo-1473448912268-2022ce9509d8','A damp garden shed'],holiday:['Broken Pedalo','photo-1507525428034-b723cf961d3e','A truly terrible boat'],fast:['Soggy Sandwich','photo-1553909489-cd47e0ef937f','Cold and disappointing'],countries:['Airport Layover','photo-1436491865332-7a61a109cc05','Eight hours waiting'],sports:['Competitive Queueing','photo-1529156069898-49953e39b3ac','An epic queue']};if(theme!=='custom'){const bad=rubbish[theme];const fix=photoCorrections[bad[0]];if(fix)bad.splice(1,2,...fix);itemDeck.push(bad);}if(theme!=='house')itemDeck=shuffle(itemDeck);let code=createCode();const r:R={revision:0,tokens:[crypto.randomUUID()],code,theme,status:'waiting',round:0,phase:'bidding',bid:0,leader:null,passed:[false],wonBy:null,soldFor:0,players:[{name:cleanName(x.name,'Player 1'),budget,items:[]}],capacity,cpu:Boolean(x.cpu),joined:1,quotas:[],history:[],created:Date.now(),twistIndex:theme==='custom'?-1:itemDeck.findIndex(v=>v[0]===rubbish[theme][0]),startingBudget:budget,itemDeck,aiVersions:[0],aiVerdict:null,customTitle:theme==='custom'?title:undefined,customItems,houseBase:['Terraced house','Semi-detached house','Detached house','Cottage','Bungalow','Modern townhouse','Small villa'].includes(String(x.houseBase))?String(x.houseBase):'Terraced house'};if(r.cpu){r.capacity=2;r.tokens.push(crypto.randomUUID());r.players.push({name:'CPU',budget,items:[]});r.passed.push(false);r.aiVersions.push(0);r.joined=2;r.status='ready';r.quotas=[5,5];}rooms.set(code,r);return reply({code,player:0,token:r.tokens[0]})}
-if(u.pathname==='/api/join'&&req.method==='POST'){const x=await req.json() as any;const code=String(x.code||'').toUpperCase(),r=rooms.get(code);if(!r)return err('Room not found');if(r.status==='playing'||r.status==='finished'||r.joined>=r.capacity)return err('Room full or started');const seat=r.joined;r.tokens.push(crypto.randomUUID());r.revision++;r.players.push({name:cleanName(x.name,'Player '+(seat+1)),budget:r.startingBudget,items:[]});r.passed.push(false);r.aiVersions.push(0);r.joined++;r.status=r.joined===r.capacity?'ready':'waiting';return reply({code,player:seat,token:r.tokens[seat]})}
-if(u.pathname==='/api/room'){const r=rooms.get(String(u.searchParams.get('code')||'').toUpperCase());return r?reply(publicRoom(r)):reply({error:'Room not found'},404)}
-if(u.pathname==='/api/action'&&req.method==='POST'){const x=await req.json() as any,r=rooms.get(String(x.code||'').toUpperCase()),p=Number(x.player);if(!r)return err('Room not found');if(!Number.isInteger(p)||p<0||p>=r.joined)return err('Invalid player');if(x.token!==r.tokens[p])return reply({error:'Session expired. Please rejoin.'},403);if(x.revision!==r.revision)return reply({error:'The auction changed. Try again.'},409);if(x.type==='retryImage'){if(r.aiStates?.[p]!=='error')return err('Image is already up to date or processing');void aiImage(r,p);return reply(publicRoom(r))}if(x.type==='start'){if(p!==0||r.status!=='ready')return err('Host must start');r.quotas=Array.from({length:r.joined},(_,i)=>5);r.status='playing';auto(r);if(r.cpu)cpuTurn(r);r.revision++;return reply(publicRoom(r))}if(x.type==='next'){if(p!==0||r.status!=='playing'||!['sold','skipped'].includes(r.phase))return err('Cannot reveal yet');next(r);if(r.cpu)cpuTurn(r);r.revision++;return reply(publicRoom(r))}if(r.status!=='playing'||r.phase!=='bidding')return err('Auction closed');if(x.type==='bid'){const n=Number(x.value);if(!eligible(r,p)||r.passed[p]||r.leader===p||!Number.isSafeInteger(n)||n<=r.bid||n>r.players[p].budget)return err('Invalid bid');r.bid=n;r.leader=p;auto(r);if(r.cpu&&p===0&&r.phase==='bidding'){await new Promise(resolve=>setTimeout(resolve,1100));cpuTurn(r)}r.revision++;return reply(publicRoom(r))}if(x.type==='pass'){if(r.passed[p]||r.leader===p||!eligible(r,p))return err('Cannot pass while leading or after passing');r.passed[p]=true;auto(r);if(r.cpu&&p===0&&r.phase==='bidding'){await new Promise(resolve=>setTimeout(resolve,1100));cpuTurn(r)}r.revision++;return reply(publicRoom(r))}return err('Unknown action')}return reply({error:'Not found'},404)}catch(e){console.error('request failure',String(e));return reply({error:e instanceof Error?e.message:'Request failed'},400)}}});
+// ---------- Images ----------
+// Each player's world is a chain of edits. Version v shows the base plus their first v acquisitions
+// (property: v=1 is exactly the house photo they bid on). Each new version edits the previous image,
+// so the original creation and earlier purchases stay put. Versions only ever move forwards.
+const STYLE = 'Photorealistic, natural light, crisp detail, consistent colour grading. No text, captions, labels, logos, watermarks or people.';
+const queue: Array<{ pri: number; run: () => Promise<void> }> = [];
+let running = 0;
+const MAX_JOBS = Number(env('DRAFT_IMAGE_CONCURRENCY', '4'));
+function enqueue(pri: number, run: () => Promise<void>) { queue.push({ pri, run }); queue.sort((a, b) => a.pri - b.pri); pump(); }
+function pump() {
+  while (running < MAX_JOBS && queue.length) {
+    const job = queue.shift()!; running++;
+    job.run().catch(() => {}).finally(() => { running--; pump(); });
+  }
+}
+const imgKey = (r: Room, k: string) => r.code + '/' + k;
+function worldKey(r: Room, p: number, v: number) {
+  if (v < 0) return '';
+  if (r.theme.mode === 'property' && v === 1) return 'lot' + r.players[p].won[0];
+  if (r.theme.mode !== 'property' && v === 0) return 'base';
+  return 'w' + p + '-' + v;
+}
+function lotPrompt(r: Room, it: Item, kind: string) {
+  const t = r.theme;
+  if (kind === 'base') return `${t.scene}. The property is ${it.visual}. Show it at its true, modest real-world size: an ordinary home with only what is described. No swimming pool, no hot tub, no cars, no extra buildings, no extended grounds, no luxury additions. Square framing with the whole property visible. ${STYLE}`;
+  return `Clear photograph of ${it.visual.replace(/ (on|in|beside|across|over|into|outside|by|at|under|above|scattered|draped|layered|piled|replacing|parked|leaning|sitting|standing|strung|fitted|attached|added|clamped|mounted|squeezed|clearly)\b.*$/i, '') || it.name} (${it.name}) as a single isolated subject, centred and filling most of the frame, on a plain softly lit warm-grey background. Square framing. ${STYLE}`;
+}
+function basePrompt(r: Room) {
+  const t = r.theme;
+  return `${t.scene}. Subject: ${t.base!.visual}. Show it plain and unembellished, exactly as described, with clear space around and on it so additions can be placed later. Square framing. ${STYLE}`;
+}
+const LUXURIES = ['swimming pool', 'hot tub', 'supercar', 'tennis court', 'helicopter', 'extra storeys', 'larger garden or extra land', 'outbuildings'];
+function worldPrompt(r: Room, p: number, from: number, to: number, withRef = false) {
+  const t = r.theme, pl = r.players[p];
+  const acq = pl.won.map(i => r.lots[i]);
+  const adds = acq.filter(x => x.kind === 'add');
+  const already = acq.slice(0, from).filter(x => x.kind === 'add');
+  const fresh = acq.slice(from, to).filter(x => x.kind === 'add');
+  const baseName = t.mode === 'property' ? (acq[0]?.name || 'house') : t.base!.name;
+  const lines = fresh.map(x => `- ${x.name}: ${x.visual}.`).join('\n');
+  const keep = already.length ? `It already contains these purchased items, which must stay exactly as they are: ${already.map(x => x.name).join(', ')}.` : 'Nothing has been added to it yet.';
+  let forbid = 'Do not add anything else that is not listed.';
+  if (t.mode === 'property') {
+    const owned = adds.map(x => (x.name + ' ' + x.visual).toLowerCase()).join(' ');
+    const missing = LUXURIES.filter(l => !owned.includes(l.split(' ')[0]));
+    forbid = `Do not enlarge the house or its plot and do not change its architecture. Do not add: ${missing.join(', ')}, or any other feature that is not listed above.`;
+  } else if (t.mode === 'build') forbid = `Do not add any other toppings, ingredients, accessories or objects. Keep the ${t.noun} the same size and shape.`;
+  else forbid = 'Do not add any other items. Do not remove, move or restyle the items already there.';
+  return `Edit this photograph of a ${t.mode === 'property' ? baseName.toLowerCase() : t.noun} (${baseName}). Keep the camera angle, framing, lighting, background and every existing element identical. ${keep}\nAdd ONLY the following newly purchased item${fresh.length > 1 ? 's' : ''}, each clearly recognisable and naturally placed:\n${lines}\n${forbid} ${withRef ? 'The second image is a reference photo of the purchased item: reproduce that item, not its background.' : ''} ${STYLE}`.trim();
+}
+async function openaiImage(prompt: string, refs: Uint8Array[], quality: string): Promise<Uint8Array> {
+  const key = Bun.env.OPENAI_API_KEY; if (!key) throw Error('No image key');
+  const model = env('DRAFT_IMAGE_MODEL', 'gpt-image-2.5-flare');
+  const call = async (full: boolean) => {
+    let body: any; const headers: Record<string, string> = { Authorization: 'Bearer ' + key };
+    const params: Record<string, string> = { model, prompt, size: '1024x1024', quality, output_format: 'jpeg' };
+    if (full) params.output_compression = '84';
+    if (!refs.length) { headers['Content-Type'] = 'application/json'; body = JSON.stringify(params); }
+    else {
+      body = new FormData();
+      for (const [k, v] of Object.entries(params)) body.append(k, v);
+      if (full) body.append('input_fidelity', 'high');
+      const use = full ? refs : refs.slice(0, 1);
+      use.forEach((b, i) => body.append(use.length > 1 ? 'image[]' : 'image', new Blob([b as BlobPart], { type: 'image/jpeg' }), 'ref' + i + '.jpg'));
+    }
+    return fetch(API + '/images/' + (refs.length ? 'edits' : 'generations'), { method: 'POST', headers, body, signal: AbortSignal.timeout(120000) });
+  };
+  let res = await call(true);
+  if (res.status === 400) { console.error('Image request rejected, retrying simplified:', (await res.text()).slice(0, 300)); res = await call(false); }
+  if (!res.ok) throw Error('Image service ' + res.status + ' ' + (await res.text()).slice(0, 200));
+  const d = await res.json() as any; const b64 = d.data?.[0]?.b64_json;
+  if (!b64) throw Error('Empty image');
+  return Uint8Array.from(Buffer.from(b64, 'base64'));
+}
+function genLot(r: Room, k: string, it: Item, kind: string, pri: number) {
+  if (r.lotImg[k]) return;
+  r.lotImg[k] = Bun.env.OPENAI_API_KEY ? 'pending' : 'none';
+  if (!Bun.env.OPENAI_API_KEY) return;
+  enqueue(pri, async () => {
+    try { images.set(imgKey(r, k), await openaiImage(lotPrompt(r, it, kind), [], kind === 'base' ? 'medium' : 'low')); r.lotImg[k] = 'ready'; }
+    catch (e) {
+      console.error('Lot image failed', String(e));
+      const n = (retries.get(imgKey(r, k)) || 0) + 1; retries.set(imgKey(r, k), n);
+      r.lotImg[k] = n < 3 ? '' : 'error';
+      if (n < 3) setTimeout(() => genLot(r, k, it, kind, pri), 3000 * n);
+    }
+    bump(r);
+    if (r.status !== 'lobby') r.players.forEach((_, p) => void ensureWorld(r, p));
+  });
+}
+function genBase(r: Room) {
+  if (r.theme.mode === 'property') return;
+  if (!Bun.env.OPENAI_API_KEY) { r.baseImg = 'none'; return; }
+  r.baseImg = 'pending';
+  enqueue(0, async () => {
+    try { images.set(imgKey(r, 'base'), await openaiImage(basePrompt(r), [], 'medium')); r.baseImg = 'ready'; }
+    catch (e) {
+      console.error('Base image failed', String(e));
+      const n = (retries.get(imgKey(r, 'base')) || 0) + 1; retries.set(imgKey(r, 'base'), n);
+      r.baseImg = 'error'; if (n < 3) setTimeout(() => genBase(r), 3000 * n);
+    }
+    if (r.status !== 'lobby') r.worlds.forEach((w, p) => { if (w.v < 0 && r.baseImg === 'ready') w.v = 0; void ensureWorld(r, p); });
+    bump(r);
+  });
+}
+async function ensureWorld(r: Room, p: number) {
+  const w = r.worlds[p], pl = r.players[p];
+  if (!w || w.busy) return;
+  if (!Bun.env.OPENAI_API_KEY) { w.state = 'none'; return; }
+  const property = r.theme.mode === 'property';
+  if (property && pl.base !== null && w.v < 1 && r.lotImg['lot' + pl.base] === 'ready') { w.v = 1; bump(r); }
+  if (!property && w.v < 0 && r.baseImg === 'ready') { w.v = 0; bump(r); }
+  const target = pl.won.length;
+  if (w.v < (property ? 1 : 0) || w.v >= target) { if (w.v >= target) w.state = 'ready'; return; }
+  w.busy = true; w.state = 'updating'; bump(r);
+  const from = w.v;
+  enqueue(-1, async () => {
+    try {
+      const prev = images.get(imgKey(r, worldKey(r, p, from)));
+      if (!prev) throw Error('Missing previous world');
+      const refs = [prev];
+      const lotRef = images.get(imgKey(r, lotImageKey(r, pl.won[from])));
+      if (lotRef && target - from === 1) refs.push(lotRef);
+      const out = await openaiImage(worldPrompt(r, p, from, target, refs.length > 1), refs, 'medium');
+      images.set(imgKey(r, worldKey(r, p, target)), out);
+      if (target > w.v) w.v = target;
+      w.state = 'ready'; w.tries = 0;
+    } catch (e) {
+      w.tries++; w.state = w.tries > 2 ? 'error' : 'retrying';
+      console.error('World image failed', String(e));
+    } finally {
+      w.busy = false; bump(r);
+      if (w.state === 'retrying') setTimeout(() => void ensureWorld(r, p), 4000);
+      else if (w.v < pl.won.length && w.state !== 'error') void ensureWorld(r, p);
+    }
+  });
+}
+// Houses and the first few items are drawn while the lobby fills; the rest once the game starts,
+// so abandoned lobbies do not pay for a whole deck of pictures.
+function prefetch(r: Room, adds: number) {
+  if (r.theme.mode === 'property') r.deckBases.slice(0, r.capacity).forEach((it, i) => genLot(r, 'lot' + i, it, 'base', 1 + i / 100));
+  r.deckAdds.slice(0, adds).forEach((it, i) => genLot(r, 'add' + i, it, 'add', 2 + i / 100));
+}
+// Lots are assembled at start; map each lot to its prefetched image key.
+function lotImageKey(r: Room, i: number) {
+  const n = r.players.length;
+  if (r.theme.mode === 'property') return i < n ? 'lot' + i : 'add' + (i - n);
+  return 'add' + i;
+}
 
+// ---------- Text AI ----------
+async function openaiJSON(system: string, user: string, schema: any, maxTokens: number, timeout = 45000) {
+  const key = Bun.env.OPENAI_API_KEY; if (!key) throw Error('AI is not configured');
+  const res = await fetch(API + '/chat/completions', {
+    method: 'POST', signal: AbortSignal.timeout(timeout),
+    headers: { Authorization: 'Bearer ' + key, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ model: env('DRAFT_TEXT_MODEL', 'gpt-4.1-mini'), max_tokens: maxTokens, temperature: 0.7, response_format: { type: 'json_schema', json_schema: { name: 'out', strict: true, schema } }, messages: [{ role: 'system', content: system }, { role: 'user', content: user }] }),
+  });
+  if (!res.ok) throw Error('AI service ' + res.status + ' ' + (await res.text()).slice(0, 200));
+  const d = await res.json() as any;
+  return JSON.parse(d.choices?.[0]?.message?.content || '{}');
+}
+const S = (props: Record<string, any>) => ({ type: 'object', additionalProperties: false, required: Object.keys(props), properties: props });
+const str = { type: 'string' };
+const THEME_SCHEMA = S({
+  status: { type: 'string', enum: ['ok', 'ambiguous'] }, question: str,
+  options: { type: 'array', items: S({ label: str, topic: str }) },
+  title: str, emoji: str, kind: { type: 'string', enum: ['build', 'collection'] }, noun: str, label: str,
+  base_name: str, base_blurb: str, base_visual: str, scene: str,
+  items: { type: 'array', items: S({ name: str, blurb: str, visual: str }) },
+});
+const THEME_SYSTEM = `You set up rounds of Draft Night, a party auction game. Players type a subject; every player starts with the same plain BASE and wins items at auction that visibly change their own version of it. Images of each player's creation are generated from your descriptions, so everything must be concrete and photographable.
 
+Decide what the subject means:
+- If it is clear (e.g. "Pancakes", "Burgers", "Supercars", "Dream bedroom", "Garden", "Gaming setup", "Holiday", "Football team"), return status "ok".
+- If it is a person's name, a nickname or in-joke, a single vague word, or could mean several quite different things to build, return status "ambiguous" with one short question and 3 or 4 concrete options (label: what players see, e.g. "Pam's dream birthday cake"; topic: a precise subject to build). Never invent a meaning for a name. When ambiguous, leave the other text fields empty and items empty.
+
+When ok:
+- kind "build": each player improves ONE object (a pancake stack, a burger, a car, a bedroom, a garden). kind "collection": each player assembles separate things inside one shared container scene (a garage of cars, a football squad on a pitch, a holiday suitcase).
+- base_visual: the plain, minimal starting version, identical for every player (e.g. "a plain stack of three golden pancakes on a white plate, nothing on top"). For a collection, the empty container scene. Never a house unless the subject is about houses.
+- scene: one sentence on camera angle, surface/setting and lighting so the whole base and every addition is visible.
+- noun: 1-3 words for what each player builds (e.g. "pancake stack", "garage"). label: one word for an auction lot (e.g. "Topping", "Upgrade", "Car", "Signing").
+- items: exactly N distinct, real, instantly recognisable things that make sense for THIS subject and can be seen in the picture. Use plain common names people know ("Nutella", "Maple Syrup", "Carbon-Fibre Wheels", "Rooftop Pool"). Mix desirable and cheaper options; one or two may be funny-but-plausible (e.g. "Bacon" on pancakes). Never include unrelated objects, characters, mascots, plush toys, fantasy concepts, buildings unrelated to the subject, or real named people.
+- blurb: at most 7 natural words. visual: at most 22 words describing what it looks like and exactly where it goes on the base.
+- title: 1-3 words. emoji: one emoji.`;
+async function interpret(topic: string, n: number, confirmed: boolean): Promise<any> {
+  const out = await openaiJSON(THEME_SYSTEM, `Subject: ${JSON.stringify(topic)}\nN = ${n}${confirmed ? '\nThe players have already confirmed this meaning, so status must be "ok".' : ''}`, THEME_SCHEMA, 3600);
+  if (out.status === 'ambiguous' && !confirmed && Array.isArray(out.options) && out.options.length >= 2)
+    return { status: 'ambiguous', question: String(out.question || 'What are you building?').slice(0, 120), options: out.options.slice(0, 4).map((o: any) => ({ label: String(o.label).slice(0, 48), topic: String(o.topic).slice(0, 80) })) };
+  const seen = new Set<string>();
+  const items: Item[] = (Array.isArray(out.items) ? out.items : []).map((x: any) => ({ name: String(x.name || '').trim().slice(0, 32), blurb: String(x.blurb || '').trim().slice(0, 60), visual: String(x.visual || '').trim().slice(0, 200) }))
+    .filter((x: Item) => x.name && x.visual && !seen.has(x.name.toLowerCase()) && seen.add(x.name.toLowerCase()));
+  if (items.length < LOTS_PER_PLAYER * 2 || !out.base_visual) throw Error('Could not build that theme. Try describing it a little more.');
+  const t: Theme = {
+    id: crypto.randomUUID().slice(0, 8), title: String(out.title || topic).slice(0, 28), emoji: String(out.emoji || '✨').slice(0, 4),
+    mode: out.kind === 'collection' ? 'collection' : 'build', noun: String(out.noun || topic).slice(0, 24).toLowerCase(), label: String(out.label || 'Lot').slice(0, 14),
+    base: { name: String(out.base_name || 'Starter').slice(0, 32), blurb: String(out.base_blurb || '').slice(0, 60), visual: String(out.base_visual).slice(0, 240) },
+    scene: String(out.scene || 'Clear, evenly lit photograph showing the whole subject').slice(0, 240), bases: [], items, created: clock(),
+  };
+  themes.set(t.id, t);
+  return { status: 'ok', theme: themeSummary(t) };
+}
+function themeSummary(t: Theme) {
+  return { id: t.id, title: t.title, emoji: t.emoji, mode: t.mode, noun: t.noun, label: t.label, base: t.base && { name: t.base.name, blurb: t.base.blurb }, maxPlayers: Math.min(MAX_PLAYERS, Math.floor(t.items.length / (t.mode === 'property' ? 4 : 5))), examples: t.items.slice(0, 8).map(x => x.name) };
+}
+async function judge(r: Room) {
+  if (!Bun.env.OPENAI_API_KEY) return;
+  try {
+    const lists = r.players.map(p => `${p.name}: ${p.won.map(i => r.lots[i].name).join(', ') || 'nothing'} (spent £${r.budget - p.budget})`).join('\n');
+    const out = await openaiJSON('You are the witty host of Draft Night, a party auction game. Players each built their own version of the theme. Crown the best creation on taste, combination and value. Reply with one or two warm, funny sentences (max 45 words) that name the winner. Never insult anyone.', `Theme: ${r.theme.title} (${r.theme.noun})\n${lists}`, S({ verdict: str }), 200, 20000);
+    r.verdict = String(out.verdict || '').slice(0, 320) || null; bump(r);
+  } catch (e) { console.error('Judge failed', String(e)); }
+}
+
+// ---------- HTTP ----------
+const CORS = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'GET,POST,OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type' };
+const reply = (v: any, status = 200) => Response.json(v, { status, headers: { ...CORS, 'Cache-Control': 'no-store' } });
+const fail = (m: string, status = 400) => reply({ error: m }, status);
+
+function view(r: Room) {
+  const a = r.auction;
+  return {
+    code: r.code, rev: r.rev, now: clock(), status: r.status, budget: r.budget, capacity: r.capacity, cpu: r.cpu,
+    theme: { ...themeSummary(r.theme), examples: undefined },
+    players: r.players.map((p, i) => ({ name: p.name, color: p.color, budget: p.budget, won: p.won, base: p.base, cpu: p.cpu, away: r.status === 'playing' && away(r, i) })),
+    lots: r.lots.map((l, i) => ({ name: l.name, blurb: l.blurb, kind: l.kind, img: r.lotImg[lotImageKey(r, i)] || 'none', key: lotImageKey(r, i) })),
+    lot: r.lot, total: r.status === 'lobby' ? LOTS_PER_PLAYER * r.players.length : r.lots.length,
+    auction: { bid: a.bid, leader: a.leader, turn: a.turn, passed: a.passed, phase: a.phase, deadline: a.deadline, log: a.log.slice(-6), result: a.result },
+    worlds: r.worlds.map((w, p) => ({ v: w.v, state: w.state, key: worldKey(r, p, w.v) })),
+    base: r.theme.mode === 'property' ? null : { state: r.baseImg },
+    history: r.history, verdict: r.verdict,
+  };
+}
+function join(r: Room, name: string, cpu = false) {
+  const taken = new Set(r.players.map(p => p.name.toLowerCase()));
+  let nm = name, k = 2; while (taken.has(nm.toLowerCase())) nm = name.slice(0, 13) + ' ' + k++;
+  r.players.push({ name: nm, color: COLORS[r.players.length], budget: r.budget, won: [], base: null, cpu, seen: clock() });
+  r.tokens.push(crypto.randomUUID());
+  r.worlds.push({ v: -1, state: 'idle', busy: false, tries: 0 });
+  bump(r);
+  return r.players.length - 1;
+}
+async function handle(req: Request): Promise<Response> {
+  const u = new URL(req.url);
+  if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers: CORS });
+  if (u.pathname === '/' || u.pathname === '/index.html') return Response.redirect(CLIENT_URL, 302);
+  if (u.pathname === '/health') return reply({ ok: true, images: Boolean(Bun.env.OPENAI_API_KEY) });
+  const body = req.method === 'POST' ? await req.json().catch(() => ({})) as any : {};
+  const room = () => rooms.get(String(u.searchParams.get('code') || body.code || '').toUpperCase());
+
+  if (u.pathname === '/api/img') {
+    const r = rooms.get(String(u.searchParams.get('code') || '').toUpperCase());
+    const data = r && images.get(imgKey(r, String(u.searchParams.get('k') || '')));
+    return data ? new Response(data as BodyInit, { headers: { ...CORS, 'Content-Type': 'image/jpeg', 'Cache-Control': 'private, max-age=21600, immutable' } }) : new Response('Not ready', { status: 404, headers: CORS });
+  }
+  if (u.pathname === '/api/presets') return reply({ presets: PRESETS.map(themeSummary), images: Boolean(Bun.env.OPENAI_API_KEY) });
+  if (u.pathname === '/api/theme' && req.method === 'POST') {
+    const topic = String(body.topic || '').replace(/\s+/g, ' ').trim().slice(0, 80);
+    if (topic.length < 2) return fail('Tell us what you are building');
+    const preset = presetFor(topic);
+    if (preset) return reply({ status: 'ok', theme: themeSummary(preset) });
+    try { return reply(await interpret(topic, clamp(Number(body.players) || 4, 4, MAX_PLAYERS) * LOTS_PER_PLAYER + 4, Boolean(body.confirmed))); }
+    catch (e) { console.error('Theme failed', String(e)); return fail(e instanceof Error && e.message.startsWith('Could not') ? e.message : 'Could not create that theme right now. Try again or pick a ready-made one.', 502); }
+  }
+  if (u.pathname === '/api/create' && req.method === 'POST') {
+    sweep();
+    const theme = PRESETS.find(p => p.id === body.theme) || themes.get(String(body.theme));
+    if (!theme) return fail('That theme has expired. Please choose it again.');
+    const cpu = Boolean(body.cpu);
+    const maxP = themeSummary(theme).maxPlayers;
+    const r: Room = {
+      code: newCode(), rev: 1, created: clock(), status: 'lobby', theme, budget: clamp(Math.round(Number(body.budget) || 100), 10, 1000),
+      capacity: cpu ? 2 : clamp(Math.round(Number(body.capacity) || 2), 2, maxP), cpu, players: [], tokens: [],
+      deckBases: shuffle(theme.bases), deckAdds: shuffle(theme.items), lots: [], lot: 0,
+      auction: { bid: 0, leader: null, turn: null, passed: [], phase: 'bidding', deadline: 0, log: [], result: null },
+      history: [], lotImg: {}, baseImg: 'none', worlds: [], verdict: null,
+    };
+    rooms.set(r.code, r);
+    join(r, cleanName(body.name, 'Player 1'));
+    if (cpu) join(r, 'CPU', true);
+    genBase(r); prefetch(r, 3);
+    return reply({ code: r.code, player: 0, token: r.tokens[0], room: view(r) });
+  }
+  if (u.pathname === '/api/join' && req.method === 'POST') {
+    const r = room(); if (!r) return fail('Room not found', 404);
+    tick(r);
+    if (r.status !== 'lobby' || r.players.length >= r.capacity) return fail(r.status === 'lobby' ? 'That room is full' : 'That game has already started');
+    const p = join(r, cleanName(body.name, 'Player ' + (r.players.length + 1)));
+    return reply({ code: r.code, player: p, token: r.tokens[p], room: view(r) });
+  }
+  if (u.pathname === '/api/room') {
+    const r = room(); if (!r) return fail('Room not found', 404);
+    const p = Number(u.searchParams.get('p'));
+    if (Number.isInteger(p) && r.tokens[p] && u.searchParams.get('t') === r.tokens[p]) {
+      const wasAway = r.status === 'playing' && away(r, p); r.players[p].seen = clock(); if (wasAway) bump(r);
+    }
+    tick(r);
+    if (Number(u.searchParams.get('rev')) === r.rev) return reply({ same: true, rev: r.rev, now: clock() });
+    return reply(view(r));
+  }
+  if (u.pathname === '/api/action' && req.method === 'POST') {
+    const r = room(); if (!r) return fail('Room not found', 404);
+    const p = Number(body.player);
+    if (!Number.isInteger(p) || !r.tokens[p] || body.token !== r.tokens[p]) return fail('Session expired. Please rejoin.', 403);
+    r.players[p].seen = clock();
+    tick(r);
+    try {
+      if (body.type === 'start') {
+        if (p !== 0) return fail('Only the host can start');
+        if (r.status !== 'lobby' || r.players.length < 2) return fail('Waiting for at least two players');
+        start(r);
+      } else if (body.type === 'bid' || body.type === 'pass') {
+        if (r.status !== 'playing') return fail('The auction is not running');
+        // Optimistic check: the action must be based on the lot and price the player saw.
+        if (Number(body.lot) !== r.lot || Number(body.seen) !== r.auction.bid) return reply({ error: 'The bidding moved on. Check the new price.', room: view(r) }, 409);
+        if (body.type === 'bid') bid(r, p, Number(body.amount)); else pass(r, p);
+      } else return fail('Unknown action');
+    } catch (e) { return reply({ error: e instanceof Error ? e.message : 'Action failed', room: view(r) }, 400); }
+    bump(r); tick(r);
+    return reply(view(r));
+  }
+  return fail('Not found', 404);
+}
+Bun.serve({ hostname: '0.0.0.0', port: Number(Bun.env.PORT || 3000), async fetch(req) { try { return await handle(req); } catch (e) { console.error('Request failed', String(e)); return fail('Request failed', 500); } } });
