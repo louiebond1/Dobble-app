@@ -16,7 +16,7 @@ The function source is passed to its container as one base64 argument, so `serve
 ## Game rules (as implemented)
 
 - Total lots = 5 × players (2–6 players, or 1 player against the CPU).
-- **Dream House** (`property` mode): the first N lots are houses, one per player. Only players without a house can bid on them. If only one homeless player is left, the last house is theirs for free. If nobody bids, a homeless player is drawn at random and gets it free. The remaining 4 × N lots are upgrades.
+- **Dream House** (`property` mode): the first N lots are houses, one per player. Only players without a house can bid on them. If only one homeless player is left, the last house is theirs for free. If nobody who still needs a house can afford £1, one of them is drawn at random and gets it free. The remaining 4 × N lots are upgrades.
 - **Build / collection** modes (Pancakes, Burgers, Pizza, Gaming Setup, Dream Garage, or anything typed in): everyone starts with the same base, and all 5 × N lots are additions.
 - Bidding goes round in turns, starting with a different player each lot. Whoever opens a lot must bid at least £1, because nobody may pass on the opening bid, so every lot sells. After that, on your turn you raise (quick +£1/+£2/+£5/+£10 buttons, or type any amount up to your money) or pass, and passing takes you out of that lot. The leader never gets a turn, so you can't bid against yourself. Players who can't afford the next bid are passed automatically. A lot goes unsold only if nobody eligible can afford £1.
 - Each turn lasts 30 seconds. An opener who runs out of time, or whose device stops polling for 20 seconds, is entered at £1 automatically. Anyone else in that situation is passed, so a phone left on the table can't stall the game.

@@ -323,11 +323,11 @@ function nextLot(r: Room) {
   if (r.lot >= r.lots.length) { r.status = 'finished'; r.auction.turn = null; void judge(r); return; }
   beginLot(r);
 }
-function bid(r: Room, p: number, amount: number) {
+function bid(r: Room, p: number, amount: number, why?: string) {
   const a = r.auction;
   if (a.phase !== 'bidding' || a.turn !== p) throw Error('It is not your turn');
   if (!Number.isSafeInteger(amount) || amount <= a.bid || amount > r.players[p].budget) throw Error('Invalid bid');
-  a.bid = amount; a.leader = p; a.log.push({ p, a: amount });
+  a.bid = amount; a.leader = p; a.log.push(why ? { p, a: amount, why } : { p, a: amount });
   passTo(r, p);
 }
 function pass(r: Room, p: number, why?: string) {
@@ -360,7 +360,7 @@ function tick(r: Room) {
       const p = a.turn;
       if (a.deadline > now && !away(r, p)) break;
       if (r.players[p].cpu) { if (a.deadline > now) break; cpuMove(r, p); }
-      else if (a.leader === null) { bid(r, p, 1); a.log[a.log.length - 1].why = away(r, p) ? 'away, opened automatically' : 'time ran out, opened automatically'; }
+      else if (a.leader === null) bid(r, p, 1, away(r, p) ? 'away, opened automatically' : 'time ran out, opened automatically');
       else forcePass(r, p, away(r, p) ? 'away' : 'time ran out');
     } else if (a.deadline <= now) nextLot(r);
     else break;

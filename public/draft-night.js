@@ -336,7 +336,7 @@
     var a = room.auction;
     return a.log.slice(-4).map(function (e) {
       var nm = e.p === me() ? 'You' : room.players[e.p].name;
-      return esc(nm) + ' ' + (e.a === null ? (e.why ? 'passed (' + esc(e.why) + ')' : 'passed') : money(e.a));
+      return esc(nm) + ' ' + (e.a === null ? (e.why ? 'passed (' + esc(e.why) + ')' : 'passed') : money(e.a) + (e.why ? ' (' + esc(e.why) + ')' : ''));
     }).join(' · ');
   }
   function updateDock() {
