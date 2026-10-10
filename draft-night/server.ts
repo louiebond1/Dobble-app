@@ -341,7 +341,7 @@ function beginLot(r: Room) {
   const n = r.players.length;
   r.auction = { bid: 0, leader: null, turn: null, passed: Array(n).fill(false), phase: 'bidding', deadline: 0, log: [], result: null };
   const seats = eligibleSeats(r);
-  if (isBaseLot(r) && seats.length === 1) { award(r, seats[0], 0, 'Last home left: theirs for free'); return; }
+  if (isBaseLot(r) && seats.length === 1) { award(r, seats[0], 0, 'Last one left: theirs for free'); return; }
   if (!seats.length) { closeLot(r); return; }
   passTo(r, (r.lot % n) - 1);
 }
