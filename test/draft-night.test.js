@@ -417,7 +417,7 @@ test('the host cannot start until every picture is ready, and out-of-credit erro
   assert.equal((await broke.call('/api/action', { code: m2.code, player: 0, token: m2.token, type: 'start', force: true })).status, 200);
 });
 
-test('nobody can win more than 5 things, and upcoming lots are never revealed', async () => {
+test('nobody can win more than their share (10 auctions, 2 players: 5 each), and upcoming lots are never revealed', async () => {
   const env = sandbox({ key: '' });
   const g = await setup(env, { theme: 'house', names: ['Rich', 'Poor'], budget: 100 });
   const r = g.room();
@@ -440,15 +440,17 @@ test('nobody can win more than 5 things, and upcoming lots are never revealed', 
   assert.equal(final.lots.length, 10, 'everything is visible once the game is over');
 });
 
-test('a longer game (more auctions) still caps everyone at 5 and leaves the extra lots unsold', async () => {
+test('the win limit is auctions ÷ players: 12 → 6 each, 16 → 8 each, 15 → 8 and 7', async () => {
+  for (const [n, want] of [[12, [6, 6]], [16, [8, 8]], [15, [8, 7]]]) {
   const env = sandbox({ key: '' });
-  const made = (await env.call('/api/create', { theme: 'burger', name: 'A', capacity: 2, auctionCount: 16, budget: 100 })).body;
+  const made = (await env.call('/api/create', { theme: 'burger', name: 'A', capacity: 2, auctionCount: n, budget: 100 })).body;
+  assert.equal(made.room.maxWins, Math.ceil(n / 2));
   const j = (await env.call('/api/join', { code: made.code, name: 'B' })).body;
   await flush();
   const seats = [made, j];
   const r = env.qa.rooms.get(made.code);
   assert.equal((await env.call('/api/action', { code: made.code, player: 0, token: made.token, type: 'start' })).status, 200);
-  assert.equal(r.lots.length, 16);
+  assert.equal(r.lots.length, n);
   let guard = 0;
   while (r.status === 'playing' && guard++ < 500) {
     for (const p of r.players) p.seen = env.now();
@@ -456,8 +458,9 @@ test('a longer game (more auctions) still caps everyone at 5 and leaves the extr
     if (a.phase !== 'bidding') { env.advance(3000); await env.call('/api/room?code=' + made.code); continue; }
     await env.call('/api/action', { code: made.code, player: a.turn, token: seats[a.turn].token, type: a.leader === null ? 'bid' : 'pass', lot: r.lot, seen: a.bid, amount: a.bid + 1 });
   }
-  same(r.players.map(p => p.won.length), [5, 5]);
-  assert.equal(r.history.filter(h => h.winner === null).length, 6);
+  same(r.players.map(p => p.won.length).sort((x, y) => y - x), want, n + ' auctions');
+  assert.equal(r.history.filter(h => h.winner === null).length, 0, 'every lot sells');
+  }
 });
 
 test('auth and joining rules', async () => {

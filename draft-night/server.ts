@@ -332,9 +332,10 @@ const bump = (r: Room) => { r.rev++; };
 const isBaseLot = (r: Room) => r.lots[r.lot]?.kind === 'base';
 // Themes with starting options auction them first, one per player, before any additions.
 const hasBases = (t: Theme) => t.bases.length > 0;
-// Nobody wins more than 5 things (starting option included). Fewer lots than 5 per player lowers the cap so they share out evenly;
-// more lots just means more choice, and lots nobody can take any more go unsold.
-const maxWins = (r: Room) => Math.min(LOTS_PER_PLAYER, Math.ceil(r.auctionCount / r.players.length));
+// Each player can win their share of the auctions (starting option included): 12 auctions for 2 players is 6 each.
+// An uneven split rounds up, so with 15 auctions for 2 players one of them can win 8.
+// In the lobby it is worked out from the seats; once started, from the players actually playing.
+const maxWins = (r: Room) => Math.ceil(r.auctionCount / (r.status === 'lobby' ? r.capacity : r.players.length));
 function eligible(r: Room, p: number) { return r.status === 'playing' && p >= 0 && p < r.players.length && r.players[p].won.length < maxWins(r) && (isBaseLot(r) ? r.players[p].base === null : !hasBases(r.theme) || r.players[p].base !== null); }
 const eligibleSeats = (r: Room) => r.players.map((_, i) => i).filter(i => eligible(r, i));
 const canAct = (r: Room, p: number) => eligible(r, p) && !r.auction.passed[p] && r.auction.leader !== p;

@@ -110,12 +110,12 @@
       '<div class="eyebrow">Players</div><div class="seg">' + counts + '</div>' +
       (ui.cpu ? '' : '<label class="check"><input type="checkbox" id="private"' + (ui.listed ? '' : ' checked') + '><span>Private game: friends join with the room code instead of finding it under Join</span></label>') +
       '<div class="eyebrow">Total auctions</div><div class="seg">' + [0, 12, 16, 20, 24, 30].map(function (c) { return '<button data-auctions="' + c + '" aria-pressed="' + (ui.auctionCount === c) + '">' + (c === 0 ? 'Auto (' + (n * 5) + ')' : c) + '</button>'; }).join('') + '</div>' +
-      '<div class="hint">Wins each scale with the auction count, up to 5.</div>' +
+      '<div class="hint">Each player can win auctions ÷ players, e.g. 12 auctions for 2 players is 6 each.</div>' +
       '<div class="eyebrow">Budget each</div><div class="seg">' + BUDGETS.map(function (b) { return '<button data-budget="' + b + '" aria-pressed="' + (ui.budget === b) + '">' + money(b) + '</button>'; }).join('') + '</div>' +
       '<label class="budget-other"><span>Or any amount £</span><input id="budgetOther" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="4" autocomplete="off" placeholder="e.g. 30" value="' + (BUDGETS.indexOf(ui.budget) < 0 ? ui.budget : '') + '"></label>' +
       (ui.error ? '<div class="error">' + esc(ui.error) + '</div>' : '') + '</div>' +
       '<div class="footer"><button class="primary" id="create"' + (ui.busy || ui.asking || ui.ambiguous ? ' disabled' : '') + '>' + (ui.busy ? 'Creating…' : ui.ambiguous ? 'Pick what you meant above' : pendingTopic() ? 'Use “' + esc(pendingTopic().slice(0, 24)) + '”' : ui.cpu ? 'Play ' + esc(t.title) + ' vs CPU' : 'Create ' + esc(t.title) + ' room') + '</button>' +
-      '<div class="hint">' + total + ' auctions · ' + (hasStarts(t) ? 'first ' + n + ' are ' + esc(startWord(t).toLowerCase()) + 's, one each' : Math.min(5, Math.ceil(total / n)) + ' wins each') + '</div></div></div>';
+      '<div class="hint">' + total + ' auctions · ' + (hasStarts(t) ? 'first ' + n + ' are ' + esc(startWord(t).toLowerCase()) + 's, one each' : Math.ceil(total / n) + ' wins each') + '</div></div></div>';
   }
   function homeClick(e) {
     var b = e.target.closest('button'); if (!b) return;

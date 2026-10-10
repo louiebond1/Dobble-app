@@ -234,7 +234,7 @@ await scenario('Q-quick-play', async () => {
   await louie.waitForFunction(() => document.querySelector('.eyebrow.split').textContent.includes('2 of 2'));
   assert.deepEqual(await tags(louie), ['LouiePlayer 1 · Host · You', 'MarioPlayer 2 · Ready']);
   assert.deepEqual(await tags(mario), ['LouiePlayer 1 · Host', 'MarioPlayer 2 · Ready · You']);
-  assert.match(await louie.textContent('.brief'), /12 auctions · 5 possible wins per player/);
+  assert.match(await louie.textContent('.brief'), /12 auctions · 6 possible wins per player/);
   await shot(mario, 'Q2-lobby-mario.png'); await shot(louie, 'Q3-lobby-louie.png'); await layoutCheck(louie, 'lobby');
   // A full game no longer shows up for a third phone.
   const sam = await phone('Sam');
