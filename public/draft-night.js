@@ -27,7 +27,7 @@
     names: store.get('dn-names', ['Louie', 'Ariel']),
     themeId: store.get('dn-theme', 'house'),
     custom: null, customTopic: '', asking: false, ambiguous: null, askError: '',
-    players: store.get('dn-players', 2), cpu: store.get('dn-cpu', false), budget: store.get('dn-budget', 100),
+    auctionCount: store.get('dn-auction-count', 0), players: store.get('dn-players', 2), cpu: store.get('dn-cpu', false), budget: store.get('dn-budget', 100),
     busy: false, error: '', joinCode: (params.get('room') || '').toUpperCase().slice(0, 4)
   };
   var session = store.get('dn-session', null); // { code, player, token }
@@ -53,6 +53,7 @@
     return ui.presets.filter(function (p) { return p.id === ui.themeId; })[0] || ui.presets[0];
   }
   function seats() { return ui.cpu ? 2 : ui.players; }
+  function auctionTotal() { return ui.auctionCount || seats() * 5; }
   function patch(el, html) { if (el && el.__html !== html) { el.innerHTML = html; el.__html = html; } }
   function lotName(i) { return room.lots[i] ? room.lots[i].name : ''; }
   function me() { return session ? session.player : -1; }
@@ -76,7 +77,7 @@
 
   // ---------- home ----------
   function renderHome() {
-    var t = theme(), n = seats(), total = n * 5, max = t.maxPlayers || 6;
+    var t = theme(), n = seats(), total = auctionTotal(), max = t.maxPlayers || 6;
     var presetTiles = ui.presets.map(function (p) {
       return '<button class="theme" data-theme="' + esc(p.id) + '" aria-pressed="' + (ui.themeId === p.id) + '"><span class="em">' + esc(p.emoji) + '</span><b>' + esc(p.title) + '</b><small>' +
         (hasStarts(p) ? 'Bid for your ' + esc(startWord(p).toLowerCase()) + (p.starts && p.starts.length ? ': ' + esc(p.starts.slice(0, 3).join(', ')) + '…' : ', then build on it') : 'Start: ' + esc(p.base && p.base.name)) + '</small></button>';
@@ -99,17 +100,20 @@
       '<div class="eyebrow">What are you building?</div><div class="themes">' + presetTiles + '</div>' +
       '<form class="ask" id="ask"><input class="field" id="topic" maxlength="80" placeholder="Or type anything, e.g. Dream bedroom" value="' + esc(ui.customTopic) + '" autocomplete="off"><button aria-label="Use this theme"' + (ui.asking ? ' disabled' : '') + '>→</button></form>' + custom +
       '<div class="eyebrow">Players</div><div class="seg">' + counts + '</div>' +
+      '<div class="eyebrow">Total auctions</div><div class="seg">' + [0, 12, 16, 20, 24, 30].map(function (c) { return '<button data-auctions="' + c + '" aria-pressed="' + (ui.auctionCount === c) + '">' + (c === 0 ? 'Auto (' + (n * 5) + ')' : c) + '</button>'; }).join('') + '</div>' +
+      '<div class="hint">Maximum 5 wins per player. More auctions means more choice.</div>' +
       '<div class="eyebrow">Budget each</div><div class="seg">' + BUDGETS.map(function (b) { return '<button data-budget="' + b + '" aria-pressed="' + (ui.budget === b) + '">' + money(b) + '</button>'; }).join('') + '</div>' +
       '<label class="budget-other"><span>Or any amount £</span><input id="budgetOther" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="4" autocomplete="off" placeholder="e.g. 30" value="' + (BUDGETS.indexOf(ui.budget) < 0 ? ui.budget : '') + '"></label>' +
       (ui.error ? '<div class="error">' + esc(ui.error) + '</div>' : '') + '</div>' +
       '<div class="footer"><button class="primary" id="create"' + (ui.busy || ui.asking || ui.ambiguous ? ' disabled' : '') + '>' + (ui.busy ? 'Creating…' : ui.ambiguous ? 'Pick what you meant above' : pendingTopic() ? 'Use “' + esc(pendingTopic().slice(0, 24)) + '”' : ui.cpu ? 'Play ' + esc(t.title) + ' vs CPU' : 'Create ' + esc(t.title) + ' room') + '</button>' +
-      '<div class="hint">' + total + ' auctions · ' + (hasStarts(t) ? 'first ' + n + ' are ' + esc(startWord(t).toLowerCase()) + 's, one each' : '5 per player') + '</div></div></div>';
+      '<div class="hint">' + total + ' auctions · ' + (hasStarts(t) ? 'first ' + n + ' are ' + esc(startWord(t).toLowerCase()) + 's, one each' : 'maximum 5 wins each') + '</div></div></div>';
   }
   function homeClick(e) {
     var b = e.target.closest('button'); if (!b) return;
     if (b.dataset.theme) { ui.themeId = b.dataset.theme; if (ui.themeId !== (ui.custom && ui.custom.id)) store.set('dn-theme', ui.themeId); ensureCount(); }
     else if (b.dataset.name) { ui.name = b.dataset.name; }
     else if (b.dataset.players) { var c = +b.dataset.players; ui.cpu = c === 0; if (c) ui.players = c; store.set('dn-players', ui.players); store.set('dn-cpu', ui.cpu); ensureCount(); }
+    else if (b.dataset.auctions !== undefined) { ui.auctionCount = +b.dataset.auctions; store.set('dn-auction-count', ui.auctionCount); }
     else if (b.dataset.budget) { ui.budget = +b.dataset.budget; store.set('dn-budget', ui.budget); }
     else if (b.dataset.option) { var o = ui.ambiguous.options[+b.dataset.option]; ui.customTopic = ui.lastAsked = o.label; askTheme(o.topic, true); return; }
     else if (b.dataset.go === 'join') { ui.view = 'join'; return render(); }
@@ -151,7 +155,7 @@
     var name = rememberName();
     if (!name) { ui.error = 'Add your name first.'; render(); $('#name').focus(); return; }
     ui.busy = true; ui.error = ''; render();
-    api('/api/create', { theme: theme().id, name: name, capacity: seats(), budget: ui.budget, cpu: ui.cpu }).then(function (d) {
+    api('/api/create', { theme: theme().id, name: name, capacity: seats(), auctionCount: auctionTotal(), budget: ui.budget, cpu: ui.cpu }).then(function (d) {
       ui.busy = false;
       if (!d.code) { ui.error = d.error || 'Could not create a room.'; return render(); }
       enter(d);
@@ -234,7 +238,7 @@
     var link = location.origin + location.pathname + '?room=' + room.code;
     app.innerHTML = '<div class="screen"><div class="bar"><button class="link" data-leave>‹ Leave</button><span class="wordmark">Draft Night</span><span style="width:48px"></span></div><div class="content">' +
       '<div class="eyebrow" style="margin-top:12px">Room code</div><div class="code num">' + esc(room.code) + '</div><p class="muted" style="margin:0">Friends open Draft Night, tap Join and enter this code.</p>' +
-      '<div class="eyebrow">Tonight</div><div class="brief"><span class="em">' + esc(t.emoji) + '</span><div><b>' + esc(t.title) + '</b><p>' + brief + '</p><p>' + (n * 5) + ' auctions · ' + money(room.budget) + ' each</p></div></div>' +
+      '<div class="eyebrow">Tonight</div><div class="brief"><span class="em">' + esc(t.emoji) + '</span><div><b>' + esc(t.title) + '</b><p>' + brief + '</p><p>' + room.auctionCount + ' auctions · ' + money(room.budget) + ' each</p></div></div>' +
       '<div class="eyebrow">Players ' + n + ' / ' + room.capacity + '</div><ul class="roster">' + slots + '</ul></div>' +
       '<div class="footer">' + (room.cpu ? '' : '<button class="secondary" data-share="' + esc(link) + '">Share invite link</button>') +
       prepHtml() + (host ? startButton(n) : '<div class="hint">' + (prepReady() ? 'Waiting for ' + esc(room.players[0].name) + ' to start' : 'Preparing pictures…') + '</div>') + '</div></div>';
