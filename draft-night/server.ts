@@ -472,11 +472,12 @@ function worldKey(r: Room, p: number, v: number) {
   if (hasBases(r.theme) && v === 1) return 'lot' + r.players[p].won[0];
   return 'w' + p + '-' + v;
 }
+// Item pictures describe the thing without naming it: with the name in the prompt, FLUX sometimes wrote it across the picture.
 function lotPrompt(r: Room, it: Item, kind: string) {
   const t = r.theme;
   if (kind === 'base' && t.mode === 'property') return `${t.scene}. The property is ${it.visual}. Show it exactly as described at its true real-world size, with nothing that is not described: no swimming pool, no hot tub, no cars, no extra buildings or grounds unless described. Square framing with the whole property visible. ${STYLE}`;
   if (kind === 'base') return `${t.scene}. Subject: ${it.visual}. Show it exactly as described, plain, with nothing added on or around it, leaving space for additions later. Square framing. ${STYLE}`;
-  return `Clear photograph of ${it.visual.replace(/ (on|in|beside|across|over|into|outside|by|at|under|above|scattered|draped|layered|piled|replacing|parked|leaning|sitting|standing|strung|fitted|attached|added|clamped|mounted|squeezed|clearly)\b.*$/i, '') || it.name} (${it.name}) as a single isolated subject, centred and filling most of the frame, on a plain softly lit warm-grey background. Square framing. ${STYLE}`;
+  return `Clear photograph of ${it.visual.replace(/ (on|in|beside|across|over|into|outside|by|at|under|above|scattered|draped|layered|piled|replacing|parked|leaning|sitting|standing|strung|fitted|attached|added|clamped|mounted|squeezed|clearly)\b.*$/i, '') || it.name} as a single isolated subject, centred and filling most of the frame, on a plain softly lit warm-grey background. Square framing. ${STYLE}`;
 }
 function basePrompt(r: Room) {
   const t = r.theme;

@@ -234,6 +234,8 @@ test('Scenario F: a modest terrace keeps its identity; only purchased items are 
   // Force the deck: Victorian Terrace first; upgrades include a paddleboard and a supercar.
   const terrace = r.lots.findIndex(l => l.name === 'Victorian Terrace');
   assert.ok(env.qa.lotPrompt(r, r.theme.bases.find(b => b.name === 'Victorian Terrace'), 'base').match(/no swimming pool/i));
+  const pesto = { name: 'Pesto Drizzle', blurb: '', visual: 'swirls of green pesto across the pizza' };
+  assert.ok(!env.qa.lotPrompt(r, pesto, 'add').includes('Pesto Drizzle'), 'item pictures never name the item, or the model writes it on the picture');
   const pb = r.theme.items.find(i => i.name === 'Paddleboard'), car = r.theme.items.find(i => i.name === 'Supercar');
   r.lots[0] = { ...r.theme.bases.find(b => b.name === 'Victorian Terrace'), kind: 'base' };
   r.lots[2] = { ...pb, kind: 'add' }; r.lots[3] = { ...car, kind: 'add' };
