@@ -270,7 +270,7 @@ const images = new Map<string, Uint8Array>();
 const timers = new Map<string, any>();
 const retries = new Map<string, number>();
 
-const shuffle = <T>(a: T[]): T[] => { const x = [...a]; for (let i = x.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [x[i], x[j]] = [x[j], x[i]]; } return x; };
+const shuffle = <T,>(a: T[]): T[] => { const x = [...a]; for (let i = x.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [x[i], x[j]] = [x[j], x[i]]; } return x; };
 const cleanName = (x: any, d: string) => String(x || '').replace(/[^\p{L}\p{N} '\-]/gu, '').trim().slice(0, 16) || d;
 const clamp = (n: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, n));
 function newCode() { let c = ''; do { c = Array.from({ length: 4 }, () => 'ABCDEFGHJKMNPQRSTUVWXYZ'[Math.floor(Math.random() * 23)]).join(''); } while (rooms.has(c)); return c; }

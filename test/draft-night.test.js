@@ -384,6 +384,11 @@ test('auth and joining rules', async () => {
   same(pre.body.presets.map(p => p.id), ['house', 'pancakes', 'burger', 'pizza', 'gaming', 'garage']);
 });
 
+test('function source also parses as TSX (Railway saves it as index.tsx)', () => {
+  // In TSX a generic arrow like <T>(x) => x is read as a JSX tag and the function crashes on boot.
+  assert.ok(!/=\s*<[A-Z]\w*>\s*\(/.test(source), 'write generic arrows as <T,>(...) or use a function declaration');
+});
+
 test('Railway function stays below the startup argument limit', () => {
   assert.ok(Buffer.byteLength(source, 'utf8') < 96000, 'Single-file Railway function must stay below 96KB (it is passed base64-encoded as one argument)');
 });
