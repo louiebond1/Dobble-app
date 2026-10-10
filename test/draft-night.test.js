@@ -248,7 +248,9 @@ test('Scenario F: a modest terrace keeps its identity; only purchased items are 
   const edits = env.calls.filter(c => c.url.endsWith('/images/edits'));
   assert.ok(edits.length >= 1);
   const first = edits[0].opts.body;
-  assert.ok(first.getAll('image[]').length === 2 || first.getAll('image').length === 1, 'previous world (+ item reference) sent');
+  assert.equal(first.getAll('image').length, 1, 'only the previous picture is sent (cheapest setting)');
+  assert.equal(first.get('quality'), 'low');
+  assert.equal(first.get('input_fidelity'), null);
   assert.equal(r.worlds[0].v, 3);
   const w = await g.state();
   assert.equal(w.worlds[0].key, 'w0-3');
@@ -413,6 +415,29 @@ test('the host cannot start until every picture is ready, and out-of-credit erro
   const blocked = await broke.call('/api/action', { code: m2.code, player: 0, token: m2.token, type: 'start' });
   assert.equal(blocked.status, 400);
   assert.equal((await broke.call('/api/action', { code: m2.code, player: 0, token: m2.token, type: 'start', force: true })).status, 200);
+});
+
+test('nobody can win more than 5 things, and upcoming lots are never revealed', async () => {
+  const env = sandbox({ key: '' });
+  const g = await setup(env, { theme: 'house', names: ['Rich', 'Poor'], budget: 100 });
+  const r = g.room();
+  r.players[1].budget = 10; // Poor can afford to open every remaining lot at £1
+  let peeked = false;
+  while (r.status === 'playing') {
+    const a = r.auction;
+    if (a.phase !== 'bidding') { await g.settle(); continue; }
+    const view = await g.state();
+    if (view.lots.length !== r.lot + 1) peeked = true;
+    // Rich always bids when allowed; Poor only opens when forced.
+    const p = a.turn;
+    await g.act(p, p === 0 || a.leader === null ? 'bid' : 'pass', { amount: a.bid + 1 });
+    for (const pl of r.players) assert.ok(pl.won.length <= 5, pl.name + ' has ' + pl.won.length);
+  }
+  assert.equal(peeked, false, 'the API never sends lots that have not come up');
+  assert.equal(r.players[0].won.length, 5, 'Rich stopped at 5');
+  assert.equal(r.players[1].won.length, 5, 'the rest went to Poor');
+  const final = await g.state();
+  assert.equal(final.lots.length, 10, 'everything is visible once the game is over');
 });
 
 test('auth and joining rules', async () => {

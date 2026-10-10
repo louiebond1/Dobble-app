@@ -330,13 +330,7 @@
         '<div class="who" style="--c:' + (leader ? leader.color : 'var(--muted)') + '">' + (leader ? '<b>' + (a.leader === me() ? 'You lead' : esc(leader.name) + ' leads') + '</b>' : '<b>' + (a.turn === null ? 'No bids yet' : a.turn === me() ? 'You open' : esc(room.players[a.turn].name) + ' opens') + '</b>') + '</div></div>' +
         '<div class="trail">' + trail() + '</div>';
     }
-    var homes = '';
-    if (lot.kind === 'base' && room.players.length > 1) {
-      homes = '<div class="homes">' + room.lots.filter(function (l) { return l.kind === 'base'; }).map(function (l, i) {
-        var owner = room.players.filter(function (p) { return p.base === i; })[0];
-        return '<div class="home' + (i === room.lot ? ' now' : '') + (owner ? ' owned' : '') + '"' + (owner ? ' style="--c:' + owner.color + '"' : '') + '><div class="t">' + (l.img === 'ready' ? '<img alt="" src="' + imgUrl(l.key) + '">' : '') + '</div><span>' + esc(l.name) + '</span><span>' + (owner ? esc(owner.name) : i === room.lot ? 'Now' : i > room.lot ? 'Next' : '') + '</span></div>';
-      }).join('') + '</div>';
-    }
+    var homes = ''; // upcoming lots stay secret
     var lotEl = $('#lot');
     if (!lotEl.__built || lotEl.__lot !== room.lot) {
       lotEl.innerHTML = '<div class="lot-row"><div class="lot-img"><img alt=""><div class="ph"></div></div><div class="lot-text"><div class="lot-kind"></div><div class="lot-name"></div><div class="lot-blurb"></div></div></div><div id="price"></div><div id="homes"></div>';
@@ -366,8 +360,8 @@
     var head = '<div class="dock-head"><span>You have <b class="num">' + money(p.budget) + '</b></span><span class="muted" id="tleft"></span></div>';
     var body;
     if (a.phase !== 'bidding') {
-      var nextLot = room.lots[room.lot + 1];
-      body = '<div class="wait"><b>' + (nextLot ? 'Next: ' + esc(nextLot.name) : 'Final lot complete') + '</b><span>' + (nextLot ? 'Coming up in a moment' : 'Revealing every creation…') + '</span></div>';
+      var last = room.lot + 1 >= room.total;
+      body = '<div class="wait"><b>' + (last ? 'Final lot complete' : 'Next lot coming up') + '</b><span>' + (last ? 'Revealing every creation…' : 'Lot ' + (room.lot + 2) + ' of ' + room.total) + '</span></div>';
     } else if (a.turn === mine) {
       var steps = [1, 2, 5, 10], base = a.bid;
       body = '<div class="bids">' + steps.map(function (s, i) {
@@ -377,7 +371,8 @@
         (a.leader === null ? '<div class="opening">You open the bidding</div>' : '<button class="pass" data-pass' + (sending ? ' disabled' : '') + '>Pass</button>') + '</div>';
     } else {
       var turn = a.turn !== null ? room.players[a.turn] : null, msg, sub;
-      if (!eligibleMe()) { msg = room.lots[room.lot].kind === 'base' ? 'You already have your ' + esc(startWord(room.theme).toLowerCase()) : 'Sitting this one out'; sub = room.lots[room.lot].kind === 'base' ? 'Everyone gets exactly one' : ''; }
+      if (room.players[mine].won.length >= 5) { msg = 'You have your 5'; sub = 'Watch the others fill theirs'; }
+      else if (!eligibleMe()) { msg = room.lots[room.lot].kind === 'base' ? 'You already have your ' + esc(startWord(room.theme).toLowerCase()) : 'Sitting this one out'; sub = room.lots[room.lot].kind === 'base' ? 'Everyone gets exactly one' : ''; }
       else if (a.leader === mine) { msg = 'You lead at ' + money(a.bid); sub = turn ? esc(turn.name) + ' can raise or pass' : ''; }
       else if (a.passed[mine]) { msg = 'You passed'; sub = p.budget <= a.bid ? 'Not enough left to raise' : turn ? esc(turn.name) + ' is deciding' : ''; }
       else { msg = turn ? esc(turn.name) + '’s turn' : 'Waiting…'; sub = a.leader === null ? (turn ? esc(turn.name) + ' opens the bidding at £1 or more' : '') : 'You’re up next if they raise or pass'; }

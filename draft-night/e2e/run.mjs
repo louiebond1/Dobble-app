@@ -91,7 +91,7 @@ async function join(page, code) {
   await page.click('#joinForm .primary');
   await page.waitForSelector('.code');
 }
-const lotNo = async page => Number((await page.textContent('#prog')).match(/Lot (\d+)/)[1]) - 1;
+const lotNo = async page => { const t = await page.textContent('#prog', { timeout: 1500 }).catch(() => null); return t ? Number(t.match(/Lot (\d+)/)[1]) - 1 : -1; };
 async function finished(page) { return (await page.$('.compare')) !== null; }
 
 // Drives a whole game through the UI. decide(seat, lot, page) returns 'pass' or an index into the bid buttons.
@@ -103,6 +103,7 @@ async function play(pages, decide, onLot) {
       const p = pages[i];
       if (!(await p.$('.game'))) continue;
       const lot = await lotNo(p);
+      if (lot < 0) continue; // the game just ended on this phone
       if (onLot && !seen.has(lot) && i === 0) { seen.add(lot); await onLot(lot); }
       const btn = await p.$('.bids button:not([disabled])');
       if (!btn) continue;

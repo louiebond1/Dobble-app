@@ -51,7 +51,7 @@ City Penthouse Building|The top floor is yours|a sleek glass apartment tower pho
 Alpine Chalet|Snowy peaks and a wood burner|a traditional wooden alpine chalet with a steep roof and balconies on a snowy mountain slope with pine trees`);
 
 const PRESETS: Theme[] = [
-  { id: 'house', title: 'Dream House', emoji: '🏡', mode: 'property', noun: 'home', label: 'Upgrade', startLabel: 'Home', base: { name: 'Empty plot', blurb: 'Bid for your home first', visual: 'an empty grassy building plot with a low fence on a quiet residential street' }, scene: 'Eye-level estate-agent photograph from across the street or lawn, showing the whole front of the property and its plot boundaries with a little space around it', bases: HOUSES, created: 0, items: parse(`
+  { id: 'house', title: 'Dream House', emoji: '🏡', mode: 'property', noun: 'home', label: 'Upgrade', startLabel: 'Home', base: { name: 'Empty plot', blurb: 'Bid for your home first', visual: 'an empty grassy building plot with a low fence around it on a quiet residential street, neighbouring houses at the edges' }, scene: 'Elevated drone photograph from above and in front at about 45 degrees, showing the whole house, its roof and its entire plot including the back garden, with a little space around the boundaries', bases: HOUSES, created: 0, items: parse(`
 Swimming Pool|A sparkling outdoor pool|a rectangular outdoor swimming pool with stone edging in the garden beside the house
 Hot Tub|Bubbles under the stars|a round cedar hot tub with steam rising, on a patio beside the house
 Supercar|Red, loud and Italian|a glossy red Italian supercar parked on the driveway or kerb directly outside the house
@@ -332,7 +332,8 @@ const bump = (r: Room) => { r.rev++; };
 const isBaseLot = (r: Room) => r.lots[r.lot]?.kind === 'base';
 // Themes with starting options auction them first, one per player, before any additions.
 const hasBases = (t: Theme) => t.bases.length > 0;
-function eligible(r: Room, p: number) { return r.status === 'playing' && p >= 0 && p < r.players.length && (isBaseLot(r) ? r.players[p].base === null : !hasBases(r.theme) || r.players[p].base !== null); }
+// Everyone ends with at most LOTS_PER_PLAYER things (their starting option counts as one).
+function eligible(r: Room, p: number) { return r.status === 'playing' && p >= 0 && p < r.players.length && r.players[p].won.length < LOTS_PER_PLAYER && (isBaseLot(r) ? r.players[p].base === null : !hasBases(r.theme) || r.players[p].base !== null); }
 const eligibleSeats = (r: Room) => r.players.map((_, i) => i).filter(i => eligible(r, i));
 const canAct = (r: Room, p: number) => eligible(r, p) && !r.auction.passed[p] && r.auction.leader !== p;
 const away = (r: Room, p: number) => !r.players[p].cpu && clock() - r.players[p].seen > AWAY_MS;
@@ -443,6 +444,13 @@ function start(r: Room) {
 // Each player's world is a chain of edits. Version v shows the base plus their first v acquisitions
 // (property: v=1 is exactly the house photo they bid on). Each new version edits the previous image,
 // so the original creation and earlier purchases stay put. Versions only ever move forwards.
+// Cheapest settings that still look right: a side-by-side test showed low quality on this model keeps houses, placement
+// and earlier items as well as medium, while gpt-image-1-mini drifted (wrong angle, items in the wrong place).
+const ITEM_Q = env('DRAFT_ITEM_QUALITY', 'low');
+const WORLD_Q = env('DRAFT_WORLD_QUALITY', 'low');
+// Extras that add input cost; edits stayed faithful without them in the same test.
+const HIGH_FIDELITY = env('DRAFT_HIGH_FIDELITY', '') === '1';
+const ITEM_REFERENCE = env('DRAFT_ITEM_REFERENCE', '') === '1';
 const STYLE = 'Photorealistic, natural light, crisp detail, consistent colour grading. No text, captions, labels, logos, watermarks or people.';
 const queue: Array<{ pri: number; run: () => Promise<void> }> = [];
 let running = 0;
@@ -500,7 +508,7 @@ async function openaiImage(prompt: string, refs: Uint8Array[], quality: string):
     else {
       body = new FormData();
       for (const [k, v] of Object.entries(params)) body.append(k, v);
-      if (full) body.append('input_fidelity', 'high');
+      if (full && HIGH_FIDELITY) body.append('input_fidelity', 'high');
       const use = full ? refs : refs.slice(0, 1);
       use.forEach((b, i) => body.append(use.length > 1 ? 'image[]' : 'image', new Blob([b as BlobPart], { type: 'image/jpeg' }), 'ref' + i + '.jpg'));
     }
@@ -525,7 +533,7 @@ function genLot(r: Room, k: string, it: Item, kind: string, pri: number) {
   r.lotImg[k] = Bun.env.OPENAI_API_KEY ? 'pending' : 'none';
   if (!Bun.env.OPENAI_API_KEY) return;
   enqueue(pri, async () => {
-    try { images.set(imgKey(r, k), await openaiImage(lotPrompt(r, it, kind), [], kind === 'base' ? 'medium' : 'low')); r.lotImg[k] = 'ready'; }
+    try { images.set(imgKey(r, k), await openaiImage(lotPrompt(r, it, kind), [], kind === 'base' ? WORLD_Q : ITEM_Q)); r.lotImg[k] = 'ready'; }
     catch (e) {
       console.error('Lot image failed', String(e));
       if (outOfCredit(r, e)) { r.lotImg[k] = 'error'; bump(r); return; }
@@ -542,7 +550,7 @@ function genBase(r: Room) {
   if (!Bun.env.OPENAI_API_KEY) { r.baseImg = 'none'; return; }
   r.baseImg = 'pending';
   enqueue(0, async () => {
-    try { images.set(imgKey(r, 'base'), await openaiImage(basePrompt(r), [], 'medium')); r.baseImg = 'ready'; }
+    try { images.set(imgKey(r, 'base'), await openaiImage(basePrompt(r), [], WORLD_Q)); r.baseImg = 'ready'; }
     catch (e) {
       console.error('Base image failed', String(e));
       const n = (retries.get(imgKey(r, 'base')) || 0) + 1; retries.set(imgKey(r, 'base'), n);
@@ -569,8 +577,8 @@ async function ensureWorld(r: Room, p: number) {
       if (!prev) throw Error('Missing previous world');
       const refs = [prev];
       const lotRef = images.get(imgKey(r, lotImageKey(r, pl.won[from])));
-      if (lotRef && target - from === 1) refs.push(lotRef);
-      const out = await openaiImage(worldPrompt(r, p, from, target, refs.length > 1), refs, 'medium');
+      if (ITEM_REFERENCE && lotRef && target - from === 1) refs.push(lotRef);
+      const out = await openaiImage(worldPrompt(r, p, from, target, refs.length > 1), refs, WORLD_Q);
       images.set(imgKey(r, worldKey(r, p, target)), out);
       if (target > w.v) w.v = target;
       w.state = 'ready'; w.tries = 0;
@@ -678,7 +686,8 @@ function view(r: Room) {
     code: r.code, rev: r.rev, now: clock(), status: r.status, budget: r.budget, capacity: r.capacity, cpu: r.cpu,
     theme: { ...themeSummary(r.theme), examples: undefined, starts: undefined },
     players: r.players.map((p, i) => ({ name: p.name, color: p.color, budget: p.budget, won: p.won, base: p.base, cpu: p.cpu, away: r.status === 'playing' && away(r, i) })),
-    lots: r.lots.map((l, i) => ({ name: l.name, blurb: l.blurb, kind: l.kind, img: r.lotImg[lotImageKey(r, i)] || 'none', key: lotImageKey(r, i) })),
+    // Only lots that have already come up are sent, so nobody can peek at what is next.
+    lots: r.lots.slice(0, r.lot + 1).map((l, i) => ({ name: l.name, blurb: l.blurb, kind: l.kind, img: r.lotImg[lotImageKey(r, i)] || 'none', key: lotImageKey(r, i) })),
     lot: r.lot, total: r.status === 'lobby' ? LOTS_PER_PLAYER * r.players.length : r.lots.length,
     auction: { bid: a.bid, leader: a.leader, turn: a.turn, passed: a.passed, phase: a.phase, deadline: a.deadline, log: a.log.slice(-6), result: a.result },
     worlds: r.worlds.map((w, p) => ({ v: w.v, state: w.state, key: worldKey(r, p, w.v) })),
