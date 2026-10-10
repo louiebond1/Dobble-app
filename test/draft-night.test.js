@@ -474,6 +474,104 @@ test('auth and joining rules', async () => {
   same(pre.body.presets.map(p => p.id), ['house', 'pancakes', 'burger', 'pizza', 'gaming', 'garage']);
 });
 
+test('Quick Play: open games are listed, seats are claimed in order, and the host starts for everyone', async () => {
+  const env = sandbox({ key: '' });
+  const made = (await env.call('/api/create', { theme: 'house', name: 'Louie', capacity: 4, auctionCount: 16, device: 'dev-louie' })).body;
+  let list = (await env.call('/api/lobbies')).body.rooms;
+  assert.equal(list.length, 1);
+  same({ host: list[0].host, title: list[0].theme.title, players: list[0].players, capacity: list[0].capacity, seat: list[0].seat }, { host: 'Louie', title: 'Dream House', players: ['Louie'], capacity: 4, seat: 2 });
+  // Mario, Ariel and Sam join from their own phones and get seats 2, 3 and 4 in that order.
+  const names = ['Mario', 'Ariel', 'Sam'], seats = [];
+  for (const n of names) { const j = await env.call('/api/join', { code: list[0].code, name: n, device: 'dev-' + n }); assert.equal(j.status, 200); seats.push(j.body); }
+  same(seats.map(s => s.player), [1, 2, 3]);
+  same(seats[2].room.players.map(p => p.name), ['Louie', 'Mario', 'Ariel', 'Sam']);
+  assert.equal(seats[2].room.me, 3);
+  assert.equal((await env.call('/api/lobbies')).body.rooms.length, 0, 'a full game disappears from Quick Play');
+  // Every phone sees the same lobby, with its own seat.
+  for (const s of seats) { const v = (await env.call(`/api/room?code=${s.code}&t=${s.token}`)).body; assert.equal(v.me, s.player); same(v.players.map(p => p.name), ['Louie', 'Mario', 'Ariel', 'Sam']); }
+  assert.equal((await env.call('/api/action', { code: made.code, token: seats[0].token, type: 'start' })).status, 400, 'only the host starts');
+  const st = await env.call('/api/action', { code: made.code, token: made.token, type: 'start' });
+  assert.equal(st.status, 200, JSON.stringify(st.body));
+  for (const s of [made, ...seats]) { const v = (await env.call(`/api/room?code=${s.code}&t=${s.token}`)).body; assert.equal(v.status, 'playing'); assert.equal(v.lot, 0); assert.equal(v.total, 16); }
+  assert.equal(env.qa.rooms.get(made.code).lots.length, 16);
+});
+
+test('Quick Play: simultaneous claims never share a seat, and a full game turns the late phone away', async () => {
+  const env = sandbox({ key: '' });
+  const made = (await env.call('/api/create', { theme: 'pancakes', name: 'Ariel', capacity: 3, device: 'a' })).body;
+  // Two phones tap "I'm Player 2" at the same moment, then a third tries too.
+  const [x, y] = await Promise.all([env.call('/api/join', { code: made.code, name: 'Mario', device: 'm', seat: 2 }), env.call('/api/join', { code: made.code, name: 'Luigi', device: 'l', seat: 2 })]);
+  same([x.status, y.status], [200, 200]);
+  same([x.body.player, y.body.player].sort(), [1, 2], 'one gets Player 2, the other Player 3');
+  const late = await env.call('/api/join', { code: made.code, name: 'Peach', device: 'p', seat: 2 });
+  assert.equal(late.status, 400); assert.match(late.body.error, /filled up/);
+  same(env.qa.rooms.get(made.code).players.map(p => p.name).sort(), ['Ariel', 'Luigi', 'Mario']);
+});
+
+test('Quick Play: refreshing or rejoining keeps your seat; leaving frees it for someone else', async () => {
+  const env = sandbox({ key: '' });
+  const made = (await env.call('/api/create', { theme: 'house', name: 'Louie', capacity: 3, device: 'L' })).body;
+  const mario = (await env.call('/api/join', { code: made.code, name: 'Mario', device: 'M' })).body;
+  const ariel = (await env.call('/api/join', { code: made.code, name: 'Ariel', device: 'A' })).body;
+  // Mario's phone lost its session and he taps join again: same seat, no duplicate.
+  const again = (await env.call('/api/join', { code: made.code, name: 'Mario', device: 'M' })).body;
+  same([again.player, again.token], [1, mario.token]);
+  assert.equal(env.qa.rooms.get(made.code).players.length, 3);
+  // Refreshing restores identity from the stored token.
+  assert.equal((await env.call(`/api/room?code=${made.code}&t=${ariel.token}`)).body.me, 2);
+  // Mario leaves: his seat opens, Ariel keeps her identity (now Player 2) and Sam takes the free seat.
+  await env.call('/api/leave', { code: made.code, token: mario.token });
+  let v = (await env.call(`/api/room?code=${made.code}&t=${ariel.token}`)).body;
+  same([v.me, v.players.map(p => p.name), v.notice], [1, ['Louie', 'Ariel'], 'Mario left.']);
+  assert.equal((await env.call(`/api/room?code=${made.code}&t=${mario.token}`)).body.me, -1, 'the old token no longer has a seat');
+  assert.equal((await env.call('/api/lobbies')).body.rooms[0].seat, 3);
+  const sam = (await env.call('/api/join', { code: made.code, name: 'Sam', device: 'S' })).body;
+  same([sam.player, sam.room.players.map(p => p.name)], [2, ['Louie', 'Ariel', 'Sam']]);
+  assert.equal((await env.call('/api/action', { code: made.code, token: ariel.token, type: 'bid', lot: 0, seen: 0, amount: 1 })).status, 400, 'actions resolve by token after the seats moved');
+  // The host leaves: the next player becomes host and can start.
+  await env.call('/api/leave', { code: made.code, token: made.token });
+  v = (await env.call(`/api/room?code=${made.code}&t=${ariel.token}`)).body;
+  same([v.me, v.players.map(p => p.name), v.notice], [0, ['Ariel', 'Sam'], 'Louie left. Ariel is now the host.']);
+  assert.equal((await env.call('/api/action', { code: made.code, token: ariel.token, type: 'start' })).status, 200);
+  assert.equal((await env.call('/api/lobbies')).body.rooms.length, 0, 'a started game disappears from Quick Play');
+  assert.equal((await env.call('/api/join', { code: made.code, name: 'Late', device: 'Z' })).status, 400);
+  // Once playing, leaving does not remove anyone (the away rule handles absent players).
+  await env.call('/api/leave', { code: made.code, token: sam.token });
+  assert.equal(env.qa.rooms.get(made.code).players.length, 2);
+});
+
+test('Quick Play: phones that go quiet free their seat, private and CPU games are never listed, the last player leaving closes the room', async () => {
+  const env = sandbox({ key: '' });
+  const made = (await env.call('/api/create', { theme: 'burger', name: 'Louie', capacity: 2, device: 'L' })).body;
+  await env.call('/api/join', { code: made.code, name: 'Mario', device: 'M' });
+  assert.equal((await env.call('/api/lobbies')).body.rooms.length, 0);
+  for (let i = 0; i < 26; i++) { env.advance(5000); await env.call(`/api/room?code=${made.code}&t=${made.token}`); } // only the host keeps polling
+  const v = (await env.call(`/api/room?code=${made.code}&t=${made.token}`)).body;
+  same(v.players.map(p => p.name), ['Louie']);
+  assert.equal((await env.call('/api/lobbies')).body.rooms.length, 1, 'the freed seat is offered again');
+  env.advance(130000);
+  assert.equal((await env.call('/api/lobbies')).body.rooms.length, 0, 'a host who has gone quiet is not advertised');
+  await env.call('/api/create', { theme: 'house', name: 'Private', capacity: 2, listed: false });
+  await env.call('/api/create', { theme: 'house', name: 'Solo', cpu: true });
+  assert.equal((await env.call('/api/lobbies')).body.rooms.length, 0);
+  await env.call('/api/leave', { code: made.code, token: made.token });
+  assert.equal(env.qa.rooms.has(made.code), false);
+  assert.equal((await env.call(`/api/room?code=${made.code}`)).status, 404);
+});
+
+test('room-code joining still works and 12, 16 and 20 auctions are honoured', async () => {
+  for (const n of [12, 16, 20]) {
+    const env = sandbox({ key: '' });
+    const made = (await env.call('/api/create', { theme: 'house', name: 'Louie', capacity: 2, auctionCount: n })).body;
+    const j = await env.call('/api/join', { code: made.code.toLowerCase(), name: 'Mario' });
+    assert.equal(j.status, 200);
+    assert.equal(j.body.room.total, n);
+    assert.equal((await env.call('/api/action', { code: made.code, player: 0, token: made.token, type: 'start' })).status, 200);
+    const r = env.qa.rooms.get(made.code);
+    same([r.lots.length, r.lots.filter(l => l.kind === 'base').length], [n, 2]);
+  }
+});
+
 test('function source also parses as TSX (Railway saves it as index.tsx)', () => {
   // In TSX a generic arrow like <T>(x) => x is read as a JSX tag and the function crashes on boot.
   assert.ok(!/=\s*<[A-Z]\w*>\s*\(/.test(source), 'write generic arrows as <T,>(...) or use a function declaration');

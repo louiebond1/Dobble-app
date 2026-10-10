@@ -7,12 +7,12 @@ type Mode = 'property' | 'build' | 'collection';
 // bases: the starting options auctioned first (one per player). base: what everyone holds before winning one.
 type Theme = { id: string; title: string; emoji: string; mode: Mode; noun: string; label: string; startLabel: string; base: Item | null; scene: string; bases: Item[]; items: Item[]; created: number };
 type Lot = Item & { kind: 'base' | 'add' };
-type Player = { name: string; color: string; budget: number; won: number[]; base: number | null; cpu: boolean; seen: number };
+type Player = { name: string; color: string; budget: number; won: number[]; base: number | null; cpu: boolean; seen: number; device: string };
 type Entry = { p: number; a: number | null; why?: string };
 type Auction = { bid: number; leader: number | null; turn: number | null; passed: boolean[]; phase: 'bidding' | 'sold' | 'unsold'; deadline: number; log: Entry[]; result: { winner: number | null; price: number; note: string } | null };
 type World = { v: number; state: string; busy: boolean; tries: number };
 type Room = {
-  code: string; rev: number; created: number; auctionCount: number; status: 'lobby' | 'playing' | 'finished'; theme: Theme; budget: number; capacity: number; cpu: boolean;
+  code: string; rev: number; created: number; auctionCount: number; listed: boolean; notice: string; sig?: string; status: 'lobby' | 'playing' | 'finished'; theme: Theme; budget: number; capacity: number; cpu: boolean;
   players: Player[]; tokens: string[]; deckBases: Item[]; deckAdds: Item[]; lots: Lot[]; lot: number; auction: Auction;
   history: Array<{ lot: number; winner: number | null; price: number }>; lotImg: Record<string, string>; baseImg: string; imageError: string; worlds: World[]; verdict: string | null;
 };
@@ -682,12 +682,12 @@ function prep(r: Room) {
   const states = [...Object.values(r.lotImg), ...(r.theme.base?.visual ? [r.baseImg] : [])].filter(x => x !== 'none');
   return { total: states.length, ready: states.filter(x => x === 'ready').length, failed: states.filter(x => x === 'error').length, error: r.imageError, enabled: Boolean(Bun.env.OPENAI_API_KEY) };
 }
-function view(r: Room) {
+function view(r: Room, me = -1) {
   const a = r.auction;
   return {
-    code: r.code, rev: r.rev, now: clock(), status: r.status, budget: r.budget, capacity: r.capacity, auctionCount: r.auctionCount, maxWins: maxWins(r), cpu: r.cpu,
+    me, listed: r.listed, notice: r.notice, code: r.code, rev: r.rev, now: clock(), status: r.status, budget: r.budget, capacity: r.capacity, auctionCount: r.auctionCount, maxWins: maxWins(r), cpu: r.cpu,
     theme: { ...themeSummary(r.theme), examples: undefined, starts: undefined },
-    players: r.players.map((p, i) => ({ name: p.name, color: p.color, budget: p.budget, won: p.won, base: p.base, cpu: p.cpu, away: r.status === 'playing' && away(r, i) })),
+    players: r.players.map((p, i) => ({ name: p.name, color: p.color, budget: p.budget, won: p.won, base: p.base, cpu: p.cpu, away: !p.cpu && (r.status === 'playing' ? away(r, i) : clock() - p.seen > AWAY_MS) })),
     // Only lots that have already come up are sent, so nobody can peek at what is next.
     lots: r.lots.slice(0, r.lot + 1).map((l, i) => ({ name: l.name, blurb: l.blurb, kind: l.kind, img: r.lotImg[lotImageKey(r, i)] || 'none', key: lotImageKey(r, i) })),
     lot: r.lot, total: r.status === 'lobby' ? r.auctionCount : r.lots.length,
@@ -697,14 +697,49 @@ function view(r: Room) {
     history: r.history, verdict: r.verdict,
   };
 }
-function join(r: Room, name: string, cpu = false) {
+function join(r: Room, name: string, cpu = false, device = '') {
   const taken = new Set(r.players.map(p => p.name.toLowerCase()));
   let nm = name, k = 2; while (taken.has(nm.toLowerCase())) nm = name.slice(0, 13) + ' ' + k++;
-  r.players.push({ name: nm, color: COLORS[r.players.length], budget: r.budget, won: [], base: null, cpu, seen: clock() });
+  r.players.push({ name: nm, color: COLORS[r.players.length], budget: r.budget, won: [], base: null, cpu, seen: clock(), device });
   r.tokens.push(crypto.randomUUID());
   r.worlds.push({ v: -1, state: 'idle', busy: false, tries: 0 });
   bump(r);
   return r.players.length - 1;
+}
+// ---------- Quick Play ----------
+// Seats are handed out by the server in request order (Bun runs one request at a time), so two phones can never get the same seat.
+// Before the game starts a seat is freed when its player leaves or stops polling; the next human becomes host if the host goes.
+const LOBBY_IDLE_MS = Number(env('DRAFT_LOBBY_IDLE_MS', '120000'));
+const device = (x: any) => String(x || '').replace(/[^\w-]/g, '').slice(0, 64);
+const seatOf = (r: Room, token: any) => token ? r.tokens.indexOf(String(token)) : -1;
+function unseat(r: Room, p: number, why: string) {
+  const gone = r.players[p].name;
+  r.players.splice(p, 1); r.tokens.splice(p, 1); r.worlds.splice(p, 1);
+  r.players.forEach((pl, i) => { pl.color = COLORS[i]; });
+  if (!r.players.some(pl => !pl.cpu)) { close(r); return; }
+  r.notice = p === 0 ? `${gone} ${why}. ${r.players[0].name} is now the host.` : `${gone} ${why}.`;
+  bump(r);
+}
+function close(r: Room) {
+  rooms.delete(r.code); clearTimeout(timers.get(r.code));
+  for (const key of images.keys()) if (key.startsWith(r.code + '/')) images.delete(key);
+}
+function tidy(r: Room) {
+  if (r.status !== 'lobby') return;
+  for (let i = r.players.length - 1; i > 0; i--) if (!r.players[i].cpu && clock() - r.players[i].seen > LOBBY_IDLE_MS) unseat(r, i, 'left');
+  // Who looks away is part of what everyone sees, so a change counts as a new revision.
+  const sig = r.players.map(p => !p.cpu && clock() - p.seen > AWAY_MS ? 1 : 0).join('');
+  if (rooms.get(r.code) === r && sig !== r.sig) { r.sig = sig; bump(r); }
+}
+// Waiting rooms anyone can join: in the lobby, listed, not full and with a host who is still there.
+function openRooms() {
+  const out = [];
+  for (const r of rooms.values()) {
+    tidy(r);
+    if (rooms.get(r.code) !== r || !r.listed || r.status !== 'lobby' || r.players.length >= r.capacity || clock() - r.players[0].seen > LOBBY_IDLE_MS) continue;
+    out.push({ code: r.code, host: r.players[0].name, theme: { title: r.theme.title, emoji: r.theme.emoji }, players: r.players.map(p => p.name), capacity: r.capacity, seat: r.players.length + 1, auctionCount: r.auctionCount, budget: r.budget, created: r.created });
+  }
+  return out.sort((a, b) => b.created - a.created).slice(0, 20);
 }
 async function handle(req: Request): Promise<Response> {
   const u = new URL(req.url);
@@ -736,40 +771,53 @@ async function handle(req: Request): Promise<Response> {
     const maxP = themeSummary(theme).maxPlayers;
     const r: Room = {
       code: newCode(), rev: 1, created: clock(), status: 'lobby', theme, budget: clamp(Math.round(Number(body.budget) || 100), 5, 1000),
-      capacity: cpu ? 2 : clamp(Math.round(Number(body.capacity) || 2), 2, maxP), auctionCount: 0, cpu, players: [], tokens: [],
+      capacity: cpu ? 2 : clamp(Math.round(Number(body.capacity) || 2), 2, maxP), auctionCount: 0, cpu, players: [], tokens: [], listed: !cpu && body.listed !== false, notice: '',
       deckBases: shuffle(theme.bases), deckAdds: shuffle(theme.items), lots: [], lot: 0,
       auction: { bid: 0, leader: null, turn: null, passed: [], phase: 'bidding', deadline: 0, log: [], result: null },
       history: [], lotImg: {}, baseImg: 'none', imageError: '', worlds: [], verdict: null,
     };
     r.auctionCount = clamp(Math.round(Number(body.auctionCount) || r.capacity * LOTS_PER_PLAYER), r.capacity, Math.min(30, (hasBases(theme) ? r.capacity : 0) + theme.items.length));
     rooms.set(r.code, r);
-    join(r, cleanName(body.name, 'Player 1'));
+    join(r, cleanName(body.name, 'Player 1'), false, device(body.device));
     if (cpu) join(r, 'CPU', true);
     // Every picture for the whole game is prepared while the lobby fills; the host starts once they are ready.
     genBase(r); prefetch(r, r.auctionCount - (hasBases(theme) ? r.capacity : 0));
-    return reply({ code: r.code, player: 0, token: r.tokens[0], room: view(r) });
+    return reply({ code: r.code, player: 0, token: r.tokens[0], room: view(r, 0) });
   }
   if (u.pathname === '/api/join' && req.method === 'POST') {
-    const r = room(); if (!r) return fail('Room not found', 404);
-    tick(r);
-    if (r.status !== 'lobby' || r.players.length >= r.capacity) return fail(r.status === 'lobby' ? 'That room is full' : 'That game has already started');
-    const p = join(r, cleanName(body.name, 'Player ' + (r.players.length + 1)));
-    return reply({ code: r.code, player: p, token: r.tokens[p], room: view(r) });
+    const r = room(); if (!r) return fail('That game has closed', 404);
+    tick(r); tidy(r);
+    if (rooms.get(r.code) !== r) return fail('That game has closed', 404);
+    // The same phone joining again gets its own seat back instead of a duplicate player.
+    const dev = device(body.device), mine = dev ? r.players.findIndex(p => !p.cpu && p.device === dev) : -1;
+    if (mine >= 0) { r.players[mine].seen = clock(); return reply({ code: r.code, player: mine, token: r.tokens[mine], room: view(r, mine) }); }
+    if (r.status !== 'lobby' || r.players.length >= r.capacity) return fail(r.status === 'lobby' ? 'That game just filled up' : 'That game has already started');
+    const p = join(r, cleanName(body.name, 'Player ' + (r.players.length + 1)), false, dev);
+    r.notice = '';
+    return reply({ code: r.code, player: p, token: r.tokens[p], room: view(r, p) });
+  }
+  if (u.pathname === '/api/lobbies') return reply({ rooms: openRooms(), now: clock() });
+  if (u.pathname === '/api/leave' && req.method === 'POST') {
+    const r = room(); if (!r) return reply({ ok: true });
+    const p = seatOf(r, body.token);
+    if (p >= 0 && r.status === 'lobby') unseat(r, p, 'left');
+    return reply({ ok: true });
   }
   if (u.pathname === '/api/room') {
     const r = room(); if (!r) return fail('Room not found', 404);
-    const p = Number(u.searchParams.get('p'));
-    if (Number.isInteger(p) && r.tokens[p] && u.searchParams.get('t') === r.tokens[p]) {
-      const wasAway = r.status === 'playing' && away(r, p); r.players[p].seen = clock(); if (wasAway) bump(r);
-    }
-    tick(r);
-    if (Number(u.searchParams.get('rev')) === r.rev) return reply({ same: true, rev: r.rev, now: clock() });
-    return reply(view(r));
+    // Players are identified by their token, so a seat number that moved (someone earlier left the lobby) still resolves.
+    const p = seatOf(r, u.searchParams.get('t'));
+    if (p >= 0) { const wasAway = away(r, p); r.players[p].seen = clock(); if (wasAway) bump(r); }
+    tick(r); tidy(r);
+    if (rooms.get(r.code) !== r) return fail('Room not found', 404);
+    const me = seatOf(r, u.searchParams.get('t'));
+    if (Number(u.searchParams.get('rev')) === r.rev) return reply({ same: true, rev: r.rev, now: clock(), me });
+    return reply(view(r, me));
   }
   if (u.pathname === '/api/action' && req.method === 'POST') {
     const r = room(); if (!r) return fail('Room not found', 404);
-    const p = Number(body.player);
-    if (!Number.isInteger(p) || !r.tokens[p] || body.token !== r.tokens[p]) return fail('Session expired. Please rejoin.', 403);
+    const p = seatOf(r, body.token);
+    if (p < 0) return fail('Session expired. Please rejoin.', 403);
     r.players[p].seen = clock();
     tick(r);
     try {
@@ -784,12 +832,12 @@ async function handle(req: Request): Promise<Response> {
       } else if (body.type === 'bid' || body.type === 'pass') {
         if (r.status !== 'playing') return fail('The auction is not running');
         // Optimistic check: the action must be based on the lot and price the player saw.
-        if (Number(body.lot) !== r.lot || Number(body.seen) !== r.auction.bid) return reply({ error: 'The bidding moved on. Check the new price.', room: view(r) }, 409);
+        if (Number(body.lot) !== r.lot || Number(body.seen) !== r.auction.bid) return reply({ error: 'The bidding moved on. Check the new price.', room: view(r, p) }, 409);
         if (body.type === 'bid') bid(r, p, Number(body.amount)); else pass(r, p);
       } else return fail('Unknown action');
-    } catch (e) { return reply({ error: e instanceof Error ? e.message : 'Action failed', room: view(r) }, 400); }
+    } catch (e) { return reply({ error: e instanceof Error ? e.message : 'Action failed', room: view(r, p) }, 400); }
     bump(r); tick(r);
-    return reply(view(r));
+    return reply(view(r, p));
   }
   return fail('Not found', 404);
 }

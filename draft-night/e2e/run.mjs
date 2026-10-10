@@ -86,11 +86,23 @@ async function create(page, { theme, players, budget = 100, custom }) {
   await page.click(`[data-budget="${budget}"]`);
 }
 async function join(page, code) {
+  await page.click('[data-tab="join"]');
   await page.click('[data-go="join"]');
   await page.fill('#code', code);
   await page.click('#joinForm .primary');
-  await page.waitForSelector('.code');
+  await page.waitForSelector('.roster');
 }
+// The room code is in the address bar once a room is open.
+async function created(page) { await page.waitForSelector('.roster'); return new URL(page.url()).searchParams.get('room'); }
+// Quick Play: open the Join tab and tap the seat offered in the host's game.
+async function quick(page, host) {
+  await page.click('[data-tab="join"]');
+  const row = page.locator('.open li', { hasText: host + '’s game' });
+  await row.waitFor();
+  await row.locator('[data-seat]').click();
+  await page.waitForSelector('.roster');
+}
+const tags = page => page.$$eval('.roster li', ls => ls.map(l => l.textContent.trim()));
 const lotNo = async page => { const t = await page.textContent('#prog', { timeout: 1500 }).catch(() => null); return t ? Number(t.match(/Lot (\d+)/)[1]) - 1 : -1; };
 async function finished(page) { return (await page.$('.compare')) !== null; }
 
@@ -129,8 +141,8 @@ await scenario('A-property-2p', async () => {
   const ariel = await phone('Ariel'), louie = await phone('Louie');
   await shot(ariel, 'A0-home.png'); await layoutCheck(ariel, 'home');
   await create(ariel, { theme: 'house', players: 2 });
-  await ariel.click('#create'); await ariel.waitForSelector('.code');
-  const code = (await ariel.textContent('.code')).trim();
+  await ariel.click('#create');
+  const code = await created(ariel);
   await join(louie, code);
   await ariel.waitForSelector('[data-start]:not([disabled])');
   await shot(ariel, 'A1-lobby.png'); await layoutCheck(ariel, 'lobby');
@@ -166,8 +178,8 @@ await scenario('C-pancakes-2p', async () => {
   const a = await phone('Ariel'), b = await phone('Louie');
   await create(a, { custom: 'Pancakes', players: 2 });
   await a.waitForSelector('[data-theme="pancakes"][aria-pressed="true"]');
-  await a.click('#create'); await a.waitForSelector('.code');
-  await join(b, (await a.textContent('.code')).trim());
+  await a.click('#create'); await created(a);
+  await quick(b, 'Ariel');
   await a.waitForSelector('[data-start]:not([disabled])'); await a.click('[data-start]');
   await a.waitForSelector('.game');
   const names = [];
@@ -195,8 +207,8 @@ await scenario('D-custom-4p', async () => {
   const ps = [await phone('Ariel'), await phone('Louie'), await phone('Sam'), await phone('Jo')];
   await create(ps[0], { custom: 'Treehouse', players: 4, budget: 50 });
   await ps[0].waitForSelector('.custom-pick [aria-pressed="true"]');
-  await ps[0].click('#create'); await ps[0].waitForSelector('.code');
-  const code = (await ps[0].textContent('.code')).trim();
+  await ps[0].click('#create');
+  const code = await created(ps[0]);
   for (const p of ps.slice(1)) await join(p, code);
   await ps[0].waitForSelector('[data-start]:not([disabled])'); await ps[0].click('[data-start]');
   await ps[0].waitForSelector('.game');
@@ -206,6 +218,72 @@ await scenario('D-custom-4p', async () => {
   const budgets = await ps[0].$$eval('.entry .spend', es => es.map(e => e.textContent));
   assert.equal(budgets.length, 4);
   for (const p of ps) await p.context().close();
+});
+
+await scenario('Q-quick-play', async () => {
+  // Louie creates a 2-player game; Mario finds it under Join and taps his seat. No code is exchanged.
+  const louie = await phone('Louie'), mario = await phone('Mario');
+  await create(louie, { theme: 'house', players: 2 });
+  await louie.click('[data-auctions="12"]');
+  await louie.click('#create'); await created(louie);
+  await mario.click('[data-tab="join"]');
+  await mario.waitForSelector('.open li');
+  await shot(mario, 'Q1-join-list.png'); await layoutCheck(mario, 'join list');
+  assert.match(await mario.textContent('.open li'), /Louie’s game\s*Dream House · 1\/2 players\s*I’m Player 2/);
+  await quick(mario, 'Louie');
+  await louie.waitForFunction(() => document.querySelector('.eyebrow.split').textContent.includes('2 of 2'));
+  assert.deepEqual(await tags(louie), ['LouiePlayer 1 · Host · You', 'MarioPlayer 2 · Ready']);
+  assert.deepEqual(await tags(mario), ['LouiePlayer 1 · Host', 'MarioPlayer 2 · Ready · You']);
+  assert.match(await louie.textContent('.brief'), /12 auctions · 5 possible wins per player/);
+  await shot(mario, 'Q2-lobby-mario.png'); await shot(louie, 'Q3-lobby-louie.png'); await layoutCheck(louie, 'lobby');
+  // A full game no longer shows up for a third phone.
+  const sam = await phone('Sam');
+  await sam.click('[data-tab="join"]'); await sam.waitForSelector('.empty-note');
+  assert.equal(await sam.$('.open li'), null);
+  // Refreshing keeps everyone's identity.
+  await mario.reload(); await mario.waitForSelector('.roster');
+  assert.deepEqual(await tags(mario), ['LouiePlayer 1 · Host', 'MarioPlayer 2 · Ready · You']);
+  // Mario leaves; his seat opens and Sam takes it.
+  await mario.click('[data-leave]');
+  await louie.waitForSelector('.notice');
+  assert.match(await louie.textContent('.notice'), /Mario left/);
+  await sam.waitForSelector('.open li');
+  await quick(sam, 'Louie');
+  await louie.waitForFunction(() => document.querySelector('.eyebrow.split').textContent.includes('2 of 2'));
+  assert.deepEqual(await tags(louie), ['LouiePlayer 1 · Host · You', 'SamPlayer 2 · Ready']);
+  // Start: both phones enter the same auction.
+  await louie.waitForSelector('[data-start]:not([disabled])', { timeout: 30000 }); await louie.click('[data-start]');
+  await louie.waitForSelector('.game'); await sam.waitForSelector('.game');
+  assert.equal(await louie.textContent('#prog'), await sam.textContent('#prog'));
+  assert.match(await sam.textContent('#prog'), /of 12/);
+  assert.equal(await louie.textContent('.lot-name'), await sam.textContent('.lot-name'));
+  await shot(sam, 'Q4-game-sam.png');
+  for (const p of [louie, mario, sam]) await p.context().close();
+});
+
+await scenario('Q-three-players-and-private', async () => {
+  const ps = [await phone('Ariel'), await phone('Mario'), await phone('Luigi')];
+  await create(ps[0], { theme: 'pancakes', players: 3 });
+  await ps[0].click('#create'); await created(ps[0]);
+  await quick(ps[1], 'Ariel');
+  // Luigi's list updates live and now offers seat 3.
+  await ps[2].click('[data-tab="join"]');
+  await ps[2].waitForFunction(() => /I’m Player 3/.test(document.querySelector('.open li')?.textContent || ''));
+  assert.match(await ps[2].textContent('.open li'), /2\/3 players/);
+  await quick(ps[2], 'Ariel');
+  await ps[0].waitForFunction(() => document.querySelector('.eyebrow.split').textContent.includes('3 of 3'));
+  for (const [i, p] of ps.entries()) assert.match((await tags(p))[i], /You$/);
+  // A private game is not listed but still joins by code.
+  const host = await phone('Peach'), guest = await phone('Daisy');
+  await create(host, { theme: 'burger', players: 2 });
+  await host.check('#private'); await host.click('#create');
+  const code = await created(host);
+  assert.equal((await host.textContent('.code')).trim(), code);
+  await guest.click('[data-tab="join"]'); await guest.waitForTimeout(2500);
+  assert.equal(await guest.$('.open li'), null, 'private game hidden');
+  await join(guest, code);
+  assert.equal((await tags(guest)).length, 2);
+  for (const p of [...ps, host, guest]) await p.context().close();
 });
 
 await scenario('narrow-320', async () => {

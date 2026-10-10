@@ -28,8 +28,13 @@
     themeId: store.get('dn-theme', 'house'),
     custom: null, customTopic: '', asking: false, ambiguous: null, askError: '',
     auctionCount: store.get('dn-auction-count', 0), players: store.get('dn-players', 2), cpu: store.get('dn-cpu', false), budget: store.get('dn-budget', 100),
-    busy: false, error: '', joinCode: (params.get('room') || '').toUpperCase().slice(0, 4)
+    busy: false, error: '', joinCode: (params.get('room') || '').toUpperCase().slice(0, 4),
+    tab: 'create', open: null, openErr: false, editName: false, joining: '', listed: store.get('dn-listed', true)
   };
+  // A random id for this phone, so joining the same game again returns your own seat instead of adding you twice.
+  var device = store.get('dn-device', '');
+  if (!device) { device = (Date.now().toString(36) + Math.random().toString(36).slice(2, 10)); store.set('dn-device', device); }
+  var openTimer = null;
   var session = store.get('dn-session', null); // { code, player, token }
   var room = null, offset = 0, pollTimer = null, built = false, sending = false;
   var shown = {};   // world image currently on screen per player: key
@@ -93,13 +98,17 @@
       var pressed = c === 0 ? ui.cpu : !ui.cpu && ui.players === c;
       return '<button data-players="' + c + '" aria-pressed="' + pressed + '"' + (c > max && t !== ui.custom ? ' disabled' : '') + '>' + (c === 0 ? 'vs CPU' : c) + '</button>';
     }).join('');
-    app.innerHTML = '<div class="screen"><div class="bar"><a class="link" href="/">‹ Games</a><span class="wordmark">Draft Night</span><button class="link" data-go="join">Join</button></div>' +
-      '<div class="content"><h1>Build the best anything.</h1><p class="lede">Same budget for everyone. Bid on one item at a time, and watch each creation take shape.</p>' +
+    var waiting = ui.open ? ui.open.length : 0;
+    var tabs = '<div class="seg tabs"><button data-tab="create" aria-pressed="' + (ui.tab === 'create') + '">Create game</button><button data-tab="join" aria-pressed="' + (ui.tab === 'join') + '">Join game' + (waiting ? '<span class="count num">' + waiting + '</span>' : '') + '</button></div>';
+    if (ui.tab === 'join') return renderOpen(tabs);
+    app.innerHTML = '<div class="screen"><div class="bar"><a class="link" href="/">‹ Games</a><span class="wordmark">Draft Night</span><span style="width:52px"></span></div>' +
+      '<div class="content">' + tabs + '<h1>Build the best anything.</h1><p class="lede">Same budget for everyone. Bid on one item at a time, and watch each creation take shape.</p>' +
       '<div class="eyebrow">Your name</div><input class="field" id="name" maxlength="16" autocomplete="given-name" placeholder="Your name" value="' + esc(ui.name) + '">' +
       '<div class="names">' + ui.names.slice(0, 4).map(function (nm) { return '<button data-name="' + esc(nm) + '" aria-pressed="' + (nm === ui.name) + '">' + esc(nm) + '</button>'; }).join('') + '</div>' +
       '<div class="eyebrow">What are you building?</div><div class="themes">' + presetTiles + '</div>' +
       '<form class="ask" id="ask"><input class="field" id="topic" maxlength="80" placeholder="Or type anything, e.g. Dream bedroom" value="' + esc(ui.customTopic) + '" autocomplete="off"><button aria-label="Use this theme"' + (ui.asking ? ' disabled' : '') + '>→</button></form>' + custom +
       '<div class="eyebrow">Players</div><div class="seg">' + counts + '</div>' +
+      (ui.cpu ? '' : '<label class="check"><input type="checkbox" id="private"' + (ui.listed ? '' : ' checked') + '><span>Private game: friends join with the room code instead of finding it under Join</span></label>') +
       '<div class="eyebrow">Total auctions</div><div class="seg">' + [0, 12, 16, 20, 24, 30].map(function (c) { return '<button data-auctions="' + c + '" aria-pressed="' + (ui.auctionCount === c) + '">' + (c === 0 ? 'Auto (' + (n * 5) + ')' : c) + '</button>'; }).join('') + '</div>' +
       '<div class="hint">Wins each scale with the auction count, up to 5.</div>' +
       '<div class="eyebrow">Budget each</div><div class="seg">' + BUDGETS.map(function (b) { return '<button data-budget="' + b + '" aria-pressed="' + (ui.budget === b) + '">' + money(b) + '</button>'; }).join('') + '</div>' +
@@ -117,6 +126,9 @@
     else if (b.dataset.budget) { ui.budget = +b.dataset.budget; store.set('dn-budget', ui.budget); }
     else if (b.dataset.option) { var o = ui.ambiguous.options[+b.dataset.option]; ui.customTopic = ui.lastAsked = o.label; askTheme(o.topic, true); return; }
     else if (b.dataset.go === 'join') { ui.view = 'join'; return render(); }
+    else if (b.dataset.tab) { ui.tab = b.dataset.tab; ui.error = ''; loadOpen(); }
+    else if (b.dataset.seat) { return quickJoin(b.dataset.seat); }
+    else if (b.dataset.change !== undefined) { ui.editName = true; render(); var f = $('#name'); if (f) f.focus(); return; }
     else if (b.id === 'create') { if (pendingTopic()) { ui.lastAsked = pendingTopic(); return askTheme(ui.lastAsked, false); } return createRoom(); }
     else return;
     render();
@@ -155,16 +167,69 @@
     var name = rememberName();
     if (!name) { ui.error = 'Add your name first.'; render(); $('#name').focus(); return; }
     ui.busy = true; ui.error = ''; render();
-    api('/api/create', { theme: theme().id, name: name, capacity: seats(), auctionCount: auctionTotal(), budget: ui.budget, cpu: ui.cpu }).then(function (d) {
+    api('/api/create', { theme: theme().id, name: name, capacity: seats(), auctionCount: auctionTotal(), budget: ui.budget, cpu: ui.cpu, device: device, listed: ui.listed }).then(function (d) {
       ui.busy = false;
       if (!d.code) { ui.error = d.error || 'Could not create a room.'; return render(); }
       enter(d);
     }, function () { ui.busy = false; ui.error = 'No connection to the game server.'; render(); });
   }
   function enter(d) {
+    clearTimeout(openTimer);
     session = { code: d.code, player: d.player, token: d.token }; store.set('dn-session', session);
     history.replaceState(null, '', location.pathname + '?room=' + d.code + (params.get('api') ? '&api=' + encodeURIComponent(API) : ''));
     accept(d.room); poll();
+  }
+
+  // ---------- quick play ----------
+  // Waiting games are listed by the server; tapping a seat joins it, no code needed.
+  function renderOpen(tabs) {
+    var named = ui.name.trim() && !ui.editName;
+    app.innerHTML = '<div class="screen"><div class="bar"><a class="link" href="/">‹ Games</a><span class="wordmark">Draft Night</span><span style="width:52px"></span></div>' +
+      '<div class="content">' + tabs +
+      (named ? '<p class="as">Joining as <b>' + esc(ui.name.trim()) + '</b><button class="link" data-change>Change</button></p>' :
+        '<div class="eyebrow">Your name</div><input class="field" id="name" maxlength="16" autocomplete="given-name" placeholder="Your name" value="' + esc(ui.name) + '">' +
+        '<div class="names">' + ui.names.slice(0, 4).map(function (nm) { return '<button data-name="' + esc(nm) + '" aria-pressed="' + (nm === ui.name) + '">' + esc(nm) + '</button>'; }).join('') + '</div>') +
+      '<div class="eyebrow">Games waiting for players</div><div id="openList"></div>' +
+      (ui.error ? '<div class="error">' + esc(ui.error) + '</div>' : '') +
+      '<button class="link code-link" data-go="join">Join with room code</button></div></div>';
+    paintOpen();
+  }
+  function paintOpen() {
+    var el = $('#openList'); if (!el) return;
+    var list = ui.open, html;
+    if (!list) html = '<p class="muted empty-note"><span class="spinner"></span>Looking for games…</p>';
+    else if (!list.length) html = '<p class="muted empty-note">' + (ui.openErr ? 'Can’t reach the game server. Retrying…' : 'No games waiting yet. When a friend creates one, it appears here.') + '</p>';
+    else html = '<ul class="open">' + list.map(function (g) {
+      var busy = ui.joining === g.code;
+      return '<li><span class="em">' + esc(g.theme.emoji) + '</span><div><b>' + esc(g.host) + '’s game</b><small>' + esc(g.theme.title) + ' · ' + g.players.length + '/' + g.capacity + ' players</small></div>' +
+        '<button class="pill" data-seat="' + esc(g.code) + '"' + (ui.joining ? ' disabled' : '') + '>' + (busy ? 'Joining…' : 'I’m Player ' + g.seat) + '</button></li>';
+    }).join('') + '</ul>';
+    patch(el, html);
+  }
+  function loadOpen() {
+    clearTimeout(openTimer);
+    if (ui.view !== 'home' || session) return;
+    api('/api/lobbies').then(function (d) {
+      var had = ui.open ? ui.open.length : -1;
+      ui.open = d.rooms || []; ui.openErr = !d.rooms;
+      if (ui.view !== 'home') return;
+      if (ui.tab === 'join') paintOpen();
+      var c = document.querySelector('[data-tab="join"]');
+      if (c && had !== ui.open.length) c.innerHTML = 'Join game' + (ui.open.length ? '<span class="count num">' + ui.open.length + '</span>' : '');
+    }, function () { ui.openErr = true; ui.open = ui.open || []; if (ui.tab === 'join') paintOpen(); }).then(function () {
+      if (ui.view === 'home' && !session) openTimer = setTimeout(loadOpen, ui.tab === 'join' ? 2000 : 4000);
+    });
+  }
+  function quickJoin(code) {
+    var name = ui.editName || !ui.name.trim() ? rememberName() : ui.name.trim();
+    if (!name) { ui.error = 'Add your name first.'; render(); var f = $('#name'); if (f) f.focus(); return; }
+    if (!ui.editName) rememberName();
+    ui.joining = code; ui.error = ''; paintOpen();
+    api('/api/join', { code: code, name: name, device: device }).then(function (d) {
+      ui.joining = '';
+      if (!d.code) { ui.error = d.error || 'Could not join that game.'; render(); return loadOpen(); }
+      ui.editName = false; enter(d);
+    }, function () { ui.joining = ''; ui.error = 'No connection to the game server.'; render(); });
   }
 
   // ---------- join ----------
@@ -182,7 +247,7 @@
     if (code.length !== 4 || !name) { ui.error = 'Enter the 4-letter code and your name.'; return render(); }
     if (session && session.code === code) { ui.view = 'game'; return poll(); }
     ui.busy = true; ui.error = ''; render();
-    api('/api/join', { code: code, name: name }).then(function (d) {
+    api('/api/join', { code: code, name: name, device: device }).then(function (d) {
       ui.busy = false;
       if (!d.code) { ui.error = d.error || 'Could not join.'; return render(); }
       enter(d);
@@ -203,10 +268,20 @@
     if (!session) return;
     var q = '/api/room?code=' + session.code + '&p=' + session.player + '&t=' + encodeURIComponent(session.token) + (room && room.code === session.code ? '&rev=' + room.rev : '');
     api(q).then(function (d) {
-      if (d._status === 404) { session = null; store.set('dn-session', null); room = null; ui.view = 'home'; ui.error = 'That room has closed.'; render(); return; }
+      if (d._status === 404) { dropSession('That game has closed.'); return; }
+      // The server says which seat this phone holds; it moves if someone earlier left the lobby, and is -1 if the seat was freed.
+      if (typeof d.me === 'number' && d.me !== session.player) {
+        if (d.me < 0) { dropSession('You’re no longer in that game. Pick a seat again.'); return; }
+        session.player = d.me; store.set('dn-session', session);
+      }
       if (d.same) offset = d.now - Date.now(); else accept(d);
       schedulePoll();
     }, schedulePoll);
+  }
+  function dropSession(msg) {
+    clearTimeout(pollTimer); session = null; store.set('dn-session', null); room = null; built = false;
+    history.replaceState(null, '', location.pathname + (params.get('api') ? '?api=' + encodeURIComponent(API) : ''));
+    ui.view = 'home'; ui.tab = 'join'; ui.error = msg; ui.open = null; render(); loadOpen();
   }
   function schedulePoll() { clearTimeout(pollTimer); pollTimer = setTimeout(poll, !room ? 2000 : room.status === 'playing' ? 700 : 1500); }
   document.addEventListener('visibilitychange', function () { if (!document.hidden && session) poll(); });
@@ -230,17 +305,20 @@
     var slots = '';
     for (var i = 0; i < room.capacity; i++) {
       var p = room.players[i];
-      slots += p ? '<li style="--c:' + p.color + '"><span class="dot"></span><b>' + esc(p.name) + '</b><span class="tag">' + (i === 0 ? 'Host' : p.cpu ? 'Computer' : i === mine ? 'You' : '') + (i === mine && i === 0 ? ' · You' : '') + '</span></li>'
-        : '<li class="empty"><span class="dot" style="--c:var(--line-strong)"></span>Waiting for player ' + (i + 1) + '…</li>';
+      var tag = p ? 'Player ' + (i + 1) + ' · ' + (p.cpu ? 'Computer' : i === 0 ? 'Host' : p.away ? 'Away' : 'Ready') + (i === mine ? ' · You' : '') : '';
+      slots += p ? '<li style="--c:' + p.color + '"' + (i === mine ? ' class="mine"' : '') + '><span class="dot"></span><b>' + esc(p.name) + '</b><span class="tag' + (p.away ? ' away' : '') + '">' + tag + '</span></li>'
+        : '<li class="empty"><span class="dot" style="--c:var(--line-strong)"></span>Player ' + (i + 1) + '<span class="tag">Waiting…</span></li>';
     }
     var brief = hasStarts(t) ? 'The first ' + n + ' lots are ' + esc(startWord(t).toLowerCase()) + 's. Everyone ends up with exactly one, then the bidding moves to ' + esc(t.label.toLowerCase()) + 's.' :
       'Everyone starts with the same ' + esc(t.base && t.base.name.toLowerCase()) + '. Every ' + esc(t.label.toLowerCase()) + ' you win is added to yours.';
     var link = location.origin + location.pathname + '?room=' + room.code;
     app.innerHTML = '<div class="screen"><div class="bar"><button class="link" data-leave>‹ Leave</button><span class="wordmark">Draft Night</span><span style="width:48px"></span></div><div class="content">' +
-      '<div class="eyebrow" style="margin-top:12px">Room code</div><div class="code num">' + esc(room.code) + '</div><p class="muted" style="margin:0">Friends open Draft Night, tap Join and enter this code.</p>' +
-      '<div class="eyebrow">Tonight</div><div class="brief"><span class="em">' + esc(t.emoji) + '</span><div><b>' + esc(t.title) + '</b><p>' + brief + '</p><p>' + (room.auctionCount || n * 5) + ' auctions · ' + (room.maxWins || 5) + ' wins each · ' + money(room.budget) + ' each</p></div></div>' +
-      '<div class="eyebrow">Players ' + n + ' / ' + room.capacity + '</div><ul class="roster">' + slots + '</ul></div>' +
-      '<div class="footer">' + (room.cpu ? '' : '<button class="secondary" data-share="' + esc(link) + '">Share invite link</button>') +
+      (room.listed || room.cpu ? '' : '<div class="eyebrow" style="margin-top:12px">Room code</div><div class="code num">' + esc(room.code) + '</div><p class="muted" style="margin:0">Private game. Friends tap Join game, then Join with room code.</p>') +
+      '<div class="eyebrow"' + (room.listed || room.cpu ? ' style="margin-top:12px"' : '') + '>Tonight</div><div class="brief"><span class="em">' + esc(t.emoji) + '</span><div><b>' + esc(t.title) + '</b><p>' + brief + '</p><p>' + (room.auctionCount || n * 5) + ' auctions · ' + (room.maxWins || 5) + ' possible wins per player · ' + money(room.budget) + ' each</p></div></div>' +
+      '<div class="eyebrow split"><span>Players</span><span>' + n + ' of ' + room.capacity + ' joined</span></div><ul class="roster">' + slots + '</ul>' +
+      (room.notice ? '<p class="notice">' + esc(room.notice) + '</p>' : '') +
+      (room.listed && !room.cpu ? '<p class="muted small">' + (n < room.capacity ? 'Friends open Draft Night and tap Join game to take a seat. ' : '') + 'Room code <span class="num">' + esc(room.code) + '</span> · <button class="link inline" data-share="' + esc(link) + '">Share invite</button></p>' : '') + '</div>' +
+      '<div class="footer">' + (room.cpu || room.listed ? '' : '<button class="secondary" data-share="' + esc(link) + '">Share invite link</button>') +
       prepHtml() + (host ? startButton(n) : '<div class="hint">' + (prepReady() ? 'Waiting for ' + esc(room.players[0].name) + ' to start' : 'Preparing pictures…') + '</div>') + '</div></div>';
   }
 
@@ -465,14 +543,15 @@
     else if (ui.view === 'final') renderFinal();
   }
   function leave() {
+    if (session && room && room.status === 'lobby') api('/api/leave', { code: session.code, token: session.token }).then(null, function () {});
     clearTimeout(pollTimer); session = null; room = null; store.set('dn-session', null); built = false;
     history.replaceState(null, '', location.pathname + (params.get('api') ? '?api=' + encodeURIComponent(API) : ''));
-    ui.view = 'home'; ui.error = ''; render();
+    ui.view = 'home'; ui.error = ''; ui.open = null; render(); loadOpen();
   }
   app.addEventListener('click', function (e) {
     var b = e.target.closest('button'); if (!b) return;
     if (ui.view === 'home') return homeClick(e);
-    if (b.dataset.go === 'home') { ui.view = 'home'; ui.error = ''; return render(); }
+    if (b.dataset.go === 'home') { ui.view = 'home'; ui.error = ''; render(); return loadOpen(); }
     if (b.dataset.name !== undefined && ui.view === 'join') { ui.name = b.dataset.name; $('#name').value = ui.name; return; }
     if (b.hasAttribute('data-bid')) return act('bid', { amount: +b.dataset.bid });
     if (b.hasAttribute('data-pass')) return act('pass');
@@ -503,6 +582,9 @@
       act('bid', { amount: amount });
     }
   });
+  app.addEventListener('change', function (e) {
+    if (e.target.id === 'private') { ui.listed = !e.target.checked; store.set('dn-listed', ui.listed); }
+  });
   app.addEventListener('input', function (e) {
     if (e.target.id === 'name') ui.name = e.target.value;
     if (e.target.id === 'budgetOther') { var v = parseInt(e.target.value, 10); if (v >= 5 && v <= 1000) { ui.budget = v; store.set('dn-budget', v); document.querySelectorAll('[data-budget]').forEach(function (x) { x.setAttribute('aria-pressed', String(+x.dataset.budget === v)); }); } }
@@ -513,5 +595,5 @@
   // ---------- boot ----------
   api('/api/presets').then(function (d) { if (d.presets && d.presets.length) { ui.presets = d.presets; if (ui.view === 'home') render(); } }, function () {});
   if (session && (!ui.joinCode || ui.joinCode === session.code)) { ui.view = 'game'; render(); poll(); }
-  else { ui.view = ui.joinCode ? 'join' : 'home'; render(); }
+  else { ui.view = ui.joinCode ? 'join' : 'home'; render(); loadOpen(); }
 })();

@@ -24,6 +24,14 @@ The function source is passed to its container as one base64 argument, so `serve
 - Each turn lasts 30 seconds. An opener who runs out of time, or whose device stops polling for 20 seconds, is entered at £1 automatically. Anyone else in that situation is passed, so a phone left on the table can't stall the game.
 - Requests include the lot and price the player saw. A tap based on an out-of-date price gets a 409 and the fresh state.
 
+## Quick Play (joining without a code)
+
+- The home screen has two tabs: **Create game** and **Join game**. Join game lists open games (`GET /api/lobbies`): in the lobby, not full, not private, not CPU, and with a host whose phone polled in the last 2 minutes. Each row shows the host, theme and seats ("Louie's game · Dream House · 1/2 players · I'm Player 2"). It refreshes every 2 seconds.
+- Tapping a seat calls `/api/join` with the room code from the list, the remembered name and a random per-phone `device` id. The server hands out the next free seat. It handles one request at a time, so two phones tapping together get seats 2 and 3, never the same one, and a phone arriving at a full game is told it just filled up.
+- The same phone joining again (same `device`) gets its own seat and token back instead of a duplicate player. Refreshing restores the session from the stored token; the server identifies players by token and returns `me` (their seat) with every state, so seats that move when someone leaves still resolve.
+- Before the game starts, **Leave** (`POST /api/leave`) frees the seat; the seats close up (Player 3 becomes Player 2) and the lobby shows "Mario left." If the host leaves, the next player becomes host ("Louie left. Mario is now the host."). If no humans remain the room closes. A guest whose phone stops polling for 2 minutes (`DRAFT_LOBBY_IDLE_MS`) loses their seat and is told to pick one again. After the start, leaving does not remove anyone; the away rule handles absent players.
+- **Private game** (a tick box under Players) keeps a game out of the list; friends join with the room code via "Join with room code". Every game still has a code and an invite link.
+
 ## Typed themes
 
 `/api/theme` first checks the curated themes ("pancakes", "dream house", "burgers" and so on). Anything else goes to the text model with a strict JSON schema. Names, in-jokes and vague words come back as `ambiguous`, with 3–4 concrete interpretations to choose from. The chosen interpretation is confirmed and then kept for the whole game. Items must be real, recognisable, visible additions to that subject.
