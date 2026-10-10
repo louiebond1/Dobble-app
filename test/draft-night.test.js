@@ -97,7 +97,7 @@ test('Scenario A: two-player property game, one house each, ten lots, purchases 
     if (a.phase !== 'bidding') { await g.settle(); continue; }
     const want = r.lot % 2 === 0 ? 0 : 1;
     const p = a.turn;
-    const res = p === want ? await g.act(p, 'bid', { amount: a.bid + 3 }) : await g.act(p, 'pass');
+    const res = p === want || a.leader === null ? await g.act(p, 'bid', { amount: a.bid + (p === want ? 3 : 1) }) : await g.act(p, 'pass');
     assert.equal(res.status, 200, JSON.stringify(res.body));
     checkInvariants(r, 100);
   }
@@ -127,7 +127,7 @@ test('Scenario B: three-player property game gives everyone exactly one house ac
       const a = r.auction;
       if (a.phase !== 'bidding') { await g.settle(); continue; }
       const roll = Math.random();
-      const res = roll < 0.45 && r.players[a.turn].budget > a.bid ? await g.act(a.turn, 'bid', { amount: a.bid + 1 + Math.floor(Math.random() * 4) > r.players[a.turn].budget ? a.bid + 1 : a.bid + 1 + Math.floor(Math.random() * 4) }) : await g.act(a.turn, 'pass');
+      const res = (roll < 0.45 || a.leader === null) && r.players[a.turn].budget > a.bid ? await g.act(a.turn, 'bid', { amount: a.bid + 1 + Math.floor(Math.random() * 4) > r.players[a.turn].budget ? a.bid + 1 : a.bid + 1 + Math.floor(Math.random() * 4) }) : await g.act(a.turn, 'pass');
       assert.equal(res.status, 200, JSON.stringify(res.body));
       // While houses are on offer, a player with a house never gets a turn.
       if (r.lot < 3 && r.auction.turn !== null) assert.equal(r.players[r.auction.turn].base, null);
@@ -225,7 +225,7 @@ test('Scenario F: a modest terrace keeps its identity; only purchased items are 
   r.lots[2] = { ...pb, kind: 'add' }; r.lots[3] = { ...car, kind: 'add' };
   void terrace;
   await g.act(0, 'bid', { amount: 3 }); await g.act(1, 'pass'); await g.settle(); await g.settle();
-  for (const lot of [2, 3]) { while (r.lot < lot) await g.settle(); while (r.auction.phase === 'bidding') await g.act(r.auction.turn, r.auction.turn === 0 ? 'bid' : 'pass', { amount: r.auction.bid + 1 }); }
+  for (const lot of [2, 3]) { while (r.lot < lot) await g.settle(); while (r.auction.phase === 'bidding') await g.act(r.auction.turn, r.auction.turn === 0 || r.auction.leader === null ? 'bid' : 'pass', { amount: r.auction.bid + 1 }); }
   await flush(); await flush();
   same(r.players[0].won, [0, 2, 3]);
   const prompt = env.qa.worldPrompt(r, 0, 1, 3);
@@ -259,7 +259,7 @@ test('image jobs never let an older picture replace a newer one, and failures ke
   await flush();
   assert.equal(r.worlds[0].state, 'updating');
   await g.settle();
-  while (r.auction.phase === 'bidding') await g.act(r.auction.turn, r.auction.turn === 0 ? 'bid' : 'pass', { amount: r.auction.bid + 1 });
+  while (r.auction.phase === 'bidding') await g.act(r.auction.turn, r.auction.turn === 0 || r.auction.leader === null ? 'bid' : 'pass', { amount: r.auction.bid + 1 });
   assert.equal(r.players[0].won.length, 2);
   assert.equal(gates.length, 1, 'one edit at a time per player');
   gates.shift()(); await flush(); await flush();
@@ -271,7 +271,7 @@ test('image jobs never let an older picture replace a newer one, and failures ke
   // A failing edit keeps the last good version on screen.
   fail = true;
   await g.settle();
-  while (r.auction.phase === 'bidding') await g.act(r.auction.turn, r.auction.turn === 0 ? 'bid' : 'pass', { amount: r.auction.bid + 1 });
+  while (r.auction.phase === 'bidding') await g.act(r.auction.turn, r.auction.turn === 0 || r.auction.leader === null ? 'bid' : 'pass', { amount: r.auction.bid + 1 });
   await flush(); await flush();
   assert.equal(r.worlds[0].v, 2);
   assert.equal((await g.state()).worlds[0].key, 'w0-2');
@@ -300,34 +300,46 @@ test('Scenario G: auction edge cases', async () => {
   assert.equal(r.auction.phase, 'sold', 'nobody else can afford more than £20');
   assert.equal(r.players[1].budget, 0);
   await g.settle();
-  // B has no money: never offered a turn again.
+  // B has no money: never offered a turn again. Nobody may pass on the opening bid, so every lot sells.
   for (let i = 0; i < 3 && r.status === 'playing'; i++) {
-    while (r.auction.phase === 'bidding') { assert.notEqual(r.auction.turn, 1); await g.act(r.auction.turn, 'pass'); }
-    assert.equal(r.auction.phase, 'unsold', 'everyone passing leaves an item unsold');
+    const opener = r.auction.turn;
+    assert.notEqual(opener, 1);
+    const refused = await g.act(opener, 'pass');
+    assert.equal(refused.status, 400, 'the opener cannot pass');
+    assert.match(refused.body.error, /open the bidding/);
+    assert.equal((await g.act(opener, 'bid', { amount: 1 })).status, 200);
+    while (r.auction.phase === 'bidding') { assert.notEqual(r.auction.turn, 1); assert.equal((await g.act(r.auction.turn, 'pass')).status, 200); }
+    assert.equal(r.auction.phase, 'sold');
+    same(r.auction.result, { winner: opener, price: 1, note: '' });
     await g.settle();
   }
-  // Timeout: an idle player is passed automatically when their clock runs out.
+  // Timeout on the opening bid: the idle opener is entered at £1 automatically.
   const before = r.auction.turn; g.touch();
   env.advance(31000); g.touch(); // present (still polling) but not acting
   await env.call('/api/room?code=' + g.code);
-  assert.ok(r.auction.passed[before]);
-  assert.ok(r.auction.log.some(e => e.p === before && e.why === 'time ran out'));
+  assert.equal(r.auction.leader, before);
+  assert.equal(r.auction.bid, 1);
+  assert.ok(r.auction.log.some(e => e.p === before && /time ran out/.test(e.why)));
+  // Timeout after the opening: the idle player is passed.
+  const next = r.auction.turn; g.touch(); env.advance(31000); g.touch();
+  await env.call('/api/room?code=' + g.code);
+  assert.ok(r.auction.log.some(e => e.p === next && e.a === null && e.why === 'time ran out') || r.auction.phase !== 'bidding');
   // Away: a player who stopped polling is skipped immediately.
   g.touch(); while (r.auction.phase !== 'bidding' && r.status === 'playing') await g.settle();
   const t = r.auction.turn; env.advance(25000); for (let i = 0; i < 3; i++) if (i !== t) r.players[i].seen = env.now();
   await env.call('/api/room?code=' + g.code);
-  assert.ok(r.auction.log.some(e => e.p === t && e.why === 'away') || r.auction.phase !== 'bidding');
+  assert.ok(r.auction.log.some(e => e.p === t && /away/.test(e.why || '')) || r.auction.phase !== 'bidding');
   checkInvariants(r, 20);
 });
 
-test('property lot with no bids is drawn at random but still free, and the winner still gets only one house', async () => {
+test('a house always sells: the opener must bid £1, and the winner gets only one house', async () => {
   const env = sandbox({ key: '' });
   const g = await setup(env, { names: ['A', 'B', 'C'] });
   const r = g.room();
-  await g.act(r.auction.turn, 'pass'); await g.act(r.auction.turn, 'pass'); await g.act(r.auction.turn, 'pass');
+  assert.equal((await g.act(r.auction.turn, 'pass')).status, 400);
+  await g.act(r.auction.turn, 'bid', { amount: 1 }); await g.act(r.auction.turn, 'pass'); await g.act(r.auction.turn, 'pass');
   assert.equal(r.auction.phase, 'sold');
-  assert.equal(r.auction.result.price, 0);
-  assert.match(r.auction.result.note, /random/);
+  assert.equal(r.auction.result.price, 1);
   const owner = r.auction.result.winner; await g.settle();
   assert.notEqual(r.auction.turn, owner);
   assert.ok(!r.auction.passed[owner]);
@@ -345,7 +357,7 @@ test('random games for 2 to 6 players in every mode keep the books balanced', as
       const a = r.auction;
       if (a.phase !== 'bidding') { await g.settle(); continue; }
       const p = r.players[a.turn];
-      const res = Math.random() < 0.5 && p.budget > a.bid ? await g.act(a.turn, 'bid', { amount: Math.min(p.budget, a.bid + 1 + Math.floor(Math.random() * 6)) }) : await g.act(a.turn, 'pass');
+      const res = (Math.random() < 0.5 || a.leader === null) && p.budget > a.bid ? await g.act(a.turn, 'bid', { amount: Math.min(p.budget, a.bid + 1 + Math.floor(Math.random() * 6)) }) : await g.act(a.turn, 'pass');
       assert.equal(res.status, 200, JSON.stringify(res.body));
       checkInvariants(r, 30);
     }
@@ -363,7 +375,7 @@ test('playing against the CPU finishes with the CPU bidding on its own', async (
   while (r.status === 'playing') {
     assert.ok(++moves < 2000);
     g.touch();
-    if (r.auction.phase === 'bidding' && r.auction.turn === 0) await g.act(0, Math.random() < 0.5 && r.players[0].budget > r.auction.bid ? 'bid' : 'pass', { amount: r.auction.bid + 1 });
+    if (r.auction.phase === 'bidding' && r.auction.turn === 0) await g.act(0, (Math.random() < 0.5 || r.auction.leader === null) && r.players[0].budget > r.auction.bid ? 'bid' : 'pass', { amount: r.auction.bid + 1 });
     else { env.advance(1000); await env.call('/api/room?code=' + g.code); }
   }
   assert.ok(r.players[1].won.length >= 1);

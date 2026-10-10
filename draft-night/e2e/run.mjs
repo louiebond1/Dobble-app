@@ -50,7 +50,7 @@ async function layoutCheck(page, label) {
     const out = [];
     const W = innerWidth, H = innerHeight;
     if (document.scrollingElement.scrollWidth > W + 1) out.push('horizontal scroll ' + document.scrollingElement.scrollWidth);
-    const sel = '.sub,.meta b,.meta .money,.lot-img,.lot-kind,.lot-name,.lot-blurb,.amt,.who b,.trail,.dock-head span,.bids button,.pass,.progress span,.wait b,.wait span,.verdict-bar span,.code,.roster li,.primary,.theme b,.theme small,h1';
+    const sel = '.custom,.opening,.sub,.meta b,.meta .money,.lot-img,.lot-kind,.lot-name,.lot-blurb,.amt,.who b,.trail,.dock-head span,.bids button,.pass,.progress span,.wait b,.wait span,.verdict-bar span,.code,.roster li,.primary,.theme b,.theme small,h1';
     const els = [...document.querySelectorAll(sel)].filter(e => e.offsetParent && e.getClientRects().length);
     const boxes = els.map(e => ({ e, r: e.getBoundingClientRect() }));
     for (const { e, r } of boxes) {
@@ -107,7 +107,9 @@ async function play(pages, decide, onLot) {
       const btn = await p.$('.bids button:not([disabled])');
       if (!btn) continue;
       const choice = await decide(i, lot, p);
-      if (choice === 'pass') await p.click('[data-pass]');
+      if (choice === 'custom') { await p.fill('#customBid', '12'); await p.click('#customForm button'); }
+      else if (choice === 'pass' && await p.$('[data-pass]')) await p.click('[data-pass]');
+      else if (choice === 'pass') await p.click('.bids button.main'); // nobody may pass on the opening bid
       else { const all = await p.$$('.bids button:not([disabled])'); await all[Math.min(choice, all.length - 1)].click(); }
       await p.waitForTimeout(120);
     }
@@ -140,13 +142,15 @@ await scenario('A-property-2p', async () => {
   await layoutCheck(ariel, 'game ariel'); await layoutCheck(louie, 'game louie');
   let shotMid = false;
   await play([ariel, louie], async (seat, lot) => {
-    if (lot === 0) return seat === 0 ? 1 : 'pass';
+    if (lot === 0) return seat === 0 ? 'custom' : 'pass';
     return (lot % 2 === 0) === (seat === 0) ? 0 : 'pass';
   }, async lot => {
     if (lot === 1) { await ariel.waitForTimeout(400); assert.ok(!(await ariel.$('.bids')), 'Ariel already has a house: no bid buttons on home 2'); await shot(ariel, 'A3-house2-auto.png'); }
     if (lot === 5 && !shotMid) { shotMid = true; await ariel.waitForTimeout(2500); await shot(ariel, 'A4-mid-ariel.png'); await shot(louie, 'A4-mid-louie.png'); await layoutCheck(louie, 'mid'); }
   });
   await ariel.waitForSelector('.compare');
+  const spent = await ariel.$$eval('.entry .spend', es => es.map(e => e.textContent));
+  assert.ok(spent[0].includes('£12') || /Spent £(1[2-9]|[2-9]\d)/.test(spent[0]), 'custom £12 bid was charged: ' + spent[0]);
   await ariel.waitForTimeout(9000);
   await ariel.evaluate(() => scrollTo(0, 0));
   await shot(ariel, 'A5-final.png');

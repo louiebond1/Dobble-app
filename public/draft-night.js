@@ -306,7 +306,7 @@
       priceHtml = '<div class="verdict-bar unsold"><span>No bids, so nobody gets it</span><span>Unsold</span></div><div class="trail"></div>';
     } else {
       priceHtml = '<div class="price"><div><div class="muted" style="font-size:12px;font-weight:600;letter-spacing:.06em;text-transform:uppercase">' + (leader ? 'Highest bid' : 'Opening bid') + '</div><div class="amt num">' + money(leader ? a.bid : 1) + '</div></div>' +
-        '<div class="who" style="--c:' + (leader ? leader.color : 'var(--muted)') + '">' + (leader ? '<b>' + (a.leader === me() ? 'You lead' : esc(leader.name) + ' leads') + '</b>' : '<b>No bids yet</b>') + '</div></div>' +
+        '<div class="who" style="--c:' + (leader ? leader.color : 'var(--muted)') + '">' + (leader ? '<b>' + (a.leader === me() ? 'You lead' : esc(leader.name) + ' leads') + '</b>' : '<b>' + (a.turn === null ? 'No bids yet' : a.turn === me() ? 'You open' : esc(room.players[a.turn].name) + ' opens') + '</b>') + '</div></div>' +
         '<div class="trail">' + trail() + '</div>';
     }
     var homes = '';
@@ -352,16 +352,21 @@
       body = '<div class="bids">' + steps.map(function (s, i) {
         var amt = base + s, ok = amt <= p.budget && !sending;
         return '<button data-bid="' + amt + '" class="' + (i === 0 ? 'main' : '') + '"' + (ok ? '' : ' disabled') + ' aria-label="Bid ' + money(amt) + '"><b class="num">' + money(amt) + '</b><small>+' + money(s) + '</small></button>';
-      }).join('') + '</div><div class="dock-row"><button class="pass" data-pass' + (sending ? ' disabled' : '') + '>Pass on this ' + esc(room.lots[room.lot].kind === 'base' ? 'home' : room.theme.label.toLowerCase()) + '</button></div>';
+      }).join('') + '</div><div class="dock-row"><form class="custom" id="customForm"><span>£</span><input id="customBid" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="4" autocomplete="off" placeholder="Amount" aria-label="Custom bid amount"><button' + (sending ? ' disabled' : '') + '>Bid</button></form>' +
+        (a.leader === null ? '<div class="opening">You open the bidding</div>' : '<button class="pass" data-pass' + (sending ? ' disabled' : '') + '>Pass</button>') + '</div>';
     } else {
       var turn = a.turn !== null ? room.players[a.turn] : null, msg, sub;
       if (!eligibleMe()) { msg = room.lots[room.lot].kind === 'base' ? 'You already have your home' : 'Sitting this one out'; sub = room.lots[room.lot].kind === 'base' ? 'Everyone gets exactly one house' : ''; }
       else if (a.leader === mine) { msg = 'You lead at ' + money(a.bid); sub = turn ? esc(turn.name) + ' can raise or pass' : ''; }
       else if (a.passed[mine]) { msg = 'You passed'; sub = p.budget <= a.bid ? 'Not enough left to raise' : turn ? esc(turn.name) + ' is deciding' : ''; }
-      else { msg = turn ? esc(turn.name) + '’s turn' : 'Waiting…'; sub = 'You’re up next if they raise or pass'; }
+      else { msg = turn ? esc(turn.name) + '’s turn' : 'Waiting…'; sub = a.leader === null ? (turn ? esc(turn.name) + ' opens the bidding at £1 or more' : '') : 'You’re up next if they raise or pass'; }
       body = '<div class="wait"><b>' + msg + '</b><span>' + sub + '</span></div>';
     }
+    // Keep whatever the player is typing if the dock redraws mid-turn.
+    var typed = $('#customBid'), keep = typed ? typed.value : '', focused = typed && document.activeElement === typed;
     patch(dock, head + '<div class="clock"><i id="clock"></i></div>' + body);
+    var input = $('#customBid');
+    if (input && keep && !input.value) { input.value = keep; if (focused) input.focus(); }
   }
   function eligibleMe() {
     var lot = room.lots[room.lot], p = room.players[me()];
@@ -471,6 +476,12 @@
     e.preventDefault();
     if (e.target.id === 'ask') { ui.name = $('#name').value; ui.customTopic = ui.lastAsked = $('#topic').value.trim(); askTheme(ui.customTopic, false); }
     if (e.target.id === 'joinForm') joinRoom();
+    if (e.target.id === 'customForm') {
+      var amount = Number(($('#customBid').value || '').trim()), p = room.players[me()], low = room.auction.bid + 1;
+      if (!Number.isInteger(amount) || amount < low) return toast('Bid at least ' + money(low));
+      if (amount > p.budget) return toast('You only have ' + money(p.budget));
+      act('bid', { amount: amount });
+    }
   });
   app.addEventListener('input', function (e) {
     if (e.target.id === 'name') ui.name = e.target.value;

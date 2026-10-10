@@ -333,7 +333,14 @@ function bid(r: Room, p: number, amount: number) {
 function pass(r: Room, p: number, why?: string) {
   const a = r.auction;
   if (a.phase !== 'bidding' || a.turn !== p) throw Error('It is not your turn');
+  // Every lot sells: whoever opens must bid at least £1. Only running out of money excuses it.
+  if (a.leader === null && r.players[p].budget >= 1) throw Error('You open the bidding: bid at least £1');
   a.passed[p] = true; a.log.push(why ? { p, a: null, why } : { p, a: null });
+  passTo(r, p);
+}
+function forcePass(r: Room, p: number, why: string) {
+  const a = r.auction;
+  a.passed[p] = true; a.log.push({ p, a: null, why });
   passTo(r, p);
 }
 function cpuMove(r: Room, p: number) {
@@ -341,7 +348,7 @@ function cpuMove(r: Room, p: number) {
   const left = r.lots.length - r.lot, share = Math.max(1, Math.round(left / r.players.length));
   let value = lot.kind === 'base' ? pl.budget * (0.25 + Math.random() * 0.3) : (pl.budget / share) * (0.6 + Math.random() * 0.9);
   value = Math.floor(Math.min(value, pl.budget));
-  if (a.bid < value) bid(r, p, Math.min(pl.budget, a.bid + (value - a.bid > 5 && Math.random() < 0.5 ? 2 : 1)));
+  if (a.bid < value || a.leader === null) bid(r, p, Math.min(pl.budget, a.bid + (value - a.bid > 5 && Math.random() < 0.5 ? 2 : 1)));
   else pass(r, p);
 }
 // Advances any timers that have expired. Called on every request and by a per-room timeout.
@@ -353,7 +360,8 @@ function tick(r: Room) {
       const p = a.turn;
       if (a.deadline > now && !away(r, p)) break;
       if (r.players[p].cpu) { if (a.deadline > now) break; cpuMove(r, p); }
-      else pass(r, p, away(r, p) ? 'away' : 'time ran out');
+      else if (a.leader === null) { bid(r, p, 1); a.log[a.log.length - 1].why = away(r, p) ? 'away, opened automatically' : 'time ran out, opened automatically'; }
+      else forcePass(r, p, away(r, p) ? 'away' : 'time ran out');
     } else if (a.deadline <= now) nextLot(r);
     else break;
     bump(r);
