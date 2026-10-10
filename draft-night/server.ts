@@ -14,7 +14,7 @@ type World = { v: number; state: string; busy: boolean; tries: number };
 type Room = {
   code: string; rev: number; created: number; status: 'lobby' | 'playing' | 'finished'; theme: Theme; budget: number; capacity: number; cpu: boolean;
   players: Player[]; tokens: string[]; deckBases: Item[]; deckAdds: Item[]; lots: Lot[]; lot: number; auction: Auction;
-  history: Array<{ lot: number; winner: number | null; price: number }>; lotImg: Record<string, string>; baseImg: string; worlds: World[]; verdict: string | null;
+  history: Array<{ lot: number; winner: number | null; price: number }>; lotImg: Record<string, string>; baseImg: string; imageError: string; worlds: World[]; verdict: string | null;
 };
 
 const env = (k: string, d: string) => String(Bun.env[k] || d);
@@ -51,7 +51,7 @@ City Penthouse Building|The top floor is yours|a sleek glass apartment tower pho
 Alpine Chalet|Snowy peaks and a wood burner|a traditional wooden alpine chalet with a steep roof and balconies on a snowy mountain slope with pine trees`);
 
 const PRESETS: Theme[] = [
-  { id: 'house', title: 'Dream House', emoji: '🏡', mode: 'property', noun: 'home', label: 'Upgrade', startLabel: 'Home', base: null, scene: 'Eye-level estate-agent photograph from across the street or lawn, showing the whole front of the property and its plot boundaries with a little space around it', bases: HOUSES, created: 0, items: parse(`
+  { id: 'house', title: 'Dream House', emoji: '🏡', mode: 'property', noun: 'home', label: 'Upgrade', startLabel: 'Home', base: { name: 'Empty plot', blurb: 'Bid for your home first', visual: 'an empty grassy building plot with a low fence on a quiet residential street' }, scene: 'Eye-level estate-agent photograph from across the street or lawn, showing the whole front of the property and its plot boundaries with a little space around it', bases: HOUSES, created: 0, items: parse(`
 Swimming Pool|A sparkling outdoor pool|a rectangular outdoor swimming pool with stone edging in the garden beside the house
 Hot Tub|Bubbles under the stars|a round cedar hot tub with steam rising, on a patio beside the house
 Supercar|Red, loud and Italian|a glossy red Italian supercar parked on the driveway or kerb directly outside the house
@@ -435,7 +435,7 @@ function start(r: Room) {
     : r.deckAdds.slice(0, LOTS_PER_PLAYER * n).map(x => ({ ...x, kind: 'add' as const }));
   r.status = 'playing'; r.lot = 0;
   prefetch(r, r.lots.filter(l => l.kind === 'add').length);
-  r.worlds = r.players.map(() => ({ v: hasBases(r.theme) ? -1 : (r.baseImg === 'ready' ? 0 : -1), state: 'idle', busy: false, tries: 0 }));
+  r.worlds = r.players.map(() => ({ v: r.baseImg === 'ready' ? 0 : -1, state: 'idle', busy: false, tries: 0 }));
   beginLot(r);
 }
 
@@ -457,8 +457,8 @@ function pump() {
 const imgKey = (r: Room, k: string) => r.code + '/' + k;
 function worldKey(r: Room, p: number, v: number) {
   if (v < 0) return '';
+  if (v === 0) return 'base';
   if (hasBases(r.theme) && v === 1) return 'lot' + r.players[p].won[0];
-  if (!hasBases(r.theme) && v === 0) return 'base';
   return 'w' + p + '-' + v;
 }
 function lotPrompt(r: Room, it: Item, kind: string) {
@@ -513,6 +513,13 @@ async function openaiImage(prompt: string, refs: Uint8Array[], quality: string):
   if (!b64) throw Error('Empty image');
   return Uint8Array.from(Buffer.from(b64, 'base64'));
 }
+// OpenAI answers 429 insufficient_quota when the account has no credit; retrying cannot help.
+const CREDIT_MSG = 'Pictures are unavailable: the OpenAI account behind Draft Night has run out of credit. Add credit at platform.openai.com → Billing.';
+function outOfCredit(r: Room | null, e: unknown) {
+  const hit = /insufficient_quota|no credits remaining|billing/i.test(String(e));
+  if (hit && r) { r.imageError = CREDIT_MSG; bump(r); }
+  return hit;
+}
 function genLot(r: Room, k: string, it: Item, kind: string, pri: number) {
   if (r.lotImg[k]) return;
   r.lotImg[k] = Bun.env.OPENAI_API_KEY ? 'pending' : 'none';
@@ -521,6 +528,7 @@ function genLot(r: Room, k: string, it: Item, kind: string, pri: number) {
     try { images.set(imgKey(r, k), await openaiImage(lotPrompt(r, it, kind), [], kind === 'base' ? 'medium' : 'low')); r.lotImg[k] = 'ready'; }
     catch (e) {
       console.error('Lot image failed', String(e));
+      if (outOfCredit(r, e)) { r.lotImg[k] = 'error'; bump(r); return; }
       const n = (retries.get(imgKey(r, k)) || 0) + 1; retries.set(imgKey(r, k), n);
       r.lotImg[k] = n < 3 ? '' : 'error';
       if (n < 3) setTimeout(() => genLot(r, k, it, kind, pri), 3000 * n);
@@ -530,7 +538,7 @@ function genLot(r: Room, k: string, it: Item, kind: string, pri: number) {
   });
 }
 function genBase(r: Room) {
-  if (hasBases(r.theme)) return;
+  if (!r.theme.base?.visual) return;
   if (!Bun.env.OPENAI_API_KEY) { r.baseImg = 'none'; return; }
   r.baseImg = 'pending';
   enqueue(0, async () => {
@@ -538,7 +546,7 @@ function genBase(r: Room) {
     catch (e) {
       console.error('Base image failed', String(e));
       const n = (retries.get(imgKey(r, 'base')) || 0) + 1; retries.set(imgKey(r, 'base'), n);
-      r.baseImg = 'error'; if (n < 3) setTimeout(() => genBase(r), 3000 * n);
+      r.baseImg = 'error'; if (n < 3 && !outOfCredit(r, e)) setTimeout(() => genBase(r), 3000 * n);
     }
     if (r.status !== 'lobby') r.worlds.forEach((w, p) => { if (w.v < 0 && r.baseImg === 'ready') w.v = 0; void ensureWorld(r, p); });
     bump(r);
@@ -549,8 +557,8 @@ async function ensureWorld(r: Room, p: number) {
   if (!w || w.busy) return;
   if (!Bun.env.OPENAI_API_KEY) { w.state = 'none'; return; }
   const property = hasBases(r.theme);
+  if (w.v < 0 && r.baseImg === 'ready') { w.v = 0; bump(r); }
   if (property && pl.base !== null && w.v < 1 && r.lotImg['lot' + pl.base] === 'ready') { w.v = 1; bump(r); }
-  if (!property && w.v < 0 && r.baseImg === 'ready') { w.v = 0; bump(r); }
   const target = pl.won.length;
   if (w.v < (property ? 1 : 0) || w.v >= target) { if (w.v >= target) w.state = 'ready'; return; }
   w.busy = true; w.state = 'updating'; bump(r);
@@ -567,7 +575,7 @@ async function ensureWorld(r: Room, p: number) {
       if (target > w.v) w.v = target;
       w.state = 'ready'; w.tries = 0;
     } catch (e) {
-      w.tries++; w.state = w.tries > 2 ? 'error' : 'retrying';
+      w.tries++; w.state = w.tries > 2 || outOfCredit(r, e) ? 'error' : 'retrying';
       console.error('World image failed', String(e));
     } finally {
       w.busy = false; bump(r);
@@ -576,8 +584,6 @@ async function ensureWorld(r: Room, p: number) {
     }
   });
 }
-// Houses and the first few items are drawn while the lobby fills; the rest once the game starts,
-// so abandoned lobbies do not pay for a whole deck of pictures.
 function prefetch(r: Room, adds: number) {
   if (hasBases(r.theme)) r.deckBases.slice(0, r.capacity).forEach((it, i) => genLot(r, 'lot' + i, it, 'base', 1 + i / 100));
   r.deckAdds.slice(0, adds).forEach((it, i) => genLot(r, 'add' + i, it, 'add', 2 + i / 100));
@@ -662,6 +668,10 @@ const CORS = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods
 const reply = (v: any, status = 200) => Response.json(v, { status, headers: { ...CORS, 'Cache-Control': 'no-store' } });
 const fail = (m: string, status = 400) => reply({ error: m }, status);
 
+function prep(r: Room) {
+  const states = [...Object.values(r.lotImg), ...(r.theme.base?.visual ? [r.baseImg] : [])].filter(x => x !== 'none');
+  return { total: states.length, ready: states.filter(x => x === 'ready').length, failed: states.filter(x => x === 'error').length, error: r.imageError, enabled: Boolean(Bun.env.OPENAI_API_KEY) };
+}
 function view(r: Room) {
   const a = r.auction;
   return {
@@ -672,7 +682,7 @@ function view(r: Room) {
     lot: r.lot, total: r.status === 'lobby' ? LOTS_PER_PLAYER * r.players.length : r.lots.length,
     auction: { bid: a.bid, leader: a.leader, turn: a.turn, passed: a.passed, phase: a.phase, deadline: a.deadline, log: a.log.slice(-6), result: a.result },
     worlds: r.worlds.map((w, p) => ({ v: w.v, state: w.state, key: worldKey(r, p, w.v) })),
-    base: hasBases(r.theme) ? null : { state: r.baseImg },
+    base: { state: r.baseImg }, prep: prep(r),
     history: r.history, verdict: r.verdict,
   };
 }
@@ -705,7 +715,7 @@ async function handle(req: Request): Promise<Response> {
     const preset = presetFor(topic);
     if (preset) return reply({ status: 'ok', theme: themeSummary(preset) });
     try { return reply(await interpret(topic, clamp(Number(body.players) || 4, 4, MAX_PLAYERS) * LOTS_PER_PLAYER + 4, Boolean(body.confirmed))); }
-    catch (e) { console.error('Theme failed', String(e)); return fail(e instanceof Error && e.message.startsWith('Could not') ? e.message : 'Could not create that theme right now. Try again or pick a ready-made one.', 502); }
+    catch (e) { console.error('Theme failed', String(e)); return fail(outOfCredit(null, e) ? 'Typed themes are unavailable: the OpenAI account behind Draft Night has run out of credit. Pick a ready-made theme, or add credit at platform.openai.com.' : e instanceof Error && e.message.startsWith('Could not') ? e.message : 'Could not create that theme right now. Try again or pick a ready-made one.', 502); }
   }
   if (u.pathname === '/api/create' && req.method === 'POST') {
     sweep();
@@ -718,12 +728,13 @@ async function handle(req: Request): Promise<Response> {
       capacity: cpu ? 2 : clamp(Math.round(Number(body.capacity) || 2), 2, maxP), cpu, players: [], tokens: [],
       deckBases: shuffle(theme.bases), deckAdds: shuffle(theme.items), lots: [], lot: 0,
       auction: { bid: 0, leader: null, turn: null, passed: [], phase: 'bidding', deadline: 0, log: [], result: null },
-      history: [], lotImg: {}, baseImg: 'none', worlds: [], verdict: null,
+      history: [], lotImg: {}, baseImg: 'none', imageError: '', worlds: [], verdict: null,
     };
     rooms.set(r.code, r);
     join(r, cleanName(body.name, 'Player 1'));
     if (cpu) join(r, 'CPU', true);
-    genBase(r); prefetch(r, 3);
+    // Every picture for the whole game is prepared while the lobby fills; the host starts once they are ready.
+    genBase(r); prefetch(r, r.capacity * (hasBases(theme) ? 4 : LOTS_PER_PLAYER));
     return reply({ code: r.code, player: 0, token: r.tokens[0], room: view(r) });
   }
   if (u.pathname === '/api/join' && req.method === 'POST') {
@@ -753,6 +764,10 @@ async function handle(req: Request): Promise<Response> {
       if (body.type === 'start') {
         if (p !== 0) return fail('Only the host can start');
         if (r.status !== 'lobby' || r.players.length < 2) return fail('Waiting for at least two players');
+        const ready = prep(r);
+        // Pictures first: the game only starts without them if the image service has failed and the host chooses to.
+        if (ready.enabled && ready.ready + ready.failed < ready.total) return fail(`Still preparing pictures (${ready.ready}/${ready.total})`);
+        if (ready.enabled && ready.failed && !body.force) return fail(r.imageError || 'Some pictures could not be made. Start anyway?');
         start(r);
       } else if (body.type === 'bid' || body.type === 'pass') {
         if (r.status !== 'playing') return fail('The auction is not running');

@@ -50,6 +50,7 @@ async function setup(env, { theme = 'house', names = ['Ariel', 'Louie'], budget 
     const r = room();
     return env.call('/api/action', { code, player: p, token: seats[p].token, type, lot: r.lot, seen: r.auction.bid, ...extra });
   };
+  await flush(); // pictures are prepared in the lobby before the host can start
   const s = await act(0, 'start');
   assert.equal(s.status, 200, JSON.stringify(s.body));
   // Keep every human "present" so the away rule does not fire while the test clock jumps.
@@ -153,7 +154,7 @@ test('Scenario C: "Pancakes" starts with a bid for the base (pancakes, waffle, c
   same(r.lots.map(l => l.kind), ['base', 'base', 'add', 'add', 'add', 'add', 'add', 'add', 'add', 'add']);
   assert.ok(r.lots.every(l => !/house|garden|pool|villa|terrace/i.test(l.name)), 'only pancake things');
   await flush();
-  assert.ok(r.worlds.every(w => w.v === -1), 'nobody has a base until they win one');
+  assert.ok(r.worlds.every(w => w.v === 0), 'everyone shows the shared starting picture (an empty plate) until they win a base');
   // Ariel wins the first base; the second is Louie's automatically.
   await g.act(0, 'bid', { amount: 7 }); await g.act(1, 'pass');
   await g.settle();
@@ -386,6 +387,32 @@ test('playing against the CPU finishes with the CPU bidding on its own', async (
   }
   assert.ok(r.players[1].won.length >= 1);
   for (const p of r.players) assert.equal(p.won.filter(i => r.lots[i].kind === 'base').length, 1);
+});
+
+test('the host cannot start until every picture is ready, and out-of-credit errors are explained', async () => {
+  let gate; const held = new Promise(r => gate = r);
+  const env = sandbox({ image: async () => { await held; } });
+  const made = (await env.call('/api/create', { theme: 'burger', name: 'A', capacity: 2 })).body;
+  const j = (await env.call('/api/join', { code: made.code, name: 'B' })).body;
+  const first = await env.call('/api/action', { code: made.code, player: 0, token: made.token, type: 'start' });
+  assert.equal(first.status, 400);
+  assert.match(first.body.error, /preparing pictures/i);
+  const prep = (await env.call('/api/room?code=' + made.code)).body.prep;
+  assert.equal(prep.total, 1 + 2 + 8, 'empty bun + 2 burgers + 8 toppings');
+  gate(); await flush(); await flush();
+  const ready = (await env.call('/api/room?code=' + made.code)).body.prep;
+  assert.equal(ready.ready, ready.total);
+  assert.equal((await env.call('/api/action', { code: made.code, player: 0, token: made.token, type: 'start' })).status, 200);
+  void j;
+  // No credit: every picture fails at once with a clear reason, and the host may start without them.
+  const broke = sandbox({ image: async () => { throw new Error('Image service 429 {"error":{"type":"insufficient_quota","message":"You have no credits remaining."}}'); } });
+  const m2 = (await broke.call('/api/create', { theme: 'pizza', name: 'A', capacity: 2 })).body;
+  await broke.call('/api/join', { code: m2.code, name: 'B' }); await flush(); await flush();
+  const view = (await broke.call('/api/room?code=' + m2.code)).body;
+  assert.match(view.prep.error, /run out of credit/);
+  const blocked = await broke.call('/api/action', { code: m2.code, player: 0, token: m2.token, type: 'start' });
+  assert.equal(blocked.status, 400);
+  assert.equal((await broke.call('/api/action', { code: m2.code, player: 0, token: m2.token, type: 'start', force: true })).status, 200);
 });
 
 test('auth and joining rules', async () => {

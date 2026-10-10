@@ -237,7 +237,24 @@
       '<div class="eyebrow">Tonight</div><div class="brief"><span class="em">' + esc(t.emoji) + '</span><div><b>' + esc(t.title) + '</b><p>' + brief + '</p><p>' + (n * 5) + ' auctions · ' + money(room.budget) + ' each</p></div></div>' +
       '<div class="eyebrow">Players ' + n + ' / ' + room.capacity + '</div><ul class="roster">' + slots + '</ul></div>' +
       '<div class="footer">' + (room.cpu ? '' : '<button class="secondary" data-share="' + esc(link) + '">Share invite link</button>') +
-      (host ? '<button class="primary" data-start' + (n < 2 || sending ? ' disabled' : '') + '>' + (n < 2 ? 'Waiting for players…' : 'Start the auction' + (n < room.capacity ? ' with ' + n : '')) + '</button>' : '<div class="hint">Waiting for ' + esc(room.players[0].name) + ' to start</div>') + '</div></div>';
+      prepHtml() + (host ? startButton(n) : '<div class="hint">' + (prepReady() ? 'Waiting for ' + esc(room.players[0].name) + ' to start' : 'Preparing pictures…') + '</div>') + '</div></div>';
+  }
+
+  // Pictures are prepared while the lobby fills; the host can start once every one is ready.
+  function prepReady() { var p = room.prep; return !p || !p.enabled || p.ready + p.failed >= p.total; }
+  function prepHtml() {
+    var p = room.prep; if (!p || !p.enabled || !p.total) return '';
+    if (p.error) return '<div class="prep error">' + esc(p.error) + '</div>';
+    var pct = Math.round(100 * p.ready / p.total);
+    return '<div class="prep"><div class="prep-row"><span>' + (p.ready >= p.total ? 'All pictures ready' : 'Preparing pictures') + '</span><span class="num">' + p.ready + ' / ' + p.total + '</span></div><i><b style="width:' + pct + '%"></b></i>' +
+      (p.failed && !p.error ? '<div class="muted" style="font-size:12.5px;margin-top:4px">' + p.failed + ' could not be made</div>' : '') + '</div>';
+  }
+  function startButton(n) {
+    var p = room.prep || {};
+    if (n < 2) return '<button class="primary" disabled>Waiting for players…</button>';
+    if (!prepReady()) return '<button class="primary" disabled>Preparing pictures… ' + p.ready + '/' + p.total + '</button>';
+    if (p.enabled && p.failed) return '<button class="primary" data-start data-force' + (sending ? ' disabled' : '') + '>Start without all pictures</button>';
+    return '<button class="primary" data-start' + (sending ? ' disabled' : '') + '>Start the auction' + (n < room.capacity ? ' with ' + n : '') + '</button>';
   }
 
   // ---------- game ----------
@@ -327,7 +344,7 @@
     }
     var img = lotEl.querySelector('.lot-img img');
     if (lot.img === 'ready') showImage(img, imgUrl(lot.key));
-    patch(lotEl.querySelector('.lot-img .ph'), img.classList.contains('on') ? '' : '<span>' + esc(t.emoji) + '</span>');
+    patch(lotEl.querySelector('.lot-img .ph'), img.classList.contains('on') ? '' : lot.img === 'pending' || lot.img === '' ? '<span>' + esc(t.emoji) + '</span>' : '<span class="ph-name">' + esc(lot.name) + '</span>');
     lotEl.querySelector('.lot-img .ph').classList.toggle('loading', lot.img === 'pending' && !img.classList.contains('on'));
     patch(lotEl.querySelector('.lot-kind'), esc(kind));
     patch(lotEl.querySelector('.lot-name'), esc(lot.name));
@@ -460,7 +477,7 @@
     if (b.dataset.name !== undefined && ui.view === 'join') { ui.name = b.dataset.name; $('#name').value = ui.name; return; }
     if (b.hasAttribute('data-bid')) return act('bid', { amount: +b.dataset.bid });
     if (b.hasAttribute('data-pass')) return act('pass');
-    if (b.hasAttribute('data-start')) return act('start');
+    if (b.hasAttribute('data-start')) return act('start', b.hasAttribute('data-force') ? { force: true } : {});
     if (b.dataset.world) return openWorld(+b.dataset.world);
     if (b.hasAttribute('data-leave') || b.hasAttribute('data-again')) return leave();
     if (b.hasAttribute('data-menu')) { if (confirm('Leave this game? You can rejoin with code ' + room.code + '.')) leave(); return; }
