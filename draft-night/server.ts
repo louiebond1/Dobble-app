@@ -434,7 +434,6 @@ async function openaiImage(prompt: string, refs: Uint8Array[], quality: string):
   const call = async (full: boolean) => {
     let body: any; const headers: Record<string, string> = { Authorization: 'Bearer ' + key };
     const params: Record<string, string> = { model, prompt, size: '1024x1024', quality, output_format: 'jpeg' };
-    if (full) params.output_compression = '84';
     if (!refs.length) { headers['Content-Type'] = 'application/json'; body = JSON.stringify(params); }
     else {
       body = new FormData();
