@@ -28,7 +28,7 @@ function themeReply(content) {
   const n = Number(/N = (\d+)/.exec(content)[1]);
   if (/^pam$/i.test(subject) && !content.includes('confirmed')) return { status: 'ambiguous', question: 'Who or what is Pam?', options: [{ label: "Pam's dream birthday cake", topic: 'birthday cake' }, { label: 'A pampering spa day', topic: 'spa day' }, { label: "Pam's dream house", topic: 'dream house' }], title: '', emoji: '', kind: 'build', noun: '', label: '', base_name: '', base_blurb: '', base_visual: '', scene: '', items: [] };
   const title = subject.replace(/\b\w/g, c => c.toUpperCase()).slice(0, 24);
-  return { status: 'ok', question: '', options: [], title, emoji: '✨', kind: 'build', noun: subject.toLowerCase(), label: 'Upgrade', base_name: 'Plain ' + subject.toLowerCase(), base_blurb: 'The starting point', base_visual: 'a plain ' + subject, scene: 'Even light, whole subject visible', items: Array.from({ length: n }, (_, i) => ({ name: title + ' extra ' + (i + 1), blurb: 'Mock item for testing', visual: 'mock item ' + (i + 1) + ' placed on the ' + subject })) };
+  return { status: 'ok', question: '', options: [], title, emoji: '✨', kind: 'build', noun: subject.toLowerCase(), label: 'Upgrade', base_name: 'Nothing yet', base_blurb: 'Bid for a starting ' + subject.toLowerCase(), base_visual: 'an empty spot', scene: 'Even light, whole subject visible', start_label: 'Base', bases: Array.from({ length: 8 }, (_, i) => ({ name: title + ' style ' + (i + 1), blurb: 'A starting option', visual: 'a plain ' + subject + ' of style ' + (i + 1) })), items: Array.from({ length: n }, (_, i) => ({ name: title + ' extra ' + (i + 1), blurb: 'Mock item for testing', visual: 'mock item ' + (i + 1) + ' placed on the ' + subject })) };
 }
 
 http.createServer(async (req, res) => {

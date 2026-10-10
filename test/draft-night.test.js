@@ -138,40 +138,44 @@ test('Scenario B: three-player property game gives everyone exactly one house ac
   }
 });
 
-test('Scenario C: "Pancakes" uses the pancake build with no houses and no AI guesswork', async () => {
+test('Scenario C: "Pancakes" starts with a bid for the base (pancakes, waffle, crêpe…) then toppings, never houses', async () => {
   const env = sandbox();
   const t = await env.call('/api/theme', { topic: 'Pancakes', players: 2 });
   assert.equal(t.body.status, 'ok');
   assert.equal(t.body.theme.id, 'pancakes');
+  assert.ok(t.body.theme.starts.includes('Belgian Waffle') && t.body.theme.starts.includes('French Crêpes'));
   assert.equal(env.calls.filter(c => c.url.includes('chat')).length, 0);
   for (const topic of ['pancakes', 'Dream pancakes', 'PANCAKE STACK', 'The perfect pancakes']) assert.equal(env.qa.presetFor(topic)?.id, 'pancakes', topic);
   const g = await setup(env, { theme: 'pancakes', names: ['Ariel', 'Louie'] });
   const r = g.room();
   assert.equal(r.theme.mode, 'build');
   assert.equal(r.lots.length, 10);
-  assert.ok(r.lots.every(l => l.kind === 'add'));
-  assert.ok(r.lots.every(l => !/house|garden|pool|villa|terrace/i.test(l.name)), 'only pancake items');
-  // Both players start from the same plain stack.
+  same(r.lots.map(l => l.kind), ['base', 'base', 'add', 'add', 'add', 'add', 'add', 'add', 'add', 'add']);
+  assert.ok(r.lots.every(l => !/house|garden|pool|villa|terrace/i.test(l.name)), 'only pancake things');
   await flush();
-  assert.equal(r.baseImg, 'ready');
-  assert.ok(r.worlds.every(w => w.v === 0));
-  // Ariel buys lot 1, Louie lot 2.
+  assert.ok(r.worlds.every(w => w.v === -1), 'nobody has a base until they win one');
+  // Ariel wins the first base; the second is Louie's automatically.
   await g.act(0, 'bid', { amount: 7 }); await g.act(1, 'pass');
   await g.settle();
-  await g.act(r.auction.turn, r.auction.turn === 1 ? 'bid' : 'pass', { amount: 4 });
-  if (r.auction.phase === 'bidding') await g.act(r.auction.turn, r.auction.turn === 1 ? 'bid' : 'pass', { amount: 4 });
-  await flush();
-  const p0 = env.qa.worldPrompt(r, 0, 0, 1);
-  assert.match(p0, /pancake stack/);
-  assert.ok(p0.includes(r.lots[0].name));
+  assert.equal(r.players[1].base, 1);
+  await g.settle();
+  // Lot 3 (first topping): Ariel opens and Louie passes.
+  await g.act(0, 'bid', { amount: 4 }); await g.act(1, 'pass');
+  await flush(); await flush();
+  same(r.players[0].won, [0, 2]);
+  assert.equal(r.worlds[0].v, 2, 'base photo, then the topping edited on');
+  assert.equal(r.worlds[1].v, 1, 'Louie still shows just his base');
+  const p0 = env.qa.worldPrompt(r, 0, 1, 2);
+  assert.match(p0, /breakfast plate/);
+  assert.ok(p0.includes(r.lots[0].name) && p0.includes(r.lots[2].name + ':'));
   assert.ok(!/house|swimming pool/i.test(p0));
-  assert.ok(!p0.includes(r.lots[1].name), 'Louie\'s topping is not on Ariel\'s pancakes');
+  assert.ok(!p0.includes(r.lots[1].name), "Louie's base is not on Ariel's plate");
 });
 
 test('Scenario D: four-player custom theme has 20 lots and separate budgets, inventories and worlds', async () => {
   const ai = (body) => {
     const n = Number(/N = (\d+)/.exec(body.messages[1].content)[1]);
-    return { status: 'ok', question: '', options: [], title: 'Treehouse', emoji: '🌳', kind: 'build', noun: 'treehouse', label: 'Upgrade', base_name: 'Plain treehouse', base_blurb: 'Four walls in an oak', base_visual: 'a plain wooden treehouse platform with four walls in an oak tree', scene: 'Garden photo, eye level', items: Array.from({ length: n }, (_, i) => ({ name: 'Upgrade ' + i, blurb: 'Nice', visual: 'a thing number ' + i + ' on the treehouse' })) };
+    return { status: 'ok', question: '', options: [], title: 'Treehouse', emoji: '🌳', kind: 'build', noun: 'treehouse', label: 'Upgrade', base_name: 'Plain treehouse', base_blurb: 'Four walls in an oak', base_visual: 'an oak tree', scene: 'Garden photo, eye level', start_label: 'Treehouse', bases: Array.from({ length: 8 }, (_, i) => ({ name: 'Treehouse style ' + i, blurb: 'A start', visual: 'a plain treehouse of style ' + i })), items: Array.from({ length: n }, (_, i) => ({ name: 'Upgrade ' + i, blurb: 'Nice', visual: 'a thing number ' + i + ' on the treehouse' })) };
   };
   const env = sandbox({ ai });
   const t = await env.call('/api/theme', { topic: 'Ultimate treehouse', players: 4 });
@@ -187,11 +191,15 @@ test('Scenario D: four-player custom theme has 20 lots and separate budgets, inv
     await g.act(a.turn, a.turn === want ? 'bid' : 'pass', { amount: a.bid + 1 });
   }
   await flush();
-  r.players.forEach((p, i) => { same(p.won, [i, i + 4, i + 8, i + 12, i + 16]); assert.equal(p.budget, 45); });
+  // The last starting option goes free to the only player still without one.
+  r.players.forEach((p, i) => { same(p.won, [i, i + 4, i + 8, i + 12, i + 16]); assert.equal(p.budget, i === 3 ? 46 : 45); });
   assert.equal(new Set(r.worlds.map((w, i) => i)).size, 4);
   for (let i = 0; i < 4; i++) {
     const prompt = env.qa.worldPrompt(r, i, 0, 5);
-    for (let j = 0; j < 4; j++) for (const lot of r.players[j].won) assert.equal(prompt.includes(r.lots[lot].name + ':'), i === j);
+    for (let j = 0; j < 4; j++) for (const lot of r.players[j].won) {
+      if (r.lots[lot].kind === 'add') assert.equal(prompt.includes(r.lots[lot].name + ':'), i === j);
+      else assert.equal(prompt.includes(r.lots[lot].name), i === j, 'only their own starting option');
+    }
   }
 });
 
@@ -200,7 +208,7 @@ test('Scenario E: an ambiguous theme asks a question instead of guessing', async
   const ai = (body) => {
     seen.push(body.messages[1].content);
     if (!body.messages[1].content.includes('confirmed')) return { status: 'ambiguous', question: 'Who or what is Pam?', options: [{ label: "Pam's dream birthday cake", topic: 'birthday cake' }, { label: 'A pampering spa day', topic: 'spa day' }, { label: "Pam's dream house", topic: 'dream house' }], title: '', emoji: '', kind: 'build', noun: '', label: '', base_name: '', base_blurb: '', base_visual: '', scene: '', items: [] };
-    return { status: 'ok', question: '', options: [], title: 'Birthday Cake', emoji: '🎂', kind: 'build', noun: 'cake', label: 'Decoration', base_name: 'Plain sponge', base_blurb: 'Two layers', base_visual: 'a plain two-layer sponge cake on a stand', scene: 'Side view', items: Array.from({ length: 14 }, (_, i) => ({ name: 'Decoration ' + i, blurb: 'x', visual: 'decoration ' + i + ' on the cake' })) };
+    return { status: 'ok', question: '', options: [], title: 'Birthday Cake', emoji: '🎂', kind: 'build', noun: 'cake', label: 'Decoration', base_name: 'Plain sponge', base_blurb: 'Two layers', base_visual: 'an empty cake stand', scene: 'Side view', start_label: 'Cake', bases: [{ name: 'Victoria Sponge', blurb: 'x', visual: 'a plain sponge' }, { name: 'Chocolate Cake', blurb: 'x', visual: 'a plain chocolate cake' }, { name: 'Carrot Cake', blurb: 'x', visual: 'a plain carrot cake' }], items: Array.from({ length: 14 }, (_, i) => ({ name: 'Decoration ' + i, blurb: 'x', visual: 'decoration ' + i + ' on the cake' })) };
   };
   const env = sandbox({ ai });
   const a = await env.call('/api/theme', { topic: 'Pam', players: 2 });
@@ -219,7 +227,7 @@ test('Scenario F: a modest terrace keeps its identity; only purchased items are 
   const r = g.room();
   // Force the deck: Victorian Terrace first; upgrades include a paddleboard and a supercar.
   const terrace = r.lots.findIndex(l => l.name === 'Victorian Terrace');
-  assert.ok(env.qa.lotPrompt(r, r.theme.bases.find(b => b.name === 'Victorian Terrace'), 'base').match(/No swimming pool/));
+  assert.ok(env.qa.lotPrompt(r, r.theme.bases.find(b => b.name === 'Victorian Terrace'), 'base').match(/no swimming pool/i));
   const pb = r.theme.items.find(i => i.name === 'Paddleboard'), car = r.theme.items.find(i => i.name === 'Supercar');
   r.lots[0] = { ...r.theme.bases.find(b => b.name === 'Victorian Terrace'), kind: 'base' };
   r.lots[2] = { ...pb, kind: 'add' }; r.lots[3] = { ...car, kind: 'add' };
@@ -248,34 +256,31 @@ test('Scenario F: a modest terrace keeps its identity; only purchased items are 
 });
 
 test('image jobs never let an older picture replace a newer one, and failures keep the last good image', async () => {
-  let release, fail = false;
+  let fail = false;
   const gates = [];
   const env = sandbox({ image: async (url) => { if (url.endsWith('/edits')) { if (fail) throw new Error('boom'); await new Promise(r => gates.push(r)); } } });
   const g = await setup(env, { theme: 'pizza', names: ['A', 'B'] });
   const r = g.room();
   await flush();
-  // A wins lot 1; the edit for it is held open while A also wins the next lot.
-  await g.act(0, 'bid', { amount: 1 }); await g.act(1, 'pass');
-  await flush();
+  const win = async who => { while (r.auction.phase !== 'bidding') await g.settle(); while (r.auction.phase === 'bidding') await g.act(r.auction.turn, r.auction.turn === who || r.auction.leader === null ? 'bid' : 'pass', { amount: r.auction.bid + 1 }); };
+  await win(0); // A's pizza style; B gets the other one free
+  await g.settle(); await flush();
+  assert.equal(r.worlds[0].v, 1, 'v1 is the exact pizza photo that was auctioned');
+  await win(0); await flush();
   assert.equal(r.worlds[0].state, 'updating');
-  await g.settle();
-  while (r.auction.phase === 'bidding') await g.act(r.auction.turn, r.auction.turn === 0 || r.auction.leader === null ? 'bid' : 'pass', { amount: r.auction.bid + 1 });
-  assert.equal(r.players[0].won.length, 2);
+  await win(0);
+  assert.equal(r.players[0].won.length, 3);
   assert.equal(gates.length, 1, 'one edit at a time per player');
   gates.shift()(); await flush(); await flush();
-  assert.equal(r.worlds[0].v, 1, 'first edit lands');
+  assert.equal(r.worlds[0].v, 2, 'first edit lands');
   assert.equal(gates.length, 1, 'then the next purchase is edited on top of it');
   gates.shift()(); await flush(); await flush();
-  assert.equal(r.worlds[0].v, 2);
-  assert.equal(r.worlds[1].v, 0, 'other player untouched');
-  // A failing edit keeps the last good version on screen.
+  assert.equal(r.worlds[0].v, 3);
+  assert.equal(r.worlds[1].v, 1, 'other player untouched');
   fail = true;
-  await g.settle();
-  while (r.auction.phase === 'bidding') await g.act(r.auction.turn, r.auction.turn === 0 || r.auction.leader === null ? 'bid' : 'pass', { amount: r.auction.bid + 1 });
-  await flush(); await flush();
-  assert.equal(r.worlds[0].v, 2);
-  assert.equal((await g.state()).worlds[0].key, 'w0-2');
-  void release;
+  await win(0); await flush(); await flush();
+  assert.equal(r.worlds[0].v, 3, 'a failed edit keeps the last good picture');
+  assert.equal((await g.state()).worlds[0].key, 'w0-3');
 });
 
 test('Scenario G: auction edge cases', async () => {
@@ -302,6 +307,7 @@ test('Scenario G: auction edge cases', async () => {
   await g.settle();
   // B has no money: never offered a turn again. Nobody may pass on the opening bid, so every lot sells.
   for (let i = 0; i < 3 && r.status === 'playing'; i++) {
+    while (r.auction.phase !== 'bidding') await g.settle();
     const opener = r.auction.turn;
     assert.notEqual(opener, 1);
     const refused = await g.act(opener, 'pass');

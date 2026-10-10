@@ -4,14 +4,14 @@
   var params = new URLSearchParams(location.search);
   var API = params.get('api') || 'https://draft-night-web-production.up.railway.app';
   var app = document.getElementById('app');
-  var BUDGETS = [50, 100, 200];
+  var BUDGETS = [5, 10, 15, 20, 50, 100];
   var FALLBACK_PRESETS = [
-    { id: 'house', title: 'Dream House', emoji: '🏡', mode: 'property', noun: 'home', label: 'Upgrade', base: null, maxPlayers: 6 },
-    { id: 'pancakes', title: 'Pancakes', emoji: '🥞', mode: 'build', noun: 'pancake stack', label: 'Topping', base: { name: 'Plain pancake stack' }, maxPlayers: 6 },
-    { id: 'burger', title: 'Burgers', emoji: '🍔', mode: 'build', noun: 'burger', label: 'Topping', base: { name: 'Plain burger' }, maxPlayers: 6 },
-    { id: 'pizza', title: 'Pizza', emoji: '🍕', mode: 'build', noun: 'pizza', label: 'Topping', base: { name: 'Margherita base' }, maxPlayers: 6 },
-    { id: 'gaming', title: 'Gaming Setup', emoji: '🎮', mode: 'build', noun: 'gaming setup', label: 'Upgrade', base: { name: 'Basic desk setup' }, maxPlayers: 6 },
-    { id: 'garage', title: 'Dream Garage', emoji: '🏎️', mode: 'collection', noun: 'garage', label: 'Car', base: { name: 'Empty garage' }, maxPlayers: 6 }
+    { id: 'house', title: 'Dream House', emoji: '🏡', mode: 'property', noun: 'home', label: 'Upgrade', startLabel: 'Home', hasBases: true, base: null, maxPlayers: 6 },
+    { id: 'pancakes', title: 'Pancakes', emoji: '🥞', mode: 'build', noun: 'breakfast plate', label: 'Topping', startLabel: 'Base', hasBases: true, base: { name: 'Empty plate' }, maxPlayers: 6 },
+    { id: 'burger', title: 'Burgers', emoji: '🍔', mode: 'build', noun: 'burger', label: 'Topping', startLabel: 'Burger', hasBases: true, base: { name: 'Empty bun' }, maxPlayers: 6 },
+    { id: 'pizza', title: 'Pizza', emoji: '🍕', mode: 'build', noun: 'pizza', label: 'Topping', startLabel: 'Pizza', hasBases: true, base: { name: 'Empty peel' }, maxPlayers: 6 },
+    { id: 'gaming', title: 'Gaming Setup', emoji: '🎮', mode: 'build', noun: 'gaming setup', label: 'Upgrade', startLabel: 'Setup', hasBases: true, base: { name: 'Empty room' }, maxPlayers: 6 },
+    { id: 'garage', title: 'Dream Garage', emoji: '🏎️', mode: 'collection', noun: 'garage', label: 'Car', startLabel: 'Garage', hasBases: true, base: { name: 'No garage yet' }, maxPlayers: 6 }
   ];
 
   var store = {
@@ -56,6 +56,9 @@
   function patch(el, html) { if (el && el.__html !== html) { el.innerHTML = html; el.__html = html; } }
   function lotName(i) { return room.lots[i] ? room.lots[i].name : ''; }
   function me() { return session ? session.player : -1; }
+  // What the opening lots are called for a theme ("Home", "Burger", "Base"…), and whether it has them.
+  function startWord(t) { return (t && t.startLabel) || 'Home'; }
+  function hasStarts(t) { return !!(t && (t.hasBases || t.mode === 'property')); }
 
   // Swap an <img> only once the next picture has fully loaded, so the last good image stays visible.
   function showImage(img, url) {
@@ -76,14 +79,14 @@
     var t = theme(), n = seats(), total = n * 5, max = t.maxPlayers || 6;
     var presetTiles = ui.presets.map(function (p) {
       return '<button class="theme" data-theme="' + esc(p.id) + '" aria-pressed="' + (ui.themeId === p.id) + '"><span class="em">' + esc(p.emoji) + '</span><b>' + esc(p.title) + '</b><small>' +
-        (p.mode === 'property' ? 'Bid for a house, then upgrade it' : 'Start: ' + esc(p.base && p.base.name)) + '</small></button>';
+        (hasStarts(p) ? 'Bid for your ' + esc(startWord(p).toLowerCase()) + (p.starts && p.starts.length ? ': ' + esc(p.starts.slice(0, 3).join(', ')) + '…' : ', then build on it') : 'Start: ' + esc(p.base && p.base.name)) + '</small></button>';
     }).join('');
     var custom = '';
     if (ui.asking) custom = '<div class="interpret muted"><span class="spinner"></span>Working out what to auction…</div>';
     else if (ui.ambiguous) custom = '<div class="interpret"><p>' + esc(ui.ambiguous.question) + '</p><div class="choices">' + ui.ambiguous.options.map(function (o, i) {
       return '<button data-option="' + i + '">' + esc(o.label) + '</button>'; }).join('') + '</div></div>';
-    else if (ui.custom) custom = '<div class="custom-pick"><button class="theme" data-theme="' + esc(ui.custom.id) + '" aria-pressed="' + (ui.themeId === ui.custom.id) + '"><span class="em">' + esc(ui.custom.emoji) + '</span><b>' + esc(ui.custom.title) + '</b><small>Everyone starts with: ' + esc(ui.custom.base && ui.custom.base.name) +
-      (ui.custom.base && ui.custom.base.blurb ? ' (' + esc(ui.custom.base.blurb) + ')' : '') + '</small><span class="examples">Up for auction: ' + esc((ui.custom.examples || []).slice(0, 6).join(', ')) + '…</span></button></div>';
+    else if (ui.custom) custom = '<div class="custom-pick"><button class="theme" data-theme="' + esc(ui.custom.id) + '" aria-pressed="' + (ui.themeId === ui.custom.id) + '"><span class="em">' + esc(ui.custom.emoji) + '</span><b>' + esc(ui.custom.title) + '</b><small>Bid for your ' + esc(startWord(ui.custom).toLowerCase()) + ' first' +
+      (ui.custom.starts && ui.custom.starts.length ? '. First up: ' + esc(ui.custom.starts.slice(0, 4).join(', ')) + '…' : '') + '</small><span class="examples">Up for auction: ' + esc((ui.custom.examples || []).slice(0, 6).join(', ')) + '…</span></button></div>';
     if (ui.askError) custom += '<div class="error">' + esc(ui.askError) + '</div>';
     var counts = [0, 2, 3, 4, 5, 6].map(function (c) {
       var pressed = c === 0 ? ui.cpu : !ui.cpu && ui.players === c;
@@ -97,9 +100,10 @@
       '<form class="ask" id="ask"><input class="field" id="topic" maxlength="80" placeholder="Or type anything, e.g. Dream bedroom" value="' + esc(ui.customTopic) + '" autocomplete="off"><button aria-label="Use this theme"' + (ui.asking ? ' disabled' : '') + '>→</button></form>' + custom +
       '<div class="eyebrow">Players</div><div class="seg">' + counts + '</div>' +
       '<div class="eyebrow">Budget each</div><div class="seg">' + BUDGETS.map(function (b) { return '<button data-budget="' + b + '" aria-pressed="' + (ui.budget === b) + '">' + money(b) + '</button>'; }).join('') + '</div>' +
+      '<label class="budget-other"><span>Or any amount £</span><input id="budgetOther" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="4" autocomplete="off" placeholder="e.g. 30" value="' + (BUDGETS.indexOf(ui.budget) < 0 ? ui.budget : '') + '"></label>' +
       (ui.error ? '<div class="error">' + esc(ui.error) + '</div>' : '') + '</div>' +
       '<div class="footer"><button class="primary" id="create"' + (ui.busy || ui.asking || ui.ambiguous ? ' disabled' : '') + '>' + (ui.busy ? 'Creating…' : ui.ambiguous ? 'Pick what you meant above' : pendingTopic() ? 'Use “' + esc(pendingTopic().slice(0, 24)) + '”' : ui.cpu ? 'Play ' + esc(t.title) + ' vs CPU' : 'Create ' + esc(t.title) + ' room') + '</button>' +
-      '<div class="hint">' + total + ' auctions · ' + (t.mode === 'property' ? 'first ' + n + ' are houses, one each' : '5 per player') + '</div></div></div>';
+      '<div class="hint">' + total + ' auctions · ' + (hasStarts(t) ? 'first ' + n + ' are ' + esc(startWord(t).toLowerCase()) + 's, one each' : '5 per player') + '</div></div></div>';
   }
   function homeClick(e) {
     var b = e.target.closest('button'); if (!b) return;
@@ -225,7 +229,7 @@
       slots += p ? '<li style="--c:' + p.color + '"><span class="dot"></span><b>' + esc(p.name) + '</b><span class="tag">' + (i === 0 ? 'Host' : p.cpu ? 'Computer' : i === mine ? 'You' : '') + (i === mine && i === 0 ? ' · You' : '') + '</span></li>'
         : '<li class="empty"><span class="dot" style="--c:var(--line-strong)"></span>Waiting for player ' + (i + 1) + '…</li>';
     }
-    var brief = t.mode === 'property' ? 'The first ' + n + ' lots are houses. Everyone ends up with exactly one, then the bidding moves to upgrades.' :
+    var brief = hasStarts(t) ? 'The first ' + n + ' lots are ' + esc(startWord(t).toLowerCase()) + 's. Everyone ends up with exactly one, then the bidding moves to ' + esc(t.label.toLowerCase()) + 's.' :
       'Everyone starts with the same ' + esc(t.base && t.base.name.toLowerCase()) + '. Every ' + esc(t.label.toLowerCase()) + ' you win is added to yours.';
     var link = location.origin + location.pathname + '?room=' + room.code;
     app.innerHTML = '<div class="screen"><div class="bar"><button class="link" data-leave>‹ Leave</button><span class="wordmark">Draft Night</span><span style="width:48px"></span></div><div class="content">' +
@@ -251,18 +255,18 @@
   }
   function placeholder(i) {
     var t = room.theme, p = room.players[i], w = room.worlds[i] || {};
-    if (t.mode === 'property' && p.base === null) return '<span class="em">🏠</span>' + (room.lots[room.lot] && room.lots[room.lot].kind === 'base' ? 'Bidding for a home' : 'No home yet');
+    if (hasStarts(t) && p.base === null) return '<span class="em">' + esc(t.emoji) + '</span>' + (room.lots[room.lot] && room.lots[room.lot].kind === 'base' ? 'Bidding for a ' + esc(startWord(t).toLowerCase()) : 'No ' + esc(startWord(t).toLowerCase()) + ' yet');
     if (w.state === 'none' || w.state === 'error' || (room.base && (room.base.state === 'none' || room.base.state === 'error'))) return ''; // inventory list shown instead
-    return '<span class="em">' + esc(t.emoji) + '</span>' + (t.mode === 'property' ? esc(lotName(p.base)) : esc(t.base && t.base.name));
+    return '<span class="em">' + esc(t.emoji) + '</span>' + (hasStarts(t) ? esc(lotName(p.base)) : esc(t.base && t.base.name));
   }
   function inventory(i) {
     var p = room.players[i], t = room.theme;
-    return '<div class="inv"><b>' + esc(t.mode === 'property' ? lotName(p.base) || 'No home yet' : t.base.name) + '</b>' + p.won.filter(function (x) { return x !== p.base; }).map(function (x) { return '<span>+ ' + esc(lotName(x)) + '</span>'; }).join('') + '</div>';
+    return '<div class="inv"><b>' + esc(hasStarts(t) ? lotName(p.base) || 'No ' + startWord(t).toLowerCase() + ' yet' : t.base.name) + '</b>' + p.won.filter(function (x) { return x !== p.base; }).map(function (x) { return '<span>+ ' + esc(lotName(x)) + '</span>'; }).join('') + '</div>';
   }
   function worldStatus(i) {
     var p = room.players[i], w = room.worlds[i] || {};
     var pending = p.won.length - Math.max(w.v, 0);
-    if (w.state === 'updating' || w.state === 'retrying' || (pending > 0 && w.v >= (room.theme.mode === 'property' ? 1 : 0))) {
+    if (w.state === 'updating' || w.state === 'retrying' || (pending > 0 && w.v >= (hasStarts(room.theme) ? 1 : 0))) {
       var adding = p.won.slice(Math.max(w.v, 0)).filter(function (x) { return x !== p.base; }).map(lotName);
       return adding.length ? 'Adding ' + adding.join(', ') + '…' : '';
     }
@@ -295,7 +299,7 @@
   }
   function updateLot() {
     var a = room.auction, lot = room.lots[room.lot], t = room.theme; if (!lot) return;
-    var kind = lot.kind === 'base' ? 'Home ' + (room.lot + 1) + ' of ' + room.players.length : t.label + ' · Lot ' + (room.lot + 1);
+    var kind = lot.kind === 'base' ? startWord(t) + ' ' + (room.lot + 1) + ' of ' + room.players.length : t.label + ' · Lot ' + (room.lot + 1);
     var leader = a.leader !== null ? room.players[a.leader] : null;
     var priceHtml;
     if (a.phase === 'sold') {
@@ -310,7 +314,7 @@
         '<div class="trail">' + trail() + '</div>';
     }
     var homes = '';
-    if (t.mode === 'property' && lot.kind === 'base' && room.players.length > 1) {
+    if (lot.kind === 'base' && room.players.length > 1) {
       homes = '<div class="homes">' + room.lots.filter(function (l) { return l.kind === 'base'; }).map(function (l, i) {
         var owner = room.players.filter(function (p) { return p.base === i; })[0];
         return '<div class="home' + (i === room.lot ? ' now' : '') + (owner ? ' owned' : '') + '"' + (owner ? ' style="--c:' + owner.color + '"' : '') + '><div class="t">' + (l.img === 'ready' ? '<img alt="" src="' + imgUrl(l.key) + '">' : '') + '</div><span>' + esc(l.name) + '</span><span>' + (owner ? esc(owner.name) : i === room.lot ? 'Now' : i > room.lot ? 'Next' : '') + '</span></div>';
@@ -356,7 +360,7 @@
         (a.leader === null ? '<div class="opening">You open the bidding</div>' : '<button class="pass" data-pass' + (sending ? ' disabled' : '') + '>Pass</button>') + '</div>';
     } else {
       var turn = a.turn !== null ? room.players[a.turn] : null, msg, sub;
-      if (!eligibleMe()) { msg = room.lots[room.lot].kind === 'base' ? 'You already have your home' : 'Sitting this one out'; sub = room.lots[room.lot].kind === 'base' ? 'Everyone gets exactly one house' : ''; }
+      if (!eligibleMe()) { msg = room.lots[room.lot].kind === 'base' ? 'You already have your ' + esc(startWord(room.theme).toLowerCase()) : 'Sitting this one out'; sub = room.lots[room.lot].kind === 'base' ? 'Everyone gets exactly one' : ''; }
       else if (a.leader === mine) { msg = 'You lead at ' + money(a.bid); sub = turn ? esc(turn.name) + ' can raise or pass' : ''; }
       else if (a.passed[mine]) { msg = 'You passed'; sub = p.budget <= a.bid ? 'Not enough left to raise' : turn ? esc(turn.name) + ' is deciding' : ''; }
       else { msg = turn ? esc(turn.name) + '’s turn' : 'Waiting…'; sub = a.leader === null ? (turn ? esc(turn.name) + ' opens the bidding at £1 or more' : '') : 'You’re up next if they raise or pass'; }
@@ -371,7 +375,7 @@
   function eligibleMe() {
     var lot = room.lots[room.lot], p = room.players[me()];
     if (lot.kind === 'base') return p.base === null;
-    return room.theme.mode !== 'property' || p.base !== null;
+    return !hasStarts(room.theme) || p.base !== null;
   }
   function renderGame() {
     if (!built) buildGame();
@@ -406,7 +410,7 @@
     return '<div class="entry" style="--c:' + p.color + '" data-entry="' + i + '"><div class="canvas">' + (showImg ? '<img alt="' + esc(p.name) + '’s ' + esc(t.noun) + '" data-src="' + esc(imgUrl(w.key)) + '">' : inventory(i)) +
       (status && showImg ? '<div class="status">' + esc(status) + '</div>' : '') + '</div>' +
       '<h2><span class="dot"></span>' + esc(p.name) + (i === me() ? ' <span class="muted" style="font-weight:500;font-size:14px">you</span>' : '') + '</h2><div class="spend num">Spent ' + money(spent) + ' · ' + money(p.budget) + ' left</div>' +
-      '<ul>' + (t.mode !== 'property' ? '<li class="basei"><span>' + esc(t.base.name) + '</span><span>Start</span></li>' : '') + (items || '<li><span class="muted">Nothing won</span><span></span></li>') + '</ul></div>';
+      '<ul>' + (!hasStarts(t) ? '<li class="basei"><span>' + esc(t.base.name) + '</span><span>Start</span></li>' : '') + (items || '<li><span class="muted">Nothing won</span><span></span></li>') + '</ul></div>';
   }
   function renderFinal() {
     var many = room.players.length > 2, t = room.theme;
@@ -485,6 +489,7 @@
   });
   app.addEventListener('input', function (e) {
     if (e.target.id === 'name') ui.name = e.target.value;
+    if (e.target.id === 'budgetOther') { var v = parseInt(e.target.value, 10); if (v >= 5 && v <= 1000) { ui.budget = v; store.set('dn-budget', v); document.querySelectorAll('[data-budget]').forEach(function (x) { x.setAttribute('aria-pressed', String(+x.dataset.budget === v)); }); } }
     if (e.target.id === 'topic') { ui.customTopic = e.target.value; var c = $('#create'); if (c && !ui.busy && !ui.asking && !ui.ambiguous) c.textContent = pendingTopic() ? 'Use “' + pendingTopic().slice(0, 24) + '”' : (ui.cpu ? 'Play ' + theme().title + ' vs CPU' : 'Create ' + theme().title + ' room'); }
     if (e.target.id === 'code') ui.joinCode = e.target.value.toUpperCase();
   });

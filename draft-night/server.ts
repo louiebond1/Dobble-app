@@ -4,7 +4,8 @@
 
 type Item = { name: string; blurb: string; visual: string };
 type Mode = 'property' | 'build' | 'collection';
-type Theme = { id: string; title: string; emoji: string; mode: Mode; noun: string; label: string; base: Item | null; scene: string; bases: Item[]; items: Item[]; created: number };
+// bases: the starting options auctioned first (one per player). base: what everyone holds before winning one.
+type Theme = { id: string; title: string; emoji: string; mode: Mode; noun: string; label: string; startLabel: string; base: Item | null; scene: string; bases: Item[]; items: Item[]; created: number };
 type Lot = Item & { kind: 'base' | 'add' };
 type Player = { name: string; color: string; budget: number; won: number[]; base: number | null; cpu: boolean; seen: number };
 type Entry = { p: number; a: number | null; why?: string };
@@ -42,10 +43,15 @@ Lakefront Cabin|A timber cabin on a quiet shore|a small single-storey timber cab
 Contemporary Villa|Clean white lines and big glass doors|a modern two-storey white-rendered villa with flat roofs, large glass sliding doors, a small paved terrace and a neat lawn in a sunny Mediterranean setting
 Large Detached House|Five bedrooms on a leafy avenue|a large but realistic red-brick detached family house with a double garage, a gravel driveway and a mature front garden on a leafy suburban avenue
 Seaside Bungalow|Single storey, sea breeze|a white-painted single-storey bungalow with a blue front door and a small gravel front garden, beside a coastal road with the sea behind
-Converted Barn|Oak beams and a farmyard view|a converted timber-clad barn with a pitched roof, a tall glazed entrance and a gravel courtyard, set among green fields`);
+Converted Barn|Oak beams and a farmyard view|a converted timber-clad barn with a pitched roof, a tall glazed entrance and a gravel courtyard, set among green fields
+Country Manor|Ivy, chimneys and a sweeping drive|a grand Georgian country manor house in honey-coloured stone with tall sash windows, several chimneys and a sweeping gravel drive across a lawn
+Mansion on a Hill|Sweeping views from the top|a large modern white mansion with glass walls and terraces perched on top of a green hill, a winding drive leading up to it
+Beachside House|Steps from the sand|a modern two-storey timber-and-glass beach house right on a sandy beach with dune grass in front and the sea behind
+City Penthouse Building|The top floor is yours|a sleek glass apartment tower photographed from the street, with a penthouse on the top floor and a wide roof edge
+Alpine Chalet|Snowy peaks and a wood burner|a traditional wooden alpine chalet with a steep roof and balconies on a snowy mountain slope with pine trees`);
 
 const PRESETS: Theme[] = [
-  { id: 'house', title: 'Dream House', emoji: '🏡', mode: 'property', noun: 'home', label: 'Upgrade', base: null, scene: 'Eye-level estate-agent photograph from across the street or lawn, showing the whole front of the property and its plot boundaries with a little space around it', bases: HOUSES, created: 0, items: parse(`
+  { id: 'house', title: 'Dream House', emoji: '🏡', mode: 'property', noun: 'home', label: 'Upgrade', startLabel: 'Home', base: null, scene: 'Eye-level estate-agent photograph from across the street or lawn, showing the whole front of the property and its plot boundaries with a little space around it', bases: HOUSES, created: 0, items: parse(`
 Swimming Pool|A sparkling outdoor pool|a rectangular outdoor swimming pool with stone edging in the garden beside the house
 Hot Tub|Bubbles under the stars|a round cedar hot tub with steam rising, on a patio beside the house
 Supercar|Red, loud and Italian|a glossy red Italian supercar parked on the driveway or kerb directly outside the house
@@ -80,8 +86,17 @@ E-bikes|Two bikes, zero sweat|two electric bikes in a bike rack by the front doo
 Yellow Front Door|First impressions count|a glossy bright yellow front door with a brass knocker, replacing the existing front door
 Electric Gates|Very private|black metal electric gates at the entrance to the property
 Rose Arch|Romance at the gate|an arched trellis covered in pink climbing roses over the front path`) },
-  { id: 'pancakes', title: 'Pancakes', emoji: '🥞', mode: 'build', noun: 'pancake stack', label: 'Topping', created: 0, bases: [],
-    base: { name: 'Plain pancake stack', blurb: 'Three plain buttermilk pancakes', visual: 'a plain stack of three golden buttermilk pancakes on a round white ceramic plate, completely plain with nothing on top' },
+  { id: 'pancakes', title: 'Pancakes', emoji: '🥞', mode: 'build', noun: 'breakfast plate', label: 'Topping', startLabel: 'Base', created: 0,
+    base: { name: 'Empty plate', blurb: 'Bid for what goes on it first', visual: 'an empty round white ceramic plate' },
+    bases: parse(`
+Buttermilk Pancakes|A fluffy stack of three|a plain stack of three golden buttermilk pancakes on a round white plate, nothing on top
+Belgian Waffle|Deep pockets for toppings|a plain thick golden Belgian waffle on a round white plate, nothing on top
+French Crêpes|Thin, folded and delicate|two plain thin golden crêpes folded into triangles on a round white plate, nothing on top
+Brioche French Toast|Eggy, golden slices|three plain thick slices of golden brioche French toast stacked on a round white plate, nothing on top
+Japanese Soufflé Pancakes|Tall and wobbly|two tall jiggly Japanese soufflé pancakes on a round white plate, nothing on top
+Dutch Baby|A puffy oven pancake|a plain puffed golden Dutch baby pancake in a small black cast-iron pan on the plate, nothing on top
+Scotch Pancakes|Little thick drop scones|a neat pile of five small plain Scotch pancakes on a round white plate, nothing on top
+Churro Waffle|Cinnamon-sugar crunch|a plain churro waffle dusted with cinnamon sugar on a round white plate, nothing else on top`),
     scene: 'Food photograph on a pale oak table, three-quarter view from slightly above, soft window daylight, the whole plate in frame with space around it', items: parse(`
 Fresh Strawberries|Sweet, sliced, scattered|sliced fresh strawberries scattered over the top of the stack
 Nutella|The chocolate-hazelnut classic|a thick glossy swirl of Nutella chocolate-hazelnut spread across the top pancake
@@ -115,8 +130,18 @@ Butter|Simple perfection|a melting square pat of butter on the top pancake
 Hot Fudge|Thick and molten|hot fudge sauce poured over the top
 Pomegranate Seeds|Jewel-like crunch|ruby pomegranate seeds scattered on top
 Kinder Bueno|Wafer and hazelnut|broken Kinder Bueno bar pieces on top`) },
-  { id: 'burger', title: 'Burgers', emoji: '🍔', mode: 'build', noun: 'burger', label: 'Topping', created: 0, bases: [],
-    base: { name: 'Plain burger', blurb: 'One patty in a plain bun', visual: 'a plain beef burger: one grilled beef patty in a simple sesame-seed bun with nothing else inside' },
+  { id: 'burger', title: 'Burgers', emoji: '🍔', mode: 'build', noun: 'burger', label: 'Topping', startLabel: 'Burger', created: 0,
+    base: { name: 'Empty bun', blurb: 'Bid for what goes inside it first', visual: 'an empty sesame-seed bun' },
+    bases: parse(`
+Beef Burger|A thick grilled beef patty|a burger with one thick grilled beef patty in a plain sesame-seed bun, nothing else inside
+Cheeseburger|Beef with melted cheese|a burger with a grilled beef patty and one slice of melted cheese in a plain sesame-seed bun, nothing else inside
+Chicken Burger|Crispy buttermilk fillet|a burger with one crispy golden fried chicken fillet in a plain sesame-seed bun, nothing else inside
+Veggie Plant Burger|A juicy plant-based patty|a burger with one plant-based veggie patty in a plain sesame-seed bun, nothing else inside
+Double Smash Burger|Two thin crispy patties|a burger with two thin smashed crispy-edged beef patties in a plain sesame-seed bun, nothing else inside
+Lamb Burger|Spiced and juicy|a burger with one spiced lamb patty in a plain sesame-seed bun, nothing else inside
+Fish Burger|Golden battered fillet|a burger with one golden battered fish fillet in a plain sesame-seed bun, nothing else inside
+Halloumi Burger|Two grilled slabs|a burger with two thick slabs of grilled halloumi in a plain sesame-seed bun, nothing else inside`),
+
     scene: 'Food photograph on a dark slate board, eye-level side view so every layer of the burger is visible, warm restaurant lighting, the whole burger in frame', items: parse(`
 Crispy Bacon|Smoky streaky rashers|crispy streaky bacon rashers layered on the patty
 Mature Cheddar|Melted right over the edge|a slice of melted orange cheddar draped over the patty
@@ -141,7 +166,7 @@ Hash Brown|Crispy potato layer|a crispy golden hash brown inside the burger
 Pineapple Ring|Controversial sweetness|a grilled pineapple ring on the patty
 Mac & Cheese|Gloriously messy|a slab of fried mac and cheese inside the burger
 Pulled Pork|Slow-cooked and saucy|a pile of saucy pulled pork on the patty
-Halloumi|Squeaky grilled cheese|a thick slice of grilled halloumi on the patty
+Grilled Halloumi|Squeaky extra cheese|a thick slice of grilled halloumi in the burger
 Ketchup|The essential|ketchup oozing from the burger
 American Mustard|Bright yellow tang|a zigzag of yellow mustard on the patty
 Red Onion|Sharp raw rings|thin rings of raw red onion in the burger
@@ -149,10 +174,20 @@ Fries on the Side|Golden and salted|a pile of golden fries on the board beside t
 Milkshake on the Side|Thick vanilla shake|a tall glass of vanilla milkshake on the board beside the burger
 Chilli Con Carne|Spicy beef topping|a spoonful of chilli con carne spilling over the patty
 Coleslaw|Creamy and crunchy|creamy coleslaw piled on the patty
-Crispy Chicken|Surf the turf|a crispy fried chicken fillet stacked in the burger`) },
-  { id: 'pizza', title: 'Pizza', emoji: '🍕', mode: 'build', noun: 'pizza', label: 'Topping', created: 0, bases: [],
-    base: { name: 'Margherita base', blurb: 'Tomato and mozzarella only', visual: 'a plain round Neapolitan pizza with only tomato sauce and a few melted mozzarella patches, nothing else on it' },
-    scene: 'Overhead flat-lay food photograph of the whole pizza on a wooden pizza peel on a light stone counter, soft daylight', items: parse(`
+Smoked Gouda|Rich and smoky|a melted slice of smoked gouda in the burger`) },
+  { id: 'pizza', title: 'Pizza', emoji: '🍕', mode: 'build', noun: 'pizza', label: 'Topping', startLabel: 'Pizza', created: 0,
+    base: { name: 'Empty peel', blurb: 'Bid for your pizza style first', visual: 'an empty wooden pizza peel' },
+    bases: parse(`
+Neapolitan Margherita|Puffy, charred crust|a round Neapolitan pizza with a puffy charred crust, tomato sauce and a few mozzarella patches only
+Detroit Square|Crispy cheesy edges|a rectangular Detroit-style pizza with crispy caramelised cheese edges, tomato sauce and cheese only
+Chicago Deep Dish|Tall and saucy|a whole Chicago deep-dish pizza in its pan with a tall crust, tomato sauce and cheese only
+New York Pie|Big, thin and foldable|a large thin New York-style pizza with tomato sauce and mozzarella only
+Roman Pinsa|Light and crunchy oval|an oval Roman pinsa with tomato sauce and mozzarella only
+Sicilian Sfincione|Thick and spongy|a thick square Sicilian pizza with tomato sauce and a sprinkle of breadcrumbs only
+White Pizza|No tomato, all cheese|a round white pizza with mozzarella, ricotta and olive oil only, no tomato
+Sourdough Flatbread|Long and blistered|a long blistered sourdough flatbread pizza with tomato sauce and mozzarella only`),
+
+    scene: 'Overhead flat-lay food photograph of the whole pizza on a large wooden pizza peel on a light stone counter, soft daylight', items: parse(`
 Pepperoni|Crispy-edged cups|crispy pepperoni slices spread across the pizza
 Mushrooms|Sliced chestnut mushrooms|sliced chestnut mushrooms scattered across the pizza
 Fresh Basil|Bright green leaves|fresh basil leaves scattered on top
@@ -185,9 +220,17 @@ Spicy Chicken|Tandoori-style pieces|pieces of spicy red chicken across the pizza
 Cracked Egg|A runny centre|a baked egg with a runny yolk in the centre of the pizza
 Stuffed Crust|Cheese in the crust|a fatter stuffed crust with cheese oozing from a cut in the crust edge
 Caramelised Figs|Sweet and jammy|halved caramelised figs across the pizza`) },
-  { id: 'gaming', title: 'Gaming Setup', emoji: '🎮', mode: 'build', noun: 'gaming setup', label: 'Upgrade', created: 0, bases: [],
-    base: { name: 'Basic desk setup', blurb: 'A plain desk, one screen, an office chair', visual: 'a basic gaming setup: a plain white desk with one ordinary 24-inch monitor, a basic black keyboard and mouse, and a plain grey office chair, against a bare white wall in a small room' },
-    scene: 'Wide interior photograph from behind and slightly to the side of the chair, showing the whole desk, the wall above it and the floor around it, evenly lit', items: parse(`
+  { id: 'gaming', title: 'Gaming Setup', emoji: '🎮', mode: 'build', noun: 'gaming setup', label: 'Upgrade', startLabel: 'Setup', created: 0,
+    base: { name: 'Empty room', blurb: 'Bid for your starting setup first', visual: 'an empty small room' },
+    bases: parse(`
+Basic Desk Setup|One screen, an office chair|a basic gaming setup: a plain white desk with one ordinary 24-inch monitor, a basic keyboard and mouse and a plain grey office chair against a bare white wall
+Corner L-Desk|Room to spread out|a black L-shaped corner desk with one monitor, keyboard, mouse and a plain office chair in the corner of a plain room
+Cosy Bedroom Nook|Gaming by the bed|a small wooden desk with one monitor beside a single bed in a cosy plain bedroom, with a simple chair
+Loft Battle Station|Under the eaves|a simple desk with one monitor under a sloping attic ceiling with a skylight, with a plain chair
+Living Room Console Corner|Sofa and a big TV|a plain grey sofa facing a TV on a low white TV unit in a simple living room corner
+Minimalist Studio Desk|Clean wood and white walls|a slim light-oak desk with one monitor and a white chair against a clean white wall with a large window`),
+
+    scene: 'Wide interior photograph from behind and slightly to the side of the seating, showing the whole setup, the wall above it and the floor around it, evenly lit', items: parse(`
 Ultrawide Monitor|A huge curved screen|a huge curved ultrawide monitor replacing the ordinary monitor
 Second Monitor|Double the screens|a second monitor beside the first on the desk
 RGB Light Strips|Glowing everything|glowing purple and blue LED strips along the back of the desk and wall
@@ -220,9 +263,17 @@ Gaming Laptop|A second rig|an open gaming laptop with glowing keys on the side o
 Lava Lamp|Groovy glow|an orange lava lamp glowing on the desk
 Neon Lightning Bolt|Pure vibes|a neon lightning-bolt light glowing on the wall
 Controller Charging Dock|Always topped up|a charging dock with two controllers on the desk`) },
-  { id: 'garage', title: 'Dream Garage', emoji: '🏎️', mode: 'collection', noun: 'garage', label: 'Car', created: 0, bases: [],
-    base: { name: 'Empty garage', blurb: 'A spotless garage with room for the collection', visual: 'an empty, spotless modern private garage with a polished grey concrete floor, white walls and soft overhead strip lighting, with space for several cars' },
-    scene: 'Wide interior photograph from the open garage entrance, the whole garage floor visible, even soft lighting', items: parse(`
+  { id: 'garage', title: 'Dream Garage', emoji: '🏎️', mode: 'collection', noun: 'garage', label: 'Car', startLabel: 'Garage', created: 0,
+    base: { name: 'No garage yet', blurb: 'Bid for your garage first', visual: 'an empty plot' },
+    bases: parse(`
+Modern Double Garage|Polished concrete, bright lights|an empty spotless modern private garage with a polished grey concrete floor, white walls and overhead strip lighting, room for several cars
+Underground Car Vault|Hidden beneath the house|an empty underground concrete car vault with dramatic downlights and a ramp, room for several cars
+Glass Showroom|Cars on display|an empty glass-walled showroom with a glossy white floor and spotlights, room for several cars
+Converted Barn Garage|Oak beams and brick|an empty converted barn with exposed oak beams, brick walls and a flagstone floor, room for several cars
+Racing Pit Garage|Race-day ready|an empty racing pit garage with a grey epoxy floor, tool chests along the walls and bright lights, room for several cars
+Mews Garage|A cobbled London classic|an empty old mews garage with whitewashed brick walls, a cobbled floor and big timber doors open, room for several cars`),
+
+    scene: 'Wide interior photograph from the open entrance, the whole floor visible, even soft lighting', items: parse(`
 Porsche 911|The timeless sports car|a silver Porsche 911 sports car parked in the garage
 Lamborghini Huracán|Wild, bright and loud|a lime-green Lamborghini Huracán parked in the garage
 Ferrari F8|Italian red perfection|a red Ferrari F8 parked in the garage
@@ -279,7 +330,9 @@ function sweep() { const cut = clock() - 8 * 3600e3; for (const [k, r] of rooms)
 // ---------- Auction engine ----------
 const bump = (r: Room) => { r.rev++; };
 const isBaseLot = (r: Room) => r.lots[r.lot]?.kind === 'base';
-function eligible(r: Room, p: number) { return r.status === 'playing' && p >= 0 && p < r.players.length && (isBaseLot(r) ? r.players[p].base === null : r.theme.mode !== 'property' || r.players[p].base !== null); }
+// Themes with starting options auction them first, one per player, before any additions.
+const hasBases = (t: Theme) => t.bases.length > 0;
+function eligible(r: Room, p: number) { return r.status === 'playing' && p >= 0 && p < r.players.length && (isBaseLot(r) ? r.players[p].base === null : !hasBases(r.theme) || r.players[p].base !== null); }
 const eligibleSeats = (r: Room) => r.players.map((_, i) => i).filter(i => eligible(r, i));
 const canAct = (r: Room, p: number) => eligible(r, p) && !r.auction.passed[p] && r.auction.leader !== p;
 const away = (r: Room, p: number) => !r.players[p].cpu && clock() - r.players[p].seen > AWAY_MS;
@@ -377,12 +430,12 @@ function schedule(r: Room) {
 }
 function start(r: Room) {
   const n = r.players.length;
-  r.lots = r.theme.mode === 'property'
+  r.lots = hasBases(r.theme)
     ? [...r.deckBases.slice(0, n).map(x => ({ ...x, kind: 'base' as const })), ...r.deckAdds.slice(0, 4 * n).map(x => ({ ...x, kind: 'add' as const }))]
     : r.deckAdds.slice(0, LOTS_PER_PLAYER * n).map(x => ({ ...x, kind: 'add' as const }));
   r.status = 'playing'; r.lot = 0;
   prefetch(r, r.lots.filter(l => l.kind === 'add').length);
-  r.worlds = r.players.map(() => ({ v: r.theme.mode === 'property' ? -1 : (r.baseImg === 'ready' ? 0 : -1), state: 'idle', busy: false, tries: 0 }));
+  r.worlds = r.players.map(() => ({ v: hasBases(r.theme) ? -1 : (r.baseImg === 'ready' ? 0 : -1), state: 'idle', busy: false, tries: 0 }));
   beginLot(r);
 }
 
@@ -404,13 +457,14 @@ function pump() {
 const imgKey = (r: Room, k: string) => r.code + '/' + k;
 function worldKey(r: Room, p: number, v: number) {
   if (v < 0) return '';
-  if (r.theme.mode === 'property' && v === 1) return 'lot' + r.players[p].won[0];
-  if (r.theme.mode !== 'property' && v === 0) return 'base';
+  if (hasBases(r.theme) && v === 1) return 'lot' + r.players[p].won[0];
+  if (!hasBases(r.theme) && v === 0) return 'base';
   return 'w' + p + '-' + v;
 }
 function lotPrompt(r: Room, it: Item, kind: string) {
   const t = r.theme;
-  if (kind === 'base') return `${t.scene}. The property is ${it.visual}. Show it at its true, modest real-world size: an ordinary home with only what is described. No swimming pool, no hot tub, no cars, no extra buildings, no extended grounds, no luxury additions. Square framing with the whole property visible. ${STYLE}`;
+  if (kind === 'base' && t.mode === 'property') return `${t.scene}. The property is ${it.visual}. Show it exactly as described at its true real-world size, with nothing that is not described: no swimming pool, no hot tub, no cars, no extra buildings or grounds unless described. Square framing with the whole property visible. ${STYLE}`;
+  if (kind === 'base') return `${t.scene}. Subject: ${it.visual}. Show it exactly as described, plain, with nothing added on or around it, leaving space for additions later. Square framing. ${STYLE}`;
   return `Clear photograph of ${it.visual.replace(/ (on|in|beside|across|over|into|outside|by|at|under|above|scattered|draped|layered|piled|replacing|parked|leaning|sitting|standing|strung|fitted|attached|added|clamped|mounted|squeezed|clearly)\b.*$/i, '') || it.name} (${it.name}) as a single isolated subject, centred and filling most of the frame, on a plain softly lit warm-grey background. Square framing. ${STYLE}`;
 }
 function basePrompt(r: Room) {
@@ -424,7 +478,7 @@ function worldPrompt(r: Room, p: number, from: number, to: number, withRef = fal
   const adds = acq.filter(x => x.kind === 'add');
   const already = acq.slice(0, from).filter(x => x.kind === 'add');
   const fresh = acq.slice(from, to).filter(x => x.kind === 'add');
-  const baseName = t.mode === 'property' ? (acq[0]?.name || 'house') : t.base!.name;
+  const baseName = hasBases(t) ? (acq[0]?.name || t.noun) : t.base!.name;
   const lines = fresh.map(x => `- ${x.name}: ${x.visual}.`).join('\n');
   const keep = already.length ? `It already contains these purchased items, which must stay exactly as they are: ${already.map(x => x.name).join(', ')}.` : 'Nothing has been added to it yet.';
   let forbid = 'Do not add anything else that is not listed.';
@@ -476,7 +530,7 @@ function genLot(r: Room, k: string, it: Item, kind: string, pri: number) {
   });
 }
 function genBase(r: Room) {
-  if (r.theme.mode === 'property') return;
+  if (hasBases(r.theme)) return;
   if (!Bun.env.OPENAI_API_KEY) { r.baseImg = 'none'; return; }
   r.baseImg = 'pending';
   enqueue(0, async () => {
@@ -494,7 +548,7 @@ async function ensureWorld(r: Room, p: number) {
   const w = r.worlds[p], pl = r.players[p];
   if (!w || w.busy) return;
   if (!Bun.env.OPENAI_API_KEY) { w.state = 'none'; return; }
-  const property = r.theme.mode === 'property';
+  const property = hasBases(r.theme);
   if (property && pl.base !== null && w.v < 1 && r.lotImg['lot' + pl.base] === 'ready') { w.v = 1; bump(r); }
   if (!property && w.v < 0 && r.baseImg === 'ready') { w.v = 0; bump(r); }
   const target = pl.won.length;
@@ -525,13 +579,13 @@ async function ensureWorld(r: Room, p: number) {
 // Houses and the first few items are drawn while the lobby fills; the rest once the game starts,
 // so abandoned lobbies do not pay for a whole deck of pictures.
 function prefetch(r: Room, adds: number) {
-  if (r.theme.mode === 'property') r.deckBases.slice(0, r.capacity).forEach((it, i) => genLot(r, 'lot' + i, it, 'base', 1 + i / 100));
+  if (hasBases(r.theme)) r.deckBases.slice(0, r.capacity).forEach((it, i) => genLot(r, 'lot' + i, it, 'base', 1 + i / 100));
   r.deckAdds.slice(0, adds).forEach((it, i) => genLot(r, 'add' + i, it, 'add', 2 + i / 100));
 }
 // Lots are assembled at start; map each lot to its prefetched image key.
 function lotImageKey(r: Room, i: number) {
   const n = r.players.length;
-  if (r.theme.mode === 'property') return i < n ? 'lot' + i : 'add' + (i - n);
+  if (hasBases(r.theme)) return i < n ? 'lot' + i : 'add' + (i - n);
   return 'add' + i;
 }
 
@@ -553,7 +607,8 @@ const THEME_SCHEMA = S({
   status: { type: 'string', enum: ['ok', 'ambiguous'] }, question: str,
   options: { type: 'array', items: S({ label: str, topic: str }) },
   title: str, emoji: str, kind: { type: 'string', enum: ['build', 'collection'] }, noun: str, label: str,
-  base_name: str, base_blurb: str, base_visual: str, scene: str,
+  base_name: str, base_blurb: str, base_visual: str, scene: str, start_label: str,
+  bases: { type: 'array', items: S({ name: str, blurb: str, visual: str }) },
   items: { type: 'array', items: S({ name: str, blurb: str, visual: str }) },
 });
 const THEME_SYSTEM = `You set up rounds of Draft Night, a party auction game. Players type a subject; every player starts with the same plain BASE and wins items at auction that visibly change their own version of it. Images of each player's creation are generated from your descriptions, so everything must be concrete and photographable.
@@ -564,31 +619,34 @@ Decide what the subject means:
 
 When ok:
 - kind "build": each player improves ONE object (a pancake stack, a burger, a car, a bedroom, a garden). kind "collection": each player assembles separate things inside one shared container scene (a garage of cars, a football squad on a pitch, a holiday suitcase).
-- base_visual: the plain, minimal starting version, identical for every player (e.g. "a plain stack of three golden pancakes on a white plate, nothing on top"). For a collection, the empty container scene. Never a house unless the subject is about houses.
+- base_name/base_blurb/base_visual: what everyone holds before the first round, e.g. "Empty bun" for burgers or "Empty plate" for pancakes.
+- bases: exactly 8 distinct STARTING OPTIONS that players bid on first (each player wins exactly one), e.g. burgers: Beef Burger, Cheeseburger, Chicken Burger, Veggie Plant Burger; pancakes: Buttermilk Pancakes, Belgian Waffle, French Crêpes; supercars: a garage style. Each visual describes the whole plain starting thing in the scene with nothing added (max 25 words). start_label: one word for these lots (e.g. "Burger", "Base", "Garage"). Never a house unless the subject is about houses.
 - scene: one sentence on camera angle, surface/setting and lighting so the whole base and every addition is visible.
 - noun: 1-3 words for what each player builds (e.g. "pancake stack", "garage"). label: one word for an auction lot (e.g. "Topping", "Upgrade", "Car", "Signing").
-- items: exactly N distinct, real, instantly recognisable things that make sense for THIS subject and can be seen in the picture. Use plain common names people know ("Nutella", "Maple Syrup", "Carbon-Fibre Wheels", "Rooftop Pool"). Mix desirable and cheaper options; one or two may be funny-but-plausible (e.g. "Bacon" on pancakes). Never include unrelated objects, characters, mascots, plush toys, fantasy concepts, buildings unrelated to the subject, or real named people.
+- items: exactly N distinct additions (not starting options), real, instantly recognisable things that make sense for THIS subject and can be seen in the picture. Use plain common names people know ("Nutella", "Maple Syrup", "Carbon-Fibre Wheels", "Rooftop Pool"). Mix desirable and cheaper options; one or two may be funny-but-plausible (e.g. "Bacon" on pancakes). Never include unrelated objects, characters, mascots, plush toys, fantasy concepts, buildings unrelated to the subject, or real named people.
 - blurb: at most 7 natural words. visual: at most 22 words describing what it looks like and exactly where it goes on the base.
 - title: 1-3 words. emoji: one emoji.`;
 async function interpret(topic: string, n: number, confirmed: boolean): Promise<any> {
-  const out = await openaiJSON(THEME_SYSTEM, `Subject: ${JSON.stringify(topic)}\nN = ${n}${confirmed ? '\nThe players have already confirmed this meaning, so status must be "ok".' : ''}`, THEME_SCHEMA, 3600);
+  const out = await openaiJSON(THEME_SYSTEM, `Subject: ${JSON.stringify(topic)}\nN = ${n}${confirmed ? '\nThe players have already confirmed this meaning, so status must be "ok".' : ''}`, THEME_SCHEMA, 4500);
   if (out.status === 'ambiguous' && !confirmed && Array.isArray(out.options) && out.options.length >= 2)
     return { status: 'ambiguous', question: String(out.question || 'What are you building?').slice(0, 120), options: out.options.slice(0, 4).map((o: any) => ({ label: String(o.label).slice(0, 48), topic: String(o.topic).slice(0, 80) })) };
   const seen = new Set<string>();
   const items: Item[] = (Array.isArray(out.items) ? out.items : []).map((x: any) => ({ name: String(x.name || '').trim().slice(0, 32), blurb: String(x.blurb || '').trim().slice(0, 60), visual: String(x.visual || '').trim().slice(0, 200) }))
     .filter((x: Item) => x.name && x.visual && !seen.has(x.name.toLowerCase()) && seen.add(x.name.toLowerCase()));
-  if (items.length < LOTS_PER_PLAYER * 2 || !out.base_visual) throw Error('Could not build that theme. Try describing it a little more.');
+  const clean = (x: any): Item => ({ name: String(x.name || '').trim().slice(0, 32), blurb: String(x.blurb || '').trim().slice(0, 60), visual: String(x.visual || '').trim().slice(0, 220) });
+  const bases = (Array.isArray(out.bases) ? out.bases : []).map(clean).filter((x: Item) => x.name && x.visual && !seen.has(x.name.toLowerCase()) && seen.add(x.name.toLowerCase()));
+  if (items.length < LOTS_PER_PLAYER * 2 || bases.length < 2) throw Error('Could not build that theme. Try describing it a little more.');
   const t: Theme = {
     id: crypto.randomUUID().slice(0, 8), title: String(out.title || topic).slice(0, 28), emoji: String(out.emoji || '✨').slice(0, 4),
     mode: out.kind === 'collection' ? 'collection' : 'build', noun: String(out.noun || topic).slice(0, 24).toLowerCase(), label: String(out.label || 'Lot').slice(0, 14),
-    base: { name: String(out.base_name || 'Starter').slice(0, 32), blurb: String(out.base_blurb || '').slice(0, 60), visual: String(out.base_visual).slice(0, 240) },
-    scene: String(out.scene || 'Clear, evenly lit photograph showing the whole subject').slice(0, 240), bases: [], items, created: clock(),
+    base: { name: String(out.base_name || 'Nothing yet').slice(0, 32), blurb: String(out.base_blurb || '').slice(0, 60), visual: String(out.base_visual || '').slice(0, 240) },
+    startLabel: String(out.start_label || 'Base').slice(0, 14), scene: String(out.scene || 'Clear, evenly lit photograph showing the whole subject').slice(0, 240), bases, items, created: clock(),
   };
   themes.set(t.id, t);
   return { status: 'ok', theme: themeSummary(t) };
 }
 function themeSummary(t: Theme) {
-  return { id: t.id, title: t.title, emoji: t.emoji, mode: t.mode, noun: t.noun, label: t.label, base: t.base && { name: t.base.name, blurb: t.base.blurb }, maxPlayers: Math.min(MAX_PLAYERS, Math.floor(t.items.length / (t.mode === 'property' ? 4 : 5))), examples: t.items.slice(0, 8).map(x => x.name) };
+  return { id: t.id, title: t.title, emoji: t.emoji, mode: t.mode, noun: t.noun, label: t.label, startLabel: t.startLabel, hasBases: hasBases(t), base: t.base && { name: t.base.name, blurb: t.base.blurb }, maxPlayers: Math.min(MAX_PLAYERS, hasBases(t) ? Math.min(t.bases.length, Math.floor(t.items.length / 4)) : Math.floor(t.items.length / 5)), starts: t.bases.slice(0, 8).map(x => x.name), examples: t.items.slice(0, 8).map(x => x.name) };
 }
 async function judge(r: Room) {
   if (!Bun.env.OPENAI_API_KEY) return;
@@ -608,13 +666,13 @@ function view(r: Room) {
   const a = r.auction;
   return {
     code: r.code, rev: r.rev, now: clock(), status: r.status, budget: r.budget, capacity: r.capacity, cpu: r.cpu,
-    theme: { ...themeSummary(r.theme), examples: undefined },
+    theme: { ...themeSummary(r.theme), examples: undefined, starts: undefined },
     players: r.players.map((p, i) => ({ name: p.name, color: p.color, budget: p.budget, won: p.won, base: p.base, cpu: p.cpu, away: r.status === 'playing' && away(r, i) })),
     lots: r.lots.map((l, i) => ({ name: l.name, blurb: l.blurb, kind: l.kind, img: r.lotImg[lotImageKey(r, i)] || 'none', key: lotImageKey(r, i) })),
     lot: r.lot, total: r.status === 'lobby' ? LOTS_PER_PLAYER * r.players.length : r.lots.length,
     auction: { bid: a.bid, leader: a.leader, turn: a.turn, passed: a.passed, phase: a.phase, deadline: a.deadline, log: a.log.slice(-6), result: a.result },
     worlds: r.worlds.map((w, p) => ({ v: w.v, state: w.state, key: worldKey(r, p, w.v) })),
-    base: r.theme.mode === 'property' ? null : { state: r.baseImg },
+    base: hasBases(r.theme) ? null : { state: r.baseImg },
     history: r.history, verdict: r.verdict,
   };
 }
@@ -656,7 +714,7 @@ async function handle(req: Request): Promise<Response> {
     const cpu = Boolean(body.cpu);
     const maxP = themeSummary(theme).maxPlayers;
     const r: Room = {
-      code: newCode(), rev: 1, created: clock(), status: 'lobby', theme, budget: clamp(Math.round(Number(body.budget) || 100), 10, 1000),
+      code: newCode(), rev: 1, created: clock(), status: 'lobby', theme, budget: clamp(Math.round(Number(body.budget) || 100), 5, 1000),
       capacity: cpu ? 2 : clamp(Math.round(Number(body.capacity) || 2), 2, maxP), cpu, players: [], tokens: [],
       deckBases: shuffle(theme.bases), deckAdds: shuffle(theme.items), lots: [], lot: 0,
       auction: { bid: 0, leader: null, turn: null, passed: [], phase: 'bidding', deadline: 0, log: [], result: null },
