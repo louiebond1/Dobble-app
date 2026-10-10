@@ -440,6 +440,26 @@ test('nobody can win more than 5 things, and upcoming lots are never revealed', 
   assert.equal(final.lots.length, 10, 'everything is visible once the game is over');
 });
 
+test('a longer game (more auctions) still caps everyone at 5 and leaves the extra lots unsold', async () => {
+  const env = sandbox({ key: '' });
+  const made = (await env.call('/api/create', { theme: 'burger', name: 'A', capacity: 2, auctionCount: 16, budget: 100 })).body;
+  const j = (await env.call('/api/join', { code: made.code, name: 'B' })).body;
+  await flush();
+  const seats = [made, j];
+  const r = env.qa.rooms.get(made.code);
+  assert.equal((await env.call('/api/action', { code: made.code, player: 0, token: made.token, type: 'start' })).status, 200);
+  assert.equal(r.lots.length, 16);
+  let guard = 0;
+  while (r.status === 'playing' && guard++ < 500) {
+    for (const p of r.players) p.seen = env.now();
+    const a = r.auction;
+    if (a.phase !== 'bidding') { env.advance(3000); await env.call('/api/room?code=' + made.code); continue; }
+    await env.call('/api/action', { code: made.code, player: a.turn, token: seats[a.turn].token, type: a.leader === null ? 'bid' : 'pass', lot: r.lot, seen: a.bid, amount: a.bid + 1 });
+  }
+  same(r.players.map(p => p.won.length), [5, 5]);
+  assert.equal(r.history.filter(h => h.winner === null).length, 6);
+});
+
 test('auth and joining rules', async () => {
   const env = sandbox({ key: '' });
   const made = (await env.call('/api/create', { theme: 'pizza', name: 'Host', capacity: 2 })).body;

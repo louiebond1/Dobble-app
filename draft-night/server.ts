@@ -12,7 +12,7 @@ type Entry = { p: number; a: number | null; why?: string };
 type Auction = { bid: number; leader: number | null; turn: number | null; passed: boolean[]; phase: 'bidding' | 'sold' | 'unsold'; deadline: number; log: Entry[]; result: { winner: number | null; price: number; note: string } | null };
 type World = { v: number; state: string; busy: boolean; tries: number };
 type Room = {
-  code: string; rev: number; created: number; status: 'lobby' | 'playing' | 'finished'; theme: Theme; budget: number; capacity: number; cpu: boolean;
+  code: string; rev: number; created: number; auctionCount: number; status: 'lobby' | 'playing' | 'finished'; theme: Theme; budget: number; capacity: number; cpu: boolean;
   players: Player[]; tokens: string[]; deckBases: Item[]; deckAdds: Item[]; lots: Lot[]; lot: number; auction: Auction;
   history: Array<{ lot: number; winner: number | null; price: number }>; lotImg: Record<string, string>; baseImg: string; imageError: string; worlds: World[]; verdict: string | null;
 };
@@ -332,8 +332,10 @@ const bump = (r: Room) => { r.rev++; };
 const isBaseLot = (r: Room) => r.lots[r.lot]?.kind === 'base';
 // Themes with starting options auction them first, one per player, before any additions.
 const hasBases = (t: Theme) => t.bases.length > 0;
-// Everyone ends with at most LOTS_PER_PLAYER things (their starting option counts as one).
-function eligible(r: Room, p: number) { return r.status === 'playing' && p >= 0 && p < r.players.length && r.players[p].won.length < LOTS_PER_PLAYER && (isBaseLot(r) ? r.players[p].base === null : !hasBases(r.theme) || r.players[p].base !== null); }
+// Nobody wins more than 5 things (starting option included). Fewer lots than 5 per player lowers the cap so they share out evenly;
+// more lots just means more choice, and lots nobody can take any more go unsold.
+const maxWins = (r: Room) => Math.min(LOTS_PER_PLAYER, Math.ceil(r.auctionCount / r.players.length));
+function eligible(r: Room, p: number) { return r.status === 'playing' && p >= 0 && p < r.players.length && r.players[p].won.length < maxWins(r) && (isBaseLot(r) ? r.players[p].base === null : !hasBases(r.theme) || r.players[p].base !== null); }
 const eligibleSeats = (r: Room) => r.players.map((_, i) => i).filter(i => eligible(r, i));
 const canAct = (r: Room, p: number) => eligible(r, p) && !r.auction.passed[p] && r.auction.leader !== p;
 const away = (r: Room, p: number) => !r.players[p].cpu && clock() - r.players[p].seen > AWAY_MS;
@@ -432,8 +434,8 @@ function schedule(r: Room) {
 function start(r: Room) {
   const n = r.players.length;
   r.lots = hasBases(r.theme)
-    ? [...r.deckBases.slice(0, n).map(x => ({ ...x, kind: 'base' as const })), ...r.deckAdds.slice(0, 4 * n).map(x => ({ ...x, kind: 'add' as const }))]
-    : r.deckAdds.slice(0, LOTS_PER_PLAYER * n).map(x => ({ ...x, kind: 'add' as const }));
+    ? [...r.deckBases.slice(0, n).map(x => ({ ...x, kind: 'base' as const })), ...r.deckAdds.slice(0, Math.max(0, r.auctionCount - n)).map(x => ({ ...x, kind: 'add' as const }))]
+    : r.deckAdds.slice(0, r.auctionCount).map(x => ({ ...x, kind: 'add' as const }));
   r.status = 'playing'; r.lot = 0;
   prefetch(r, r.lots.filter(l => l.kind === 'add').length);
   r.worlds = r.players.map(() => ({ v: r.baseImg === 'ready' ? 0 : -1, state: 'idle', busy: false, tries: 0 }));
@@ -683,12 +685,12 @@ function prep(r: Room) {
 function view(r: Room) {
   const a = r.auction;
   return {
-    code: r.code, rev: r.rev, now: clock(), status: r.status, budget: r.budget, capacity: r.capacity, cpu: r.cpu,
+    code: r.code, rev: r.rev, now: clock(), status: r.status, budget: r.budget, capacity: r.capacity, auctionCount: r.auctionCount, maxWins: maxWins(r), cpu: r.cpu,
     theme: { ...themeSummary(r.theme), examples: undefined, starts: undefined },
     players: r.players.map((p, i) => ({ name: p.name, color: p.color, budget: p.budget, won: p.won, base: p.base, cpu: p.cpu, away: r.status === 'playing' && away(r, i) })),
     // Only lots that have already come up are sent, so nobody can peek at what is next.
     lots: r.lots.slice(0, r.lot + 1).map((l, i) => ({ name: l.name, blurb: l.blurb, kind: l.kind, img: r.lotImg[lotImageKey(r, i)] || 'none', key: lotImageKey(r, i) })),
-    lot: r.lot, total: r.status === 'lobby' ? LOTS_PER_PLAYER * r.players.length : r.lots.length,
+    lot: r.lot, total: r.status === 'lobby' ? r.auctionCount : r.lots.length,
     auction: { bid: a.bid, leader: a.leader, turn: a.turn, passed: a.passed, phase: a.phase, deadline: a.deadline, log: a.log.slice(-6), result: a.result },
     worlds: r.worlds.map((w, p) => ({ v: w.v, state: w.state, key: worldKey(r, p, w.v) })),
     base: { state: r.baseImg }, prep: prep(r),
@@ -734,16 +736,17 @@ async function handle(req: Request): Promise<Response> {
     const maxP = themeSummary(theme).maxPlayers;
     const r: Room = {
       code: newCode(), rev: 1, created: clock(), status: 'lobby', theme, budget: clamp(Math.round(Number(body.budget) || 100), 5, 1000),
-      capacity: cpu ? 2 : clamp(Math.round(Number(body.capacity) || 2), 2, maxP), cpu, players: [], tokens: [],
+      capacity: cpu ? 2 : clamp(Math.round(Number(body.capacity) || 2), 2, maxP), auctionCount: 0, cpu, players: [], tokens: [],
       deckBases: shuffle(theme.bases), deckAdds: shuffle(theme.items), lots: [], lot: 0,
       auction: { bid: 0, leader: null, turn: null, passed: [], phase: 'bidding', deadline: 0, log: [], result: null },
       history: [], lotImg: {}, baseImg: 'none', imageError: '', worlds: [], verdict: null,
     };
+    r.auctionCount = clamp(Math.round(Number(body.auctionCount) || r.capacity * LOTS_PER_PLAYER), r.capacity, Math.min(30, (hasBases(theme) ? r.capacity : 0) + theme.items.length));
     rooms.set(r.code, r);
     join(r, cleanName(body.name, 'Player 1'));
     if (cpu) join(r, 'CPU', true);
     // Every picture for the whole game is prepared while the lobby fills; the host starts once they are ready.
-    genBase(r); prefetch(r, r.capacity * (hasBases(theme) ? 4 : LOTS_PER_PLAYER));
+    genBase(r); prefetch(r, r.auctionCount - (hasBases(theme) ? r.capacity : 0));
     return reply({ code: r.code, player: 0, token: r.tokens[0], room: view(r) });
   }
   if (u.pathname === '/api/join' && req.method === 'POST') {
