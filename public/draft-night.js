@@ -101,12 +101,12 @@
       '<form class="ask" id="ask"><input class="field" id="topic" maxlength="80" placeholder="Or type anything, e.g. Dream bedroom" value="' + esc(ui.customTopic) + '" autocomplete="off"><button aria-label="Use this theme"' + (ui.asking ? ' disabled' : '') + '>→</button></form>' + custom +
       '<div class="eyebrow">Players</div><div class="seg">' + counts + '</div>' +
       '<div class="eyebrow">Total auctions</div><div class="seg">' + [0, 12, 16, 20, 24, 30].map(function (c) { return '<button data-auctions="' + c + '" aria-pressed="' + (ui.auctionCount === c) + '">' + (c === 0 ? 'Auto (' + (n * 5) + ')' : c) + '</button>'; }).join('') + '</div>' +
-      '<div class="hint">Maximum 5 wins per player. More auctions means more choice.</div>' +
+      '<div class="hint">Your maximum wins scale with the auction count.</div>' +
       '<div class="eyebrow">Budget each</div><div class="seg">' + BUDGETS.map(function (b) { return '<button data-budget="' + b + '" aria-pressed="' + (ui.budget === b) + '">' + money(b) + '</button>'; }).join('') + '</div>' +
       '<label class="budget-other"><span>Or any amount £</span><input id="budgetOther" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="4" autocomplete="off" placeholder="e.g. 30" value="' + (BUDGETS.indexOf(ui.budget) < 0 ? ui.budget : '') + '"></label>' +
       (ui.error ? '<div class="error">' + esc(ui.error) + '</div>' : '') + '</div>' +
       '<div class="footer"><button class="primary" id="create"' + (ui.busy || ui.asking || ui.ambiguous ? ' disabled' : '') + '>' + (ui.busy ? 'Creating…' : ui.ambiguous ? 'Pick what you meant above' : pendingTopic() ? 'Use “' + esc(pendingTopic().slice(0, 24)) + '”' : ui.cpu ? 'Play ' + esc(t.title) + ' vs CPU' : 'Create ' + esc(t.title) + ' room') + '</button>' +
-      '<div class="hint">' + total + ' auctions · ' + (hasStarts(t) ? 'first ' + n + ' are ' + esc(startWord(t).toLowerCase()) + 's, one each' : 'maximum 5 wins each') + '</div></div></div>';
+      '<div class="hint">' + total + ' auctions · ' + (hasStarts(t) ? 'first ' + n + ' are ' + esc(startWord(t).toLowerCase()) + 's, one each' : Math.ceil(total / n) + ' wins each') + '</div></div></div>';
   }
   function homeClick(e) {
     var b = e.target.closest('button'); if (!b) return;
@@ -238,7 +238,7 @@
     var link = location.origin + location.pathname + '?room=' + room.code;
     app.innerHTML = '<div class="screen"><div class="bar"><button class="link" data-leave>‹ Leave</button><span class="wordmark">Draft Night</span><span style="width:48px"></span></div><div class="content">' +
       '<div class="eyebrow" style="margin-top:12px">Room code</div><div class="code num">' + esc(room.code) + '</div><p class="muted" style="margin:0">Friends open Draft Night, tap Join and enter this code.</p>' +
-      '<div class="eyebrow">Tonight</div><div class="brief"><span class="em">' + esc(t.emoji) + '</span><div><b>' + esc(t.title) + '</b><p>' + brief + '</p><p>' + room.auctionCount + ' auctions · ' + money(room.budget) + ' each</p></div></div>' +
+      '<div class="eyebrow">Tonight</div><div class="brief"><span class="em">' + esc(t.emoji) + '</span><div><b>' + esc(t.title) + '</b><p>' + brief + '</p><p>' + (room.auctionCount || n * 5) + ' auctions · ' + (room.maxWins || 5) + ' wins each · ' + money(room.budget) + ' each</p></div></div>' +
       '<div class="eyebrow">Players ' + n + ' / ' + room.capacity + '</div><ul class="roster">' + slots + '</ul></div>' +
       '<div class="footer">' + (room.cpu ? '' : '<button class="secondary" data-share="' + esc(link) + '">Share invite link</button>') +
       prepHtml() + (host ? startButton(n) : '<div class="hint">' + (prepReady() ? 'Waiting for ' + esc(room.players[0].name) + ' to start' : 'Preparing pictures…') + '</div>') + '</div></div>';
