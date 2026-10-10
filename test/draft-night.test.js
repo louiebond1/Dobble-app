@@ -12,11 +12,15 @@ const { stripTypeScriptTypes } = require('node:module');
 const file = path.join(__dirname, '../draft-night/server.ts');
 const source = fs.readFileSync(file, 'utf8');
 
-function sandbox({ key = 'test-key', ai, image } = {}) {
+function sandbox({ key = 'test-key', ai, image, cf } = {}) {
   let handler, t = 1_000_000;
   const calls = [];
   const fakeFetch = async (url, opts) => {
     calls.push({ url, opts });
+    if (url.includes('/ai/run/')) {
+      if (cf.fail) return new Response('{"errors":[{"code":4006,"message":"daily free allocation used up"}]}', { status: 429 });
+      return Response.json({ result: { image: Buffer.from('cf' + calls.length).toString('base64') }, success: true });
+    }
     if (url.endsWith('/chat/completions')) {
       const body = JSON.parse(opts.body);
       const out = ai ? ai(body) : { verdict: 'Everyone wins.' };
@@ -25,7 +29,8 @@ function sandbox({ key = 'test-key', ai, image } = {}) {
     if (image) await image(url, opts);
     return Response.json({ data: [{ b64_json: Buffer.from('img' + calls.length).toString('base64') }] });
   };
-  const ctx = { Bun: { env: key ? { OPENAI_API_KEY: key } : {}, serve(o) { handler = o.fetch; } }, Response, Request, URL, FormData, Blob, Buffer, crypto, AbortSignal, fetch: fakeFetch, console: { error() {} }, setTimeout: (f, ms) => { const h = setTimeout(f, Math.min(ms, 5)); h.unref(); return h; }, clearTimeout };
+  const vars = { ...(key ? { OPENAI_API_KEY: key } : {}), ...(cf ? { CF_ACCOUNT_ID: 'acc123', CF_API_TOKEN: 'cf-token' } : {}) };
+  const ctx = { Bun: { env: vars, serve(o) { handler = o.fetch; } }, Response, Request, URL, FormData, Blob, Buffer, crypto, AbortSignal, fetch: fakeFetch, console: { error() {} }, setTimeout: (f, ms) => { const h = setTimeout(f, Math.min(ms, 5)); h.unref(); return h; }, clearTimeout };
   vm.runInNewContext(stripTypeScriptTypes(source) + '\nglobalThis.qa={rooms,images,setClock(f){clock=f},worldPrompt,lotPrompt,presetFor,tick};', ctx);
   ctx.qa.setClock(() => t);
   const call = async (p, data) => {
@@ -475,6 +480,39 @@ test('auth and joining rules', async () => {
   assert.equal((await env.call('/api/create', { theme: 'nonsense', name: 'X' })).status, 400);
   const pre = await env.call('/api/presets');
   same(pre.body.presets.map(p => p.id), ['house', 'pancakes', 'burger', 'pizza', 'gaming', 'garage']);
+});
+
+test('pictures come from Cloudflare when it is set up: lot pictures, then edits of the previous picture', async () => {
+  const env = sandbox({ key: '', cf: {} });
+  const g = await setup(env, { theme: 'house', names: ['Ariel', 'Louie'] });
+  const r = g.room();
+  assert.equal((await g.state()).prep.enabled, true, 'pictures are on with only Cloudflare configured');
+  // Ariel wins the first house and the first upgrade, so her picture is edited once.
+  await g.act(0, 'bid', { amount: 3 }); await g.act(1, 'pass'); await g.settle(); await g.settle();
+  while (r.lot < 2) await g.settle();
+  while (r.auction.phase === 'bidding') await g.act(r.auction.turn, r.auction.turn === 0 || r.auction.leader === null ? 'bid' : 'pass', { amount: r.auction.bid + 1 });
+  await flush(); await flush();
+  const cfCalls = env.calls.filter(c => c.url.includes('/ai/run/'));
+  assert.ok(cfCalls.length > 0);
+  assert.equal(env.calls.filter(c => c.url.includes('/images/')).length, 0, 'OpenAI is not used');
+  assert.ok(cfCalls.every(c => c.url === 'https://api.cloudflare.com/client/v4/accounts/acc123/ai/run/@cf/black-forest-labs/flux-2-klein-4b'));
+  assert.equal(cfCalls[0].opts.headers.Authorization, 'Bearer cf-token');
+  const edit = cfCalls.find(c => c.opts.body.get('input_image_0'));
+  assert.ok(edit, 'the world update sends the previous picture');
+  same([edit.opts.body.get('width'), edit.opts.body.get('height')], ['1024', '1024']);
+  assert.equal(r.worlds[0].v, 2);
+  const img = await env.call(`/api/img?code=${g.code}&k=w0-2`);
+  assert.equal(img.status, 200);
+});
+
+test('if Cloudflare fails a picture, OpenAI makes it instead', async () => {
+  const env = sandbox({ cf: { fail: true } });
+  const made = (await env.call('/api/create', { theme: 'pizza', name: 'A', capacity: 2 })).body;
+  await flush(); await flush();
+  const v = (await env.call('/api/room?code=' + made.code)).body;
+  assert.ok(env.calls.some(c => c.url.includes('/ai/run/')), 'Cloudflare was tried first');
+  assert.ok(env.calls.some(c => c.url.endsWith('/images/generations')), 'OpenAI took over');
+  same([v.prep.ready, v.prep.failed], [v.prep.total, 0]);
 });
 
 test('Quick Play: open games are listed, seats are claimed in order, and the host starts for everyone', async () => {

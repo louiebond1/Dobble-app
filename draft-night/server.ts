@@ -524,6 +524,28 @@ async function openaiImage(prompt: string, refs: Uint8Array[], quality: string):
   if (!b64) throw Error('Empty image');
   return Uint8Array.from(Buffer.from(b64, 'base64'));
 }
+// Cloudflare Workers AI (FLUX.2 klein 4B) is used whenever its account and token are set: on the same house and burger
+// chains it kept the house, angle and earlier items at roughly a tenth of OpenAI's price per picture. OpenAI is the fallback.
+const CF_ACCOUNT = env('CF_ACCOUNT_ID', ''), CF_TOKEN = env('CF_API_TOKEN', '');
+const CF_MODEL = env('DRAFT_CF_MODEL', '@cf/black-forest-labs/flux-2-klein-4b');
+const imagesOn = () => Boolean((CF_ACCOUNT && CF_TOKEN) || Bun.env.OPENAI_API_KEY);
+async function cloudflareImage(prompt: string, refs: Uint8Array[]): Promise<Uint8Array> {
+  const body = new FormData();
+  body.append('prompt', prompt); body.append('width', '1024'); body.append('height', '1024');
+  refs.slice(0, 4).forEach((b, i) => body.append('input_image_' + i, new Blob([b as BlobPart], { type: 'image/jpeg' }), 'ref' + i + '.jpg'));
+  const res = await fetch(`${env('CF_API_BASE', 'https://api.cloudflare.com/client/v4')}/accounts/${CF_ACCOUNT}/ai/run/${CF_MODEL}`, { method: 'POST', headers: { Authorization: 'Bearer ' + CF_TOKEN }, body, signal: AbortSignal.timeout(120000) });
+  if (!res.ok) throw Error('Cloudflare image ' + res.status + ' ' + (await res.text()).slice(0, 200));
+  const d = await res.json() as any; const b64 = d.result?.image;
+  if (!b64) throw Error('Empty image');
+  return Uint8Array.from(Buffer.from(b64, 'base64'));
+}
+async function makeImage(prompt: string, refs: Uint8Array[], quality: string): Promise<Uint8Array> {
+  if (CF_ACCOUNT && CF_TOKEN) {
+    try { return await cloudflareImage(prompt, refs); }
+    catch (e) { if (!Bun.env.OPENAI_API_KEY) throw e; console.error('Cloudflare image failed, using OpenAI:', String(e)); }
+  }
+  return openaiImage(prompt, refs, quality);
+}
 // OpenAI answers 429 insufficient_quota when the account has no credit; retrying cannot help.
 const CREDIT_MSG = 'Pictures are unavailable: the OpenAI account behind Draft Night has run out of credit. Add credit at platform.openai.com → Billing.';
 function outOfCredit(r: Room | null, e: unknown) {
@@ -533,10 +555,10 @@ function outOfCredit(r: Room | null, e: unknown) {
 }
 function genLot(r: Room, k: string, it: Item, kind: string, pri: number) {
   if (r.lotImg[k]) return;
-  r.lotImg[k] = Bun.env.OPENAI_API_KEY ? 'pending' : 'none';
-  if (!Bun.env.OPENAI_API_KEY) return;
+  r.lotImg[k] = imagesOn() ? 'pending' : 'none';
+  if (!imagesOn()) return;
   enqueue(pri, async () => {
-    try { images.set(imgKey(r, k), await openaiImage(lotPrompt(r, it, kind), [], kind === 'base' ? WORLD_Q : ITEM_Q)); r.lotImg[k] = 'ready'; }
+    try { images.set(imgKey(r, k), await makeImage(lotPrompt(r, it, kind), [], kind === 'base' ? WORLD_Q : ITEM_Q)); r.lotImg[k] = 'ready'; }
     catch (e) {
       console.error('Lot image failed', String(e));
       if (outOfCredit(r, e)) { r.lotImg[k] = 'error'; bump(r); return; }
@@ -550,10 +572,10 @@ function genLot(r: Room, k: string, it: Item, kind: string, pri: number) {
 }
 function genBase(r: Room) {
   if (!r.theme.base?.visual) return;
-  if (!Bun.env.OPENAI_API_KEY) { r.baseImg = 'none'; return; }
+  if (!imagesOn()) { r.baseImg = 'none'; return; }
   r.baseImg = 'pending';
   enqueue(0, async () => {
-    try { images.set(imgKey(r, 'base'), await openaiImage(basePrompt(r), [], WORLD_Q)); r.baseImg = 'ready'; }
+    try { images.set(imgKey(r, 'base'), await makeImage(basePrompt(r), [], WORLD_Q)); r.baseImg = 'ready'; }
     catch (e) {
       console.error('Base image failed', String(e));
       const n = (retries.get(imgKey(r, 'base')) || 0) + 1; retries.set(imgKey(r, 'base'), n);
@@ -566,7 +588,7 @@ function genBase(r: Room) {
 async function ensureWorld(r: Room, p: number) {
   const w = r.worlds[p], pl = r.players[p];
   if (!w || w.busy) return;
-  if (!Bun.env.OPENAI_API_KEY) { w.state = 'none'; return; }
+  if (!imagesOn()) { w.state = 'none'; return; }
   const property = hasBases(r.theme);
   if (w.v < 0 && r.baseImg === 'ready') { w.v = 0; bump(r); }
   if (property && pl.base !== null && w.v < 1 && r.lotImg['lot' + pl.base] === 'ready') { w.v = 1; bump(r); }
@@ -581,7 +603,7 @@ async function ensureWorld(r: Room, p: number) {
       const refs = [prev];
       const lotRef = images.get(imgKey(r, lotImageKey(r, pl.won[from])));
       if (ITEM_REFERENCE && lotRef && target - from === 1) refs.push(lotRef);
-      const out = await openaiImage(worldPrompt(r, p, from, target, refs.length > 1), refs, WORLD_Q);
+      const out = await makeImage(worldPrompt(r, p, from, target, refs.length > 1), refs, WORLD_Q);
       images.set(imgKey(r, worldKey(r, p, target)), out);
       if (target > w.v) w.v = target;
       w.state = 'ready'; w.tries = 0;
@@ -681,7 +703,7 @@ const fail = (m: string, status = 400) => reply({ error: m }, status);
 
 function prep(r: Room) {
   const states = [...Object.values(r.lotImg), ...(r.theme.base?.visual ? [r.baseImg] : [])].filter(x => x !== 'none');
-  return { total: states.length, ready: states.filter(x => x === 'ready').length, failed: states.filter(x => x === 'error').length, error: r.imageError, enabled: Boolean(Bun.env.OPENAI_API_KEY) };
+  return { total: states.length, ready: states.filter(x => x === 'ready').length, failed: states.filter(x => x === 'error').length, error: r.imageError, enabled: imagesOn() };
 }
 function view(r: Room, me = -1) {
   const a = r.auction;
@@ -746,7 +768,7 @@ async function handle(req: Request): Promise<Response> {
   const u = new URL(req.url);
   if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers: CORS });
   if (u.pathname === '/' || u.pathname === '/index.html') return Response.redirect(CLIENT_URL, 302);
-  if (u.pathname === '/health') return reply({ ok: true, images: Boolean(Bun.env.OPENAI_API_KEY) });
+  if (u.pathname === '/health') return reply({ ok: true, images: imagesOn(), provider: CF_ACCOUNT && CF_TOKEN ? 'cloudflare' : 'openai' });
   const body = req.method === 'POST' ? await req.json().catch(() => ({})) as any : {};
   const room = () => rooms.get(String(u.searchParams.get('code') || body.code || '').toUpperCase());
 
@@ -755,7 +777,7 @@ async function handle(req: Request): Promise<Response> {
     const data = r && images.get(imgKey(r, String(u.searchParams.get('k') || '')));
     return data ? new Response(data as BodyInit, { headers: { ...CORS, 'Content-Type': 'image/jpeg', 'Cache-Control': 'private, max-age=21600, immutable' } }) : new Response('Not ready', { status: 404, headers: CORS });
   }
-  if (u.pathname === '/api/presets') return reply({ presets: PRESETS.map(themeSummary), images: Boolean(Bun.env.OPENAI_API_KEY) });
+  if (u.pathname === '/api/presets') return reply({ presets: PRESETS.map(themeSummary), images: imagesOn() });
   if (u.pathname === '/api/theme' && req.method === 'POST') {
     const topic = String(body.topic || '').replace(/\s+/g, ' ').trim().slice(0, 80);
     if (topic.length < 2) return fail('Tell us what you are building');
