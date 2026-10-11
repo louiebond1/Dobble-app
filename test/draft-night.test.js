@@ -16,7 +16,8 @@ const THEMES = JSON.parse(fs.readFileSync(path.join(__dirname, '../public/draft-
 // rev: share of reverse auctions (duds). Older scenarios script every lot as a normal auction, so it defaults to none.
 // batch: wins per picture edit (live default 2; older scenarios check one edit per win). fallback: allow paid OpenAI fallback.
 // bucket: a Map standing in for the picture library's storage bucket (shared between sandboxes like the real one).
-function sandbox({ key = 'test-key', ai, image, cf, rev = '0', batch = '1', fallback, bucket, admin, broken, cap } = {}) {
+function sandbox({ key = 'test-key', ai, image, cf, rev = '0', batch = '1', fallback, bucket, admin, broken, cap, fallbackCap = 50, check } = {}) {
+  cf = cf ?? (key ? {} : undefined);
   let handler, t = 1_000_000;
   const calls = [];
   const fakeFetch = async (url, opts) => {
@@ -25,21 +26,23 @@ function sandbox({ key = 'test-key', ai, image, cf, rev = '0', batch = '1', fall
     calls.push({ url, opts });
     if (url.includes('/ai/run/')) {
       if (cf.flagged && (!cf.once || calls.filter(c => c.url.includes('/ai/run/')).length === 1)) return Response.json({ errors: [{ code: 3030, message: 'output flagged' }] }, { status: 400 });
-      if (cf.fail) return new Response('{"errors":[{"code":4006,"message":"daily free allocation used up"}]}', { status: 429 });
+      if (cf.fail && !(cf.stronger && url.endsWith('9b'))) return cf.quota ? new Response('{"errors":[{"code":4006,"message":"daily free allocation used up"}]}', { status: 429 }) : new Response('temporary provider failure', { status: 500 });
+      if (image) await image(url, opts);
       return Response.json({ result: { image: Buffer.from('cf' + calls.length).toString('base64') }, success: true });
     }
     if (url.endsWith('/chat/completions')) {
       const body = JSON.parse(opts.body);
+      if (body.response_format?.json_schema?.name === 'creation_check') return Response.json({ usage: { prompt_tokens: 100, completion_tokens: 100 }, choices: [{ message: { content: JSON.stringify(check ? check(body) : { complete: true, missing: [], reason: '' }) } }] });
       const out = ai ? ai(body) : { verdict: 'Everyone wins.' };
-      return Response.json({ choices: [{ message: { content: JSON.stringify(out) } }] });
+      return Response.json({ usage: { prompt_tokens: 100, completion_tokens: 100 }, choices: [{ message: { content: JSON.stringify(out) } }] });
     }
     if (image) await image(url, opts);
     return Response.json({ data: [{ b64_json: Buffer.from('img' + calls.length).toString('base64') }] });
   };
-  const vars = { DRAFT_REVERSE_SHARE: rev, DRAFT_WORLD_BATCH: batch, ...(bucket ? { ART_BUCKET: 'art', ART_KEY_ID: 'id', ART_SECRET: 's', ART_ENDPOINT: 'https://store.test' } : {}), ...(admin ? { DRAFT_ADMIN_KEY: admin } : {}), ...(cap ? { DRAFT_DAILY_PICTURES: String(cap) } : {}), ...(fallback ? { DRAFT_ALLOW_PAID_FALLBACK: '1' } : {}), ...(key ? { OPENAI_API_KEY: key } : {}), ...(cf ? { CF_ACCOUNT_ID: 'acc123', CF_API_TOKEN: 'cf-token' } : {}) };
+  const vars = { DRAFT_REVERSE_SHARE: rev, DRAFT_WORLD_BATCH: batch, ...(bucket ? { ART_BUCKET: 'art', ART_KEY_ID: 'id', ART_SECRET: 's', ART_ENDPOINT: 'https://store.test' } : {}), ...(admin ? { DRAFT_ADMIN_KEY: admin } : {}), ...(cap ? { DRAFT_DAILY_PICTURES: String(cap) } : {}), DRAFT_DAILY_OPENAI_FALLBACKS: String(fallbackCap), DRAFT_ALLOW_PAID_FALLBACK: fallback === false ? '0' : '1', ...(key ? { OPENAI_API_KEY: key } : {}), ...(cf ? { CF_ACCOUNT_ID: 'acc123', CF_API_TOKEN: 'cf-token' } : {}) };
   const S3Client = class { file(k) { return { exists: async () => { if (broken) throw Error('down'); return bucket.has(k); }, arrayBuffer: async () => bucket.get(k).buffer, text: async () => { if (!bucket.has(k)) throw Error('NoSuchKey'); return new TextDecoder().decode(bucket.get(k)); }, write: async (b) => { if (broken) throw Error('down'); bucket.set(k, typeof b === 'string' ? new TextEncoder().encode(b) : new Uint8Array(b)); }, presign: () => 'https://store.test/' + k + '?sig=1' }; } };
   const ctx = { TextEncoder, Bun: { env: vars, S3Client, serve(o) { handler = o.fetch; } }, Response, Request, URL, FormData, Blob, Buffer, crypto, AbortSignal, fetch: fakeFetch, console: { error() {} }, setTimeout: (f, ms) => { const h = setTimeout(f, Math.min(ms, 5)); h.unref(); return h; }, clearTimeout };
-  vm.runInNewContext(stripTypeScriptTypes(source) + '\nglobalThis.qa={rooms,images,setClock(f){clock=f},worldPrompt,lotPrompt,presetFor,tick,fill,makeImage,ready:loadPresets(),PRESETS,themes};', ctx);
+  vm.runInNewContext(stripTypeScriptTypes(source) + '\nglobalThis.qa={rooms,images,setClock(f){clock=f},worldPrompt,lotPrompt,presetFor,tick,fill,makeImage,ensureWorld,openaiJSON,newCost,ready:loadPresets(),PRESETS,themes};', ctx);
   ctx.qa.setClock(() => t);
   const call = async (p, data) => {
     await ctx.qa.ready;
@@ -293,11 +296,11 @@ test('Scenario F: a cottage keeps its identity; only purchased items are request
   assert.ok(prompt.indexOf('swimming pool') > prompt.indexOf('Do not add'));
   assert.ok(!/supercar,/.test(prompt.slice(prompt.indexOf('Do not add'))), 'owned supercar is not forbidden');
   // Image chain: v1 is the exact house photo players bid on; later versions are edits of the previous image.
-  const edits = env.calls.filter(c => c.url.endsWith('/images/edits'));
+  const edits = env.calls.filter(c => c.url.includes('/ai/run/') && c.opts.body.get('input_image_0'));
   assert.ok(edits.length >= 1);
   const first = edits[0].opts.body;
-  assert.equal(first.getAll('image').length, 1, 'only the previous picture is sent (cheapest setting)');
-  assert.equal(first.get('quality'), 'low');
+  assert.equal(first.getAll('input_image_0').length, 1, 'only the previous picture is sent (cheapest setting)');
+  assert.equal(first.get('width'), '1024');
   assert.equal(first.get('input_fidelity'), null);
   assert.equal(r.worlds[0].v, 3);
   const w = await g.state();
@@ -309,7 +312,7 @@ test('Scenario F: a cottage keeps its identity; only purchased items are request
 test('image jobs never let an older picture replace a newer one, and failures keep the last good image', async () => {
   let fail = false;
   const gates = [];
-  const env = sandbox({ image: async (url) => { if (url.endsWith('/edits')) { if (fail) throw new Error('boom'); await new Promise(r => gates.push(r)); } } });
+  const env = sandbox({ image: async (url, opts) => { if (opts.body.get('input_image_0')) { if (fail) throw new Error('boom'); await new Promise(r => gates.push(r)); } } });
   const g = await setup(env, { theme: 'pizza', names: ['A', 'B'] });
   const r = g.room();
   await flush();
@@ -389,6 +392,29 @@ test('Scenario G: auction edge cases', async () => {
   checkInvariants(r, 20);
 });
 
+test('a player with money can buy a normal lot or give it to their broke opponent', async () => {
+  for (const choose of ['bid', 'pass', 'timeout']) {
+    const env = sandbox({ key: '' });
+    const g = await setup(env, { theme: 'garage', budget: 10 });
+    const r = g.room();
+    await g.act(0, 'bid', { amount: 10 }); await g.settle(); await g.settle();
+    assert.equal(r.players[0].budget, 0);
+    assert.equal(r.auction.turn, 1);
+    assert.equal((await g.state()).auction.giveTo, 0);
+    assert.equal((await g.act(0, 'pass')).status, 400, 'broke player cannot choose for their opponent');
+    if (choose === 'timeout') { env.advance(31000); g.touch(); await g.state(); }
+    else assert.equal((await g.act(1, choose, { amount: 1 })).status, 200);
+    assert.equal(r.auction.result.winner, choose === 'bid' ? 1 : 0);
+    assert.equal(r.auction.result.price, choose === 'bid' ? 1 : 0);
+    assert.equal(r.players[1].budget, choose === 'bid' ? 9 : 10);
+    while (r.status === 'playing') {
+      if (r.auction.phase !== 'bidding') { await g.settle(); continue; }
+      await g.act(r.auction.turn, 'bid', { amount: r.auction.bid + 1 });
+    }
+    same(r.players.map(p => p.won.length), [5, 5], 'gifting still respects final quotas');
+  }
+});
+
 test('a house always sells: the opener must bid £1, and the winner gets only one house', async () => {
   const env = sandbox({ key: '' });
   const g = await setup(env, { names: ['A', 'B', 'C'] });
@@ -455,7 +481,7 @@ test('the host cannot start until every picture is ready, and out-of-credit erro
   assert.equal((await env.call('/api/action', { code: made.code, player: 0, token: made.token, type: 'start' })).status, 200);
   void j;
   // No credit: every picture fails at once with a clear reason, and the host may start without them.
-  const broke = sandbox({ image: async () => { throw new Error('Image service 429 {"error":{"type":"insufficient_quota","message":"You have no credits remaining."}}'); } });
+  const broke = sandbox({ fallback: false, image: async () => { throw new Error('Image service 429 {"error":{"type":"insufficient_quota","message":"You have no credits remaining."}}'); } });
   const m2 = (await broke.call('/api/create', { theme: 'pizza', name: 'A', capacity: 2 })).body;
   await broke.call('/api/join', { code: m2.code, name: 'B' }); await flush(); await flush();
   const view = (await broke.call('/api/room?code=' + m2.code)).body;
@@ -548,20 +574,100 @@ test('pictures come from Cloudflare when it is set up: lot pictures, then edits 
   assert.equal(img.status, 200);
 });
 
-test('if Cloudflare fails a picture, OpenAI makes it only when the paid fallback is switched on', async () => {
-  const off = sandbox({ cf: { fail: true } });
+test('game spending stops before unaffordable requests, including parallel failures', async () => {
+  const env = sandbox({cf: {fail:true}, fallback:false});
+  const cost = env.qa.newCost();
+  await Promise.allSettled(Array.from({length:100}, () => env.qa.makeImage('subject', [], 'low', cost)));
+  assert.ok(cost.used <= 58000);
+  assert.equal(env.calls.filter(c=>c.url.includes('/ai/run/')).length, 50);
+  const before=env.calls.length;
+  await assert.rejects(env.qa.makeImage('subject', [], 'low',cost), /Game AI budget reached/);
+  assert.equal(env.calls.length,before,'budget rejection never sends a provider request');
+  await assert.rejects(env.qa.openaiJSON('s','u',{},200,45000,undefined,env.qa.newCost(),'unpriced-model'),/Unpriced text model/);
+});
+
+test('a priced stronger model replaces failed pictures only when fallback is enabled', async () => {
+  const off = sandbox({ cf: { fail: true, quota: true }, fallback: false });
   const m0 = (await off.call('/api/create', { theme: 'pizza', name: 'A', capacity: 2 })).body;
   await flush(); await flush();
   assert.ok(off.calls.some(c => c.url.includes('/ai/run/')));
-  assert.equal(off.calls.filter(c => c.url.includes('/images/')).length, 0, 'no OpenAI spend by default');
+  assert.equal(off.calls.filter(c => c.url.includes('/images/')).length, 0, 'explicitly disabling fallback prevents OpenAI spend');
   assert.ok((await off.call('/api/room?code=' + m0.code)).body.prep.failed > 0);
-  const env = sandbox({ cf: { fail: true }, fallback: true });
+  const env = sandbox({ cf: { fail: true, stronger: true }, fallback: true });
   const made = (await env.call('/api/create', { theme: 'pizza', name: 'A', capacity: 2 })).body;
   await flush(); await flush();
   const v = (await env.call('/api/room?code=' + made.code)).body;
   assert.ok(env.calls.some(c => c.url.includes('/ai/run/')), 'Cloudflare was tried first');
-  assert.ok(env.calls.some(c => c.url.endsWith('/images/generations')), 'OpenAI took over');
-  same([v.prep.ready, v.prep.failed], [v.prep.total, 0]);
+  assert.ok(env.calls.some(c => c.url.endsWith('9b')), 'stronger model was attempted');
+  assert.equal(env.calls.filter(c => c.url.includes('/images/')).length, 0, 'variable-price image API is never called');
+  assert.ok(v.prep.failed > 0, 'unaffordable retries stop at the game budget');
+  assert.ok(v.cost.used <= v.cost.limit);
+});
+
+test('provider spending ceiling survives a restart and failed requests are charged', async () => {
+  const bucket = new Map();
+  const env = sandbox({ cf: { fail: true, stronger: true }, bucket, cap: 20 });
+  const made = (await env.call('/api/create', { theme: 'garage', name: 'A', capacity: 2 })).body;
+  await flush(); await flush();
+  const view = (await env.call('/api/room?code=' + made.code)).body;
+  assert.ok(view.cost.used <= 58000);
+  const again = sandbox({ cf: {}, bucket, cap: 20 });
+  const day = new Date(env.now()).toISOString().slice(0, 10);
+  const before = JSON.parse(new TextDecoder().decode(bucket.get('meta/usage-' + day + '.json'))).cfMicros;
+  assert.ok(before > 15000, 'failed and stronger attempts both charged');
+  for (let i = 0; i < 30; i++) { try { await again.qa.makeImage('another image', [], 'low'); } catch (e) { assert.match(String(e), /Cloudflare cost limit/); break; } }
+  const after = JSON.parse(new TextDecoder().decode(bucket.get('meta/usage-' + day + '.json'))).cfMicros;
+  assert.ok(after >= before && after <= 20 * 1384);
+  assert.ok(again.calls.filter(c => c.url.includes('/ai/run/')).length < 24, 'restart keeps the earlier spend');
+});
+
+test('an incomplete final collection is repaired with bounded stronger generation and checked again', async () => {
+  let checks = 0;
+  const env = sandbox({ check: () => ++checks === 1 ? { complete: false, missing: ['Porsche 911'], reason: 'one car missing' } : { complete: true, missing: [], reason: '' } });
+  const g = await setup(env, { theme: 'garage' });
+  const r = g.room();
+  r.players[0].won = [0, 2, 4, 6, 8]; r.players[0].base = 0; r.worlds[0].v = 1;
+  await env.qa.ensureWorld(r, 0); await flush(); await flush();
+  assert.equal(checks, 2, 'both initial picture and repaired picture checked');
+  const repair = env.calls.filter(c => c.url.includes('/ai/run/') && c.opts.body.get('input_image_0')).at(-1).opts.body;
+  assert.ok(env.calls.some(c => c.url.endsWith('9b')), 'stronger repair model used');
+  assert.match(repair.get('prompt'), /one car missing/);
+  assert.equal(r.worlds[0].v, 5);
+  assert.equal(r.worlds[0].state, 'ready');
+});
+
+test('a final breakfast image with missing sardines or invented pancakes is rejected', async () => {
+  const env=sandbox({check:()=>({complete:false,missing:['Sardines'],reason:'Invented pancakes; sardines missing'})});
+  const g=await setup(env,{theme:'pancakes'}),r=g.room();
+  r.players[0].won=[0,2,4,6,8];r.players[0].base=0;r.worlds[0].v=1;
+  await env.qa.ensureWorld(r,0);await flush();await flush();
+  assert.equal(r.worlds[0].v,1,'neither incorrect image is published');
+  assert.equal(r.worlds[0].state,'error');
+  assert.equal(r.players[0].won.length,5,'all actual purchases remain in inventory');
+  const check=env.calls.find(c=>c.url.endsWith('/chat/completions')&&JSON.parse(c.opts.body).response_format.json_schema.name==='creation_check');
+  assert.match(JSON.parse(check.opts.body).messages[0].content,/Reject invented extras/);
+});
+
+test('garage edits use the original garage and the full inventory on every update', async () => {
+  const env = sandbox();
+  const g = await setup(env, { theme: 'garage' });
+  const r = g.room();
+  r.players[0].won = [0, 2, 4, 6, 8]; r.players[0].base = 0;
+  r.players[1].won = [1, 3, 5, 7, 9]; r.players[1].base = 1;
+  r.worlds[0].v = 3;
+  env.qa.images.set(g.code + '/w0-3', new Uint8Array([99]));
+  await env.qa.ready;
+  const prompt = env.qa.worldPrompt(r, 0, 3, 5, false);
+  for (const i of [2, 4, 6, 8]) assert.ok(prompt.includes(r.lots[i].name + ':'), 'all purchases, including earlier cars, are explicitly drawn');
+  for (const i of [3, 5, 7, 9]) assert.ok(!prompt.includes(r.lots[i].name + ':'), 'no opponent purchases');
+  assert.match(prompt, /exactly 4 purchased additions/);
+  assert.match(prompt, /widen the view/);
+  assert.ok(!prompt.includes('every existing element identical'), 'collection can make room for every purchase');
+  await env.qa.ensureWorld(r, 0); await flush();
+  const edit = env.calls.filter(c => c.url.includes('/ai/run/') && c.opts.body.get('input_image_0')).at(-1);
+  assert.ok(edit, 'real collection pipeline made an edit');
+  const sent = new Uint8Array(await edit.opts.body.get('input_image_0').arrayBuffer());
+  same(Array.from(sent), Array.from(env.qa.images.get(g.code + '/lot0')), 'reference is the original garage, not the partial image');
 });
 
 test('Quick Play: open games are listed, seats are claimed in order, and the host starts for everyone', async () => {
@@ -1006,7 +1112,7 @@ test('picture library prefill: admin only, fills each preset once, stops at the 
   for (let i = 0; i < 80 && env.qa.fill.running; i++) await flush();
   same([env.qa.fill.had, pics(bucket)], [pictureTotal('burger'), pictureTotal('burger') + 40], 'max 40 per run by default');
   // Cloudflare's allowance runs out: the run stops and reports why.
-  const broke = sandbox({ key: '', cf: { fail: true }, bucket: new Map(), admin: 'sekret' });
+  const broke = sandbox({ key: '', cf: { fail: true, quota: true }, fallback: false, bucket: new Map(), admin: 'sekret' });
   await broke.call('/api/prefill', { key: 'sekret', themes: ['pizza'] });
   for (let i = 0; i < 20 && broke.qa.fill.running; i++) await flush();
   same([broke.qa.fill.made, broke.qa.fill.failed], [0, 1]);
@@ -1016,20 +1122,20 @@ test('picture library prefill: admin only, fills each preset once, stops at the 
 
 test('flagged Cloudflare output gets exactly one reworded retry and no paid fallback', async () => {
   const prompt = 'A camper van parked beside a country cottage. Photorealistic, natural light, crisp detail, consistent colour grading. No text, captions, labels, logos, watermarks or people.';
-  const ok = sandbox({ key: '', cf: { flagged: true, once: true }, bucket: new Map(), cap: 1 });
+  const ok = sandbox({ key: '', cf: { flagged: true, once: true }, bucket: new Map(), cap: 2, fallback: false });
   await ok.qa.makeImage(prompt, [], 'low');
   assert.equal(ok.calls.filter(c => c.url.includes('/ai/run/')).length, 2);
   const wording = ok.calls[1].opts.body.get('prompt');
   assert.notEqual(wording, prompt);
   assert.ok(wording.includes('camper van parked beside a country cottage'), 'keeps the actual subject and placement');
   assert.equal(ok.calls.filter(c => c.url.includes('/images/')).length, 0);
-  await assert.rejects(ok.qa.makeImage(prompt, [], 'low'), /Daily picture limit/);
-  const refused = sandbox({ key: '', cf: { flagged: true }, bucket: new Map(), cap: 1 });
+  await assert.rejects(ok.qa.makeImage(prompt, [], 'low'), /Cloudflare cost limit/);
+  const refused = sandbox({ key: '', cf: { flagged: true }, bucket: new Map(), cap: 2, fallback: false });
   await assert.rejects(refused.qa.makeImage(prompt, [], 'low'), /3030/);
   assert.equal(refused.calls.filter(c => c.url.includes('/ai/run/')).length, 2, 'a repeated refusal stops');
   assert.equal(refused.calls.filter(c => c.url.includes('/images/')).length, 0);
   refused.calls.length = 0;
-  await assert.rejects(refused.qa.makeImage(prompt, [], 'low'), /3030/, 'failed pictures refund their cap slot');
+  await assert.rejects(refused.qa.makeImage(prompt, [], 'low'), /Cloudflare cost limit/, 'failed requests still consume spending allowance');
 });
 
 test('daily picture cap: stops at the limit, survives a restart, resets the next day, and explains itself', async () => {
@@ -1042,7 +1148,8 @@ test('daily picture cap: stops at the limit, survives a restart, resets the next
   same([v.prep.ready, v.prep.failed], [5, 6]);
   assert.match(v.prep.error, /picture allowance is used up/);
   const day = new Date(env.now()).toISOString().slice(0, 10);
-  assert.equal(new TextDecoder().decode(bucket.get('meta/usage-' + day + '.json')), '{"n":5}');
+  const saved = JSON.parse(new TextDecoder().decode(bucket.get('meta/usage-' + day + '.json')));
+  assert.equal(saved.n, 5); assert.ok(saved.cfMicros > 0);
   // A restarted server reads today's count from the library and makes nothing more.
   const again = sandbox({ key: '', cf: {}, bucket, cap: 5 });
   await again.call('/api/create', { theme: 'pizza', name: 'A', capacity: 2 }); await flush(); await flush();
@@ -1055,7 +1162,7 @@ test('daily picture cap: stops at the limit, survives a restart, resets the next
 });
 
 test("Cloudflare's free allowance running out is explained once instead of retried", async () => {
-  const env = sandbox({ key: '', cf: { fail: true } });
+  const env = sandbox({ key: '', cf: { fail: true, quota: true }, fallback: false });
   const made = (await env.call('/api/create', { theme: 'pizza', name: 'A', capacity: 2 })).body;
   await flush(); await flush();
   const v = (await env.call('/api/room?code=' + made.code)).body;
