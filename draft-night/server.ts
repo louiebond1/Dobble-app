@@ -64,11 +64,11 @@ Electricity Pylon|Buzzing all night|a tall grey steel electricity pylon with sag
 Overflowing Bins|The foxes love them|three overflowing wheelie bins with split rubbish bags spilling across the front path
 Burnt-out Car|Not going anywhere|a burnt-out rusty car shell on bricks on the driveway
 Weed Jungle|Brambles everywhere|overgrown brambles, nettles and waist-high weeds swallowing the whole garden`), items: parse(`
-Swimming Pool|A sparkling outdoor pool|a rectangular outdoor swimming pool with stone edging in the garden beside the house
+Swimming Pool|A sparkling outdoor pool|a small rectangular swimming pool with stone edging, shorter than the house is wide, in the back garden behind the house
 Hot Tub|Bubbles under the stars|a round cedar hot tub with steam rising, on a patio beside the house
 Supercar|Red, loud and Italian|a glossy red Italian supercar parked on the driveway or kerb directly outside the house
 Paddleboard|For calm-water mornings|a turquoise stand-up paddleboard and paddle leaning against the front wall of the house
-Outdoor Kitchen|Grill, pizza oven and bar stools|a stone outdoor kitchen with a grill, a dome pizza oven and two bar stools on a patio beside the house
+Outdoor Kitchen|Grill, pizza oven and bar stools|a small stone outdoor kitchen counter with a grill and a dome pizza oven on a paved patio right against the back wall of the house, clearly visible
 Landscaped Garden|Lush planting and stone paths|lush landscaped flower beds, clipped box hedges and a stone path, replacing the plain planting within the existing plot
 Treehouse|Every kid's dream (and yours)|a wooden treehouse with a rope ladder in a tree beside the house
 Home Cinema|Huge screen, reclining seats|a home cinema with a huge glowing screen and red reclining seats, clearly visible through a large ground-floor window
@@ -77,26 +77,26 @@ Rooftop Terrace|Loungers with a view|a rooftop terrace with a glass balustrade, 
 Luxury Garage|Sleek glass-fronted garage|a modern single garage with a sleek glass door attached to the side of the house
 Classic Mini|A 1960s British icon|a classic 1960s Mini Cooper in British racing green with a white roof parked outside the house
 Campervan|Weekends, sorted|a two-tone orange and white vintage VW campervan parked outside the house
-Trampoline|Bounce off the stress|a round garden trampoline with a black safety net beside the house
+Trampoline|Bounce off the stress|a small round garden trampoline with a black safety net on the back lawn
 Fire Pit|Marshmallow nights|a stone fire pit with low flames surrounded by four wooden Adirondack chairs beside the house
 Greenhouse|Grow your own tomatoes|a small Victorian-style glass greenhouse beside the house
 Garden Office|The shortest commute|a small modern timber garden office pod with a glass front beside the house
 Solar Panels|Free sunshine|a neat array of black solar panels fitted on the roof
 Golden Retriever|Best friend included|a happy golden retriever sitting on the front step
 Basketball Hoop|Shoot hoops on the drive|a basketball hoop on a black pole beside the driveway or front path
-Pergola & Lights|Golden-hour dinners|a wooden pergola strung with warm festoon lights over a small dining table beside the house
-Koi Pond|Calm, colourful fish|a small koi pond with orange fish and lily pads in front of the house
-Tennis Court|Your own Centre Court|a green hard tennis court with a net squeezed in beside the house
+Pergola & Lights|Golden-hour dinners|a small freestanding wooden pergola, smaller than a car, strung with festoon lights over a dining table on the back lawn, a few metres away from the house and not touching it
+Koi Pond|Calm, colourful fish|a small round koi pond, about the size of a car, with orange fish and lily pads in one corner of the front garden
+Putting Green|Practise your short game|a small artificial-grass putting green with one red flag, about the size of a car, on the back lawn
 Sauna Cabin|Scandinavian steam|a small barrel-shaped cedar sauna beside the house
 Hammock|Do absolutely nothing|a striped rope hammock strung between two posts beside the house
-Helipad|Arrive in style|a small circular helipad marked with a white H next to the house, with a small white helicopter on it
-Climbing Frame|Swings and a slide|a wooden climbing frame with two swings and a slide beside the house
+Beehives|Your own honey|two white wooden beehives at the far end of the back garden
+Climbing Frame|Swings and a slide|a small wooden climbing frame with two swings and a slide on the back lawn
 Chicken Coop|Fresh eggs every morning|a wooden chicken coop with three brown hens pecking around it beside the house
-Water Slide|Pure summer chaos|a bright blue twisting inflatable water slide on the lawn beside the house
+Water Slide|Pure summer chaos|a small bright blue inflatable water slide, smaller than a car, on the back lawn
 Speedboat|Ready for the water|a white speedboat on a trailer parked beside the house
 E-bikes|Two bikes, zero sweat|two electric bikes in a bike rack by the front door
 Yellow Front Door|First impressions count|a glossy bright yellow front door with a brass knocker, replacing the existing front door
-Electric Gates|Very private|black metal electric gates at the entrance to the property
+Electric Gates|Very private|a pair of black metal gates across the driveway entrance only, with no new walls or fences added
 Rose Arch|Romance at the gate|an arched trellis covered in pink climbing roses over the front path`) },
   { id: 'pancakes', title: 'Pancakes', emoji: '🥞', mode: 'build', noun: 'breakfast plate', label: 'Topping', startLabel: 'Base', created: 0,
     base: { name: 'Empty plate', blurb: 'Bid for what goes on it first', visual: 'an empty round white ceramic plate' },
@@ -704,7 +704,7 @@ function worldPrompt(r: Room, p: number, from: number, to: number, withRef = fal
     const owned = adds.map(x => (x.name + ' ' + x.visual).toLowerCase()).join(' ');
     // A shed, office or caravan they own is an outbuilding, so outbuildings are not forbidden then.
     const missing = LUXURIES.filter(l => !owned.includes(l.split(' ')[0]) && !(l === 'outbuildings' && /shed|office|sauna|greenhouse|coop|caravan/.test(owned)));
-    forbid = `Do not enlarge the house or its plot and do not change its architecture. Do not add: ${missing.join(', ')}, or any other feature that is not listed above.`;
+    forbid = `Show each new item at its true real-world size next to the house; it must not cover, overlap or replace any part of the house. Do not enlarge the house or its plot and do not change its architecture. Do not add: ${missing.join(', ')}, or any other feature that is not listed above.`;
   } else if (t.mode === 'build') forbid = `Do not add any other toppings, ingredients, accessories or objects. Keep the ${t.noun} the same size and shape.`;
   else forbid = 'Do not add any other items. Do not remove, move or restyle the items already there.';
   return `Edit this photograph of a ${t.mode === 'property' ? baseName.toLowerCase() : t.noun} (${baseName}). Keep the camera angle, framing, lighting, background and every existing element identical. ${keep}\nAdd ONLY the following newly purchased item${fresh.length > 1 ? 's' : ''}, each clearly recognisable and naturally placed:\n${lines}\n${forbid} ${withRef ? 'The second image is a reference photo of the purchased item: reproduce that item, not its background.' : ''} ${STYLE}`.trim();
@@ -747,7 +747,24 @@ async function cloudflareImage(prompt: string, refs: Uint8Array[]): Promise<Uint
   if (!b64) throw Error('Empty image');
   return Uint8Array.from(Buffer.from(b64, 'base64'));
 }
+// Hard daily cap on pictures made (DRAFT_DAILY_PICTURES), across games and prefill. The count lives in the picture
+// library, so the server sleeping or restarting does not reset it. Past the cap, games carry on with item lists.
+const DAILY = Number(env('DRAFT_DAILY_PICTURES', '300'));
+let usage = { day: '', n: 0, ready: Promise.resolve() };
+async function spend() {
+  const day = new Date(clock()).toISOString().slice(0, 10), f = 'meta/usage-' + day + '.json';
+  if (usage.day !== day) {
+    const u = { day, n: 0, ready: Promise.resolve() };
+    u.ready = ART ? ART.file(f).text().then(t => { u.n += Number(JSON.parse(t).n) || 0; }, () => {}) : u.ready;
+    usage = u;
+  }
+  const u = usage; await u.ready;
+  if (u.n >= DAILY) throw Error('Daily picture limit reached');
+  u.n++;
+  if (ART) await ART.file(f).write(JSON.stringify({ n: u.n })).catch(() => {});
+}
 async function makeImage(prompt: string, refs: Uint8Array[], quality: string): Promise<Uint8Array> {
+  await spend();
   if (CF_ACCOUNT && CF_TOKEN) {
     try { return await cloudflareImage(prompt, refs); }
     catch (e) {
@@ -762,9 +779,11 @@ async function makeImage(prompt: string, refs: Uint8Array[], quality: string): P
 }
 // OpenAI answers 429 insufficient_quota when the account has no credit; retrying cannot help.
 const CREDIT_MSG = 'Pictures are unavailable: the OpenAI account behind Draft Night has run out of credit. Add credit at platform.openai.com → Billing.';
+// Limits that retrying cannot fix today: our own daily cap and Cloudflare's free daily allowance.
+const LIMIT_MSG = "Today's picture allowance is used up, so this game shows item lists instead of pictures. It resets at midnight (UTC).";
 function outOfCredit(r: Room | null, e: unknown) {
-  const hit = /insufficient_quota|no credits remaining|billing/i.test(String(e));
-  if (hit && r) { r.imageError = CREDIT_MSG; bump(r); }
+  const s = String(e), limit = /Daily picture limit|daily free allocation/i.test(s), hit = limit || /insufficient_quota|no credits remaining|billing/i.test(s);
+  if (hit && r) { r.imageError = limit ? LIMIT_MSG : CREDIT_MSG; bump(r); }
   return hit;
 }
 function genLot(r: Room, k: string, it: Item, kind: string, pri: number) {
@@ -998,7 +1017,7 @@ async function handle(req: Request): Promise<Response> {
   const u = new URL(req.url);
   if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers: CORS });
   if (u.pathname === '/' || u.pathname === '/index.html') return Response.redirect(CLIENT_URL, 302);
-  if (u.pathname === '/health') return reply({ ok: true, images: imagesOn(), provider: CF_ACCOUNT && CF_TOKEN ? 'cloudflare' : 'openai', sharedArtCount: sharedArt.size, worldBatch: WORLD_BATCH, library: Boolean(ART), variants: VARIANTS });
+  if (u.pathname === '/health') return reply({ ok: true, images: imagesOn(), provider: CF_ACCOUNT && CF_TOKEN ? 'cloudflare' : 'openai', sharedArtCount: sharedArt.size, worldBatch: WORLD_BATCH, library: Boolean(ART), variants: VARIANTS, pictures: { day: usage.day, made: usage.n, cap: DAILY } });
   const body = req.method === 'POST' ? await req.json().catch(() => ({})) as any : {};
   const room = () => rooms.get(String(u.searchParams.get('code') || body.code || '').toUpperCase());
 

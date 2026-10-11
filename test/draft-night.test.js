@@ -15,7 +15,7 @@ const source = fs.readFileSync(file, 'utf8');
 // rev: share of reverse auctions (duds). Older scenarios script every lot as a normal auction, so it defaults to none.
 // batch: wins per picture edit (live default 2; older scenarios check one edit per win). fallback: allow paid OpenAI fallback.
 // bucket: a Map standing in for the picture library's storage bucket (shared between sandboxes like the real one).
-function sandbox({ key = 'test-key', ai, image, cf, rev = '0', batch = '1', fallback, bucket, admin, broken } = {}) {
+function sandbox({ key = 'test-key', ai, image, cf, rev = '0', batch = '1', fallback, bucket, admin, broken, cap } = {}) {
   let handler, t = 1_000_000;
   const calls = [];
   const fakeFetch = async (url, opts) => {
@@ -32,8 +32,8 @@ function sandbox({ key = 'test-key', ai, image, cf, rev = '0', batch = '1', fall
     if (image) await image(url, opts);
     return Response.json({ data: [{ b64_json: Buffer.from('img' + calls.length).toString('base64') }] });
   };
-  const vars = { DRAFT_REVERSE_SHARE: rev, DRAFT_WORLD_BATCH: batch, ...(bucket ? { ART_BUCKET: 'art', ART_KEY_ID: 'id', ART_SECRET: 's', ART_ENDPOINT: 'https://store.test' } : {}), ...(admin ? { DRAFT_ADMIN_KEY: admin } : {}), ...(fallback ? { DRAFT_ALLOW_PAID_FALLBACK: '1' } : {}), ...(key ? { OPENAI_API_KEY: key } : {}), ...(cf ? { CF_ACCOUNT_ID: 'acc123', CF_API_TOKEN: 'cf-token' } : {}) };
-  const S3Client = class { file(k) { return { exists: async () => { if (broken) throw Error('down'); return bucket.has(k); }, arrayBuffer: async () => bucket.get(k).buffer, write: async (b) => { if (broken) throw Error('down'); bucket.set(k, new Uint8Array(b)); }, presign: () => 'https://store.test/' + k + '?sig=1' }; } };
+  const vars = { DRAFT_REVERSE_SHARE: rev, DRAFT_WORLD_BATCH: batch, ...(bucket ? { ART_BUCKET: 'art', ART_KEY_ID: 'id', ART_SECRET: 's', ART_ENDPOINT: 'https://store.test' } : {}), ...(admin ? { DRAFT_ADMIN_KEY: admin } : {}), ...(cap ? { DRAFT_DAILY_PICTURES: String(cap) } : {}), ...(fallback ? { DRAFT_ALLOW_PAID_FALLBACK: '1' } : {}), ...(key ? { OPENAI_API_KEY: key } : {}), ...(cf ? { CF_ACCOUNT_ID: 'acc123', CF_API_TOKEN: 'cf-token' } : {}) };
+  const S3Client = class { file(k) { return { exists: async () => { if (broken) throw Error('down'); return bucket.has(k); }, arrayBuffer: async () => bucket.get(k).buffer, text: async () => { if (!bucket.has(k)) throw Error('NoSuchKey'); return new TextDecoder().decode(bucket.get(k)); }, write: async (b) => { if (broken) throw Error('down'); bucket.set(k, typeof b === 'string' ? new TextEncoder().encode(b) : new Uint8Array(b)); }, presign: () => 'https://store.test/' + k + '?sig=1' }; } };
   const ctx = { TextEncoder, Bun: { env: vars, S3Client, serve(o) { handler = o.fetch; } }, Response, Request, URL, FormData, Blob, Buffer, crypto, AbortSignal, fetch: fakeFetch, console: { error() {} }, setTimeout: (f, ms) => { const h = setTimeout(f, Math.min(ms, 5)); h.unref(); return h; }, clearTimeout };
   vm.runInNewContext(stripTypeScriptTypes(source) + '\nglobalThis.qa={rooms,images,setClock(f){clock=f},worldPrompt,lotPrompt,presetFor,tick,fill};', ctx);
   ctx.qa.setClock(() => t);
@@ -876,26 +876,27 @@ test('pictures are edited two wins at a time by default, and every win is in the
   }
 });
 
+const pics = bucket => [...bucket.keys()].filter(k => k.startsWith('art/')).length;
 test('picture library: the first game stores starting and item pictures, later games reuse them without paying again', async () => {
   const bucket = new Map();
   const made = (env) => env.calls.filter(c => c.url.includes('/ai/run/')).length;
   const first = sandbox({ key: '', cf: {}, bucket });
   const g1 = await setup(first, { theme: 'burger', names: ['A', 'B'] });
   assert.equal(made(first), 11, 'empty bun + 2 burgers + 8 toppings');
-  assert.equal(bucket.size, 11);
-  assert.ok([...bucket.keys()].every(k => /^art\/[0-9a-f]{32}-[01]\.jpg$/.test(k)));
+  assert.equal(pics(bucket), 11);
+  assert.ok([...bucket.keys()].filter(k => k.startsWith('art/')).every(k => /^art\/[0-9a-f]{32}-[01]\.jpg$/.test(k)));
   // Phones are sent straight to the library for stored pictures; creations still come from the game server.
   const img = await first.call(`/api/img?code=${g1.code}&k=add0`);
   assert.equal(img.status, 302);
   const lot0 = await first.call(`/api/img?code=${g1.code}&k=lot0`);
   assert.equal(lot0.status, 302, 'the starting burger photo (a creation\'s first picture) is served from the library too');
   // Every new picture went into the library, and nothing else did.
-  assert.equal(first.calls.filter(c => c.url.includes('/ai/run/') && !c.opts.body.get('input_image_0')).length, bucket.size);
+  assert.equal(first.calls.filter(c => c.url.includes('/ai/run/') && !c.opts.body.get('input_image_0')).length, pics(bucket));
   // Fill the rest of the burger library, then restarted servers (fresh memory) play without making any new library picture.
   const admin = sandbox({ key: '', cf: {}, bucket, admin: 'k' });
   await admin.call('/api/prefill', { key: 'k', themes: ['burger'], max: 1000 });
   for (let i = 0; i < 60 && admin.qa.fill.running; i++) await flush();
-  assert.equal(bucket.size, 49);
+  assert.equal(pics(bucket), 49);
   for (let run = 0; run < 3; run++) {
     const again = sandbox({ key: '', cf: {}, bucket });
     const g = await setup(again, { theme: 'burger', names: ['C', 'D'] });
@@ -923,7 +924,7 @@ test('picture library: a game never pays for a second version, and a broken buck
     const b = sandbox({ key: '', cf: {}, bucket });
     await setup(b, { theme: 'pizza', names: ['A', 'B'] });
   }
-  const names = [...bucket.keys()].map(k => k.slice(0, -6));
+  const names = [...bucket.keys()].filter(k => k.startsWith('art/')).map(k => k.slice(0, -6));
   assert.equal(new Set(names).size, names.length, 'one version per picture unless the prefill makes more');
   void first;
   const down = sandbox({ key: '', cf: {}, bucket: new Map(), broken: true });
@@ -938,14 +939,14 @@ test('picture library prefill: admin only, fills each preset once, stops at the 
   assert.equal((await env.call('/api/prefill', { key: 'wrong' })).status, 404);
   assert.equal((await env.call('/api/prefill', { key: 'sekret', themes: ['burger'], max: 5 })).status, 200);
   for (let i = 0; i < 20 && env.qa.fill.running; i++) await flush();
-  same([env.qa.fill.made, bucket.size], [5, 5]);
+  same([env.qa.fill.made, pics(bucket)], [5, 5]);
   await env.call('/api/prefill', { key: 'sekret', themes: ['burger'], max: 1000 });
   for (let i = 0; i < 40 && env.qa.fill.running; i++) await flush();
-  same([env.qa.fill.made, env.qa.fill.had, bucket.size], [44, 5, 49], 'empty bun + 8 burgers + 32 toppings + 8 duds');
+  same([env.qa.fill.made, env.qa.fill.had, pics(bucket)], [44, 5, 49], 'empty bun + 8 burgers + 32 toppings + 8 duds');
   // A second version of everything, and nothing is made twice.
   await env.call('/api/prefill', { key: 'sekret', themes: ['burger'], variants: 2 });
   for (let i = 0; i < 80 && env.qa.fill.running; i++) await flush();
-  same([env.qa.fill.had, bucket.size], [49, 89], 'max 40 per run by default');
+  same([env.qa.fill.had, pics(bucket)], [49, 89], 'max 40 per run by default');
   // Cloudflare's allowance runs out: the run stops and reports why.
   const broke = sandbox({ key: '', cf: { fail: true }, bucket: new Map(), admin: 'sekret' });
   await broke.call('/api/prefill', { key: 'sekret', themes: ['pizza'] });
@@ -953,6 +954,37 @@ test('picture library prefill: admin only, fills each preset once, stops at the 
   same([broke.qa.fill.made, broke.qa.fill.failed], [0, 1]);
   assert.match(broke.qa.fill.error, /daily free allocation/);
   assert.equal((await broke.call('/api/prefill?key=sekret')).body.failed, 1);
+});
+
+test('daily picture cap: stops at the limit, survives a restart, resets the next day, and explains itself', async () => {
+  const bucket = new Map();
+  const env = sandbox({ key: '', cf: {}, bucket, cap: 5 });
+  const made = (await env.call('/api/create', { theme: 'burger', name: 'A', capacity: 2 })).body;
+  await flush(); await flush();
+  const v = (await env.call('/api/room?code=' + made.code)).body;
+  assert.equal(env.calls.filter(c => c.url.includes('/ai/run/')).length, 5, 'only 5 pictures made');
+  same([v.prep.ready, v.prep.failed], [5, 6]);
+  assert.match(v.prep.error, /picture allowance is used up/);
+  const day = new Date(env.now()).toISOString().slice(0, 10);
+  assert.equal(new TextDecoder().decode(bucket.get('meta/usage-' + day + '.json')), '{"n":5}');
+  // A restarted server reads today's count from the library and makes nothing more.
+  const again = sandbox({ key: '', cf: {}, bucket, cap: 5 });
+  await again.call('/api/create', { theme: 'pizza', name: 'A', capacity: 2 }); await flush(); await flush();
+  assert.equal(again.calls.filter(c => c.url.includes('/ai/run/')).length, 0);
+  // The next day it starts again.
+  again.advance(24 * 3600e3);
+  await again.call('/api/create', { theme: 'pizza', name: 'B', capacity: 2 }); await flush(); await flush();
+  assert.equal(again.calls.filter(c => c.url.includes('/ai/run/')).length, 5);
+  assert.equal((await again.call('/health')).body.pictures.made, 5);
+});
+
+test("Cloudflare's free allowance running out is explained once instead of retried", async () => {
+  const env = sandbox({ key: '', cf: { fail: true } });
+  const made = (await env.call('/api/create', { theme: 'pizza', name: 'A', capacity: 2 })).body;
+  await flush(); await flush();
+  const v = (await env.call('/api/room?code=' + made.code)).body;
+  assert.match(v.prep.error, /picture allowance is used up/);
+  assert.equal(env.calls.filter(c => c.url.includes('/ai/run/')).length, 11, 'one try per picture, no retries');
 });
 
 test('function source also parses as TSX (Railway saves it as index.tsx)', () => {
