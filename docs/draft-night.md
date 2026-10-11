@@ -63,6 +63,8 @@ Paid picture experiments require the user's approval. The handover authorises fi
 
 ## Typed themes
 
+Typed themes distinguish whole outdoor environments from objects. Island, city, resort, zoo and theme-park designs ask for substantial developments, attractions, terrain and infrastructure at the scale of the place rather than loosely related accessories. A desert island gets a motorway, beach resort, theme park or lazy river rather than a surfboard or snorkel. Environment bases show the whole undeveloped place from an aerial view; thumbnails and creation edits depict actual full-size landscapes, explicitly excluding tabletop displays, miniature models and printed photographs. Environment scope is retained through each purchase edit, preserving terrain and previous purchases. This is enforced in generation instructions and image prompts; model output still needs visual review.
+
 `/api/theme` first checks the curated themes ("pancakes", "dream house", "burgers" and so on). Anything else goes to the text model with a strict JSON schema. Names, in-jokes and vague words come back as `ambiguous`, with 3–4 concrete interpretations to choose from. The chosen interpretation is confirmed and then kept for the whole game. Items must be real, recognisable, visible additions to that subject. If an addition or dud has an exact case-insensitive name match in a preset pool, its optional `pic` field borrows that preset item’s visual description for the thumbnail prompt. The item keeps its own `visual` description for creation updates. This reuses the same stored thumbnail when model and quality also match; starting options and non-matching names do not use this rule.
 
 ## Images
