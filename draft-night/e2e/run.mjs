@@ -28,7 +28,7 @@ process.on('exit', () => procs.forEach(p => p.kill()));
 for (const sig of ['SIGINT', 'SIGTERM']) process.on(sig, () => process.exit(1));
 
 await run('node', [path.join(here, 'mock-openai.mjs'), '4010'], { MOCK_DELAY: '900' }, 'mock openai');
-await run('bun', ['draft-night/server.ts'], { PORT: '3999', OPENAI_API_KEY: 'mock', OPENAI_BASE_URL: 'http://127.0.0.1:4010/v1', DRAFT_SOLD_MS: '1300', DRAFT_UNSOLD_MS: '900', DRAFT_TURN_MS: '25000', DRAFT_CPU_MS: '500' }, null);
+await run('bun', ['draft-night/server.ts'], { PORT: '3999', OPENAI_API_KEY: 'mock', OPENAI_BASE_URL: 'http://127.0.0.1:4010/v1', DRAFT_SOLD_MS: '1300', DRAFT_UNSOLD_MS: '900', DRAFT_TURN_MS: '25000', DRAFT_CPU_MS: '500', DRAFT_REVERSE_SHARE: '0.4' }, null);
 await run('node', ['server.js'], { PORT: '3100' }, 'listening');
 const URL0 = 'http://127.0.0.1:3100/draft-night.html?api=' + encodeURIComponent('http://127.0.0.1:3999');
 
@@ -240,7 +240,7 @@ await scenario('Q-quick-play', async () => {
   assert.deepEqual(await tags(louie), ['LouiePlayer 1 · Host · You', 'MarioPlayer 2 · Ready']);
   assert.deepEqual(await tags(mario), ['LouiePlayer 1 · Host', 'MarioPlayer 2 · Ready · You']);
   assert.match(await louie.textContent('.brief'), /12 auctions · 6 items per player/);
-  assert.match(await louie.textContent('.brief'), /About 1 in 5 lots is a dud/);
+  assert.match(await louie.textContent('.brief'), /Every so often a lot is a dud/);
   await shot(mario, 'Q2-lobby-mario.png'); await shot(louie, 'Q3-lobby-louie.png'); await layoutCheck(louie, 'lobby');
   // A full game no longer shows up for a third phone.
   const sam = await phone('Sam');

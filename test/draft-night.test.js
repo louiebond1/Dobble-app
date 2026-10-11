@@ -685,13 +685,29 @@ test('random games with reverse auctions for 2 to 6 players always finish with e
     const r = room();
     assert.equal(r.lots.length, count);
     const adds = r.lots.filter(l => l.kind === 'add').length;
-    assert.equal(r.lots.filter(l => l.rev).length, Math.min(8, Math.round(adds * 0.2)), `about one addition in five is a dud (${count} lots, ${n} players)`);
+    assert.ok(r.lots.filter(l => l.rev).length <= Math.min(8, adds), `duds are additions (${count} lots, ${n} players)`);
     assert.ok(r.lots.every(l => !(l.kind === 'base' && l.rev)), 'starting options are never reverse auctions');
     await playOut(env, g, r.budget);
     revealed += r.history.filter(h => h.paid).length;
     auto += r.history.filter(h => r.lots[h.lot].rev && !h.paid).length;
   }
   assert.ok(revealed > 50 && auto > 0, `secret bids were revealed ${revealed} times; ${auto} duds had only one possible taker`);
+});
+
+test('each addition is a dud with a 1 in 8 chance: about one per 8 additions, some games none and some two or more', async () => {
+  const counts = [];
+  for (let run = 0; run < 400; run++) {
+    const env = sandbox({ key: '', rev: '0.125' });
+    const made = (await env.call('/api/create', { theme: 'pizza', name: 'A', capacity: 2, auctionCount: 10 })).body;
+    await env.call('/api/join', { code: made.code, name: 'B' });
+    await env.call('/api/action', { code: made.code, token: made.token, type: 'start' });
+    const r = env.qa.rooms.get(made.code);
+    counts.push(r.lots.filter(l => l.rev).length);
+    assert.ok(r.lots.slice(0, 2).every(l => !l.rev), 'never a starting option');
+  }
+  const mean = counts.reduce((a, b) => a + b, 0) / counts.length;
+  assert.ok(mean > 0.8 && mean < 1.2, 'about 1 dud in 8 additions, got ' + mean);
+  assert.ok(counts.includes(0) && counts.some(c => c >= 2), 'some games have none, some two or more');
 });
 
 test('two players finish with exactly 5, 6, 8 and 10 items from 10, 12, 16 and 20 auctions, duds included', async () => {
@@ -836,17 +852,18 @@ test('duds: typed themes get them from the AI, pictures are prepared in the lobb
     assert.match(body.messages[0].content, /bad_items/);
     return { status: 'ok', question: '', options: [], title: 'Garden', emoji: '🌻', kind: 'build', noun: 'garden', label: 'Feature', base_name: 'Bare lawn', base_blurb: '', base_visual: 'a bare lawn', scene: 'Garden photo', start_label: 'Garden', bases: Array.from({ length: 8 }, (_, i) => ({ name: 'Garden ' + i, blurb: 'x', visual: 'garden ' + i })), items: Array.from({ length: n }, (_, i) => ({ name: 'Feature ' + i, blurb: 'x', visual: 'feature ' + i + ' in the garden' })), bad_items: Array.from({ length: 8 }, (_, i) => ({ name: 'Dud ' + i, blurb: 'x', visual: 'dud ' + i + ' in the garden' })) };
   };
-  const env = sandbox({ ai, rev: '0.2' });
+  const env = sandbox({ ai, rev: '1' });
   const t = (await env.call('/api/theme', { topic: 'My garden', players: 2 })).body;
   const made = (await env.call('/api/create', { theme: t.theme.id, name: 'A', capacity: 2, auctionCount: 12 })).body;
   const j = (await env.call('/api/join', { code: made.code, name: 'B' })).body;
   const room = env.qa.rooms.get(made.code);
   await flush(); await flush();
   const prep = (await env.call('/api/room?code=' + made.code)).body.prep;
-  assert.equal(prep.total, 1 + 2 + 10, 'bare lawn + 2 gardens + 10 additions (2 of them duds)');
-  assert.equal(Object.keys(room.lotImg).filter(k => k.startsWith('bad')).length, 2);
+  assert.equal(prep.total, 1 + 2 + 10, 'bare lawn + 2 gardens + 10 additions');
+  assert.equal(Object.keys(room.lotImg).filter(k => k.startsWith('bad')).length, 8, 'every addition may be a dud here, up to the 8 the AI wrote');
   assert.equal((await env.call('/api/action', { code: made.code, token: made.token, type: 'start' })).status, 200);
-  same(room.lots.filter(l => l.rev).map(l => l.name.startsWith('Dud')), [true, true]);
+  assert.ok(room.lots.filter(l => l.rev).every(l => l.name.startsWith('Dud')));
+  assert.equal(room.lots.filter(l => l.rev).length, 8, 'the duds in the game are the ones whose pictures were prepared');
   for (let i = 0; i < 12 && room.status === 'playing'; i++) {
     const v = (await env.call(`/api/room?code=${made.code}&t=${j.token}`)).body;
     assert.equal(v.lots.length, room.lot + 1, 'only lots that have come up are sent');

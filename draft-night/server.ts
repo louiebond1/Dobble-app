@@ -16,7 +16,7 @@ type World = { v: number; state: string; busy: boolean; tries: number };
 type Room = {
   code: string; rev: number; created: number; auctionCount: number; listed: boolean; notice: string; sig?: string; status: 'lobby' | 'playing' | 'finished'; theme: Theme; budget: number; capacity: number; cpu: boolean;
   players: Player[]; tokens: string[]; deckBases: Item[]; deckAdds: Item[]; deckBad: Item[]; lots: Lot[]; lot: number; auction: Auction;
-  history: Array<{ lot: number; winner: number | null; price: number; paid?: number[] }>; lotImg: Record<string, string>; art: Record<string, string>; baseImg: string; imageError: string; worlds: World[]; verdict: string | null;
+  revK: number; revFor: number; history: Array<{ lot: number; winner: number | null; price: number; paid?: number[] }>; lotImg: Record<string, string>; art: Record<string, string>; baseImg: string; imageError: string; worlds: World[]; verdict: string | null;
 };
 
 const env = (k: string, d: string) => String(Bun.env[k] || d);
@@ -26,7 +26,7 @@ const SOLD_MS = Number(env('DRAFT_SOLD_MS', '2400'));
 const UNSOLD_MS = Number(env('DRAFT_UNSOLD_MS', '1600'));
 const CPU_MS = Number(env('DRAFT_CPU_MS', '900'));
 const REVEAL_MS = Number(env('DRAFT_REVEAL_MS', '5000'));
-const REV_SHARE = Number(env('DRAFT_REVERSE_SHARE', '0.2'));
+const REV_SHARE = Number(env('DRAFT_REVERSE_SHARE', '0.125'));
 const LOTS_PER_PLAYER = 5;
 const MAX_PLAYERS = 6;
 const COLORS = ['#FF7A59', '#4EA8FF', '#3FD4A2', '#FFC145', '#B48CFF', '#FF6FAE'];
@@ -632,8 +632,12 @@ function schedule(r: Room) {
   const t = setTimeout(() => { if (rooms.get(r.code) === r) tick(r); }, wait);
   t?.unref?.(); timers.set(r.code, t);
 }
-// About one addition in five (DRAFT_REVERSE_SHARE) is a reverse auction for a dud. Starting options never are.
-const revCount = (r: Room, adds: number) => Math.min(r.deckBad.length, Math.round(adds * REV_SHARE));
+// Each addition has a 1 in 8 chance (DRAFT_REVERSE_SHARE) of being a dud, so some games have none and some two or more.
+// Decided once per addition and remembered, so the lobby's picture prefetch and the game agree. Starting options never are.
+function revCount(r: Room, adds: number) {
+  for (; r.revFor < adds; r.revFor++) if (Math.random() < REV_SHARE) r.revK++;
+  return Math.min(r.deckBad.length, r.revK);
+}
 function start(r: Room) {
   const n = r.players.length, nb = hasBases(r.theme) ? n : 0, adds = Math.max(0, r.auctionCount - nb), k = revCount(r, adds);
   const good: Lot[] = r.deckAdds.slice(0, adds - k).map((x, i) => ({ ...x, kind: 'add', key: 'add' + i }));
@@ -1062,7 +1066,7 @@ async function handle(req: Request): Promise<Response> {
       capacity: cpu ? 2 : clamp(Math.round(Number(body.capacity) || 2), 2, maxP), auctionCount: 0, cpu, players: [], tokens: [], listed: !cpu && body.listed !== false, notice: '',
       deckBases: shuffle(theme.bases), deckAdds: shuffle(theme.items), deckBad: shuffle(theme.bad), lots: [], lot: 0,
       auction: { bid: 0, leader: null, turn: null, passed: [], phase: 'bidding', deadline: 0, log: [], result: null, rev: false, elig: [], sealed: [] },
-      history: [], lotImg: {}, art: {}, baseImg: 'none', imageError: '', worlds: [], verdict: null,
+      revK: 0, revFor: 0, history: [], lotImg: {}, art: {}, baseImg: 'none', imageError: '', worlds: [], verdict: null,
     };
     r.auctionCount = clamp(Math.round(Number(body.auctionCount) || r.capacity * LOTS_PER_PLAYER), r.capacity, Math.min(30, (hasBases(theme) ? r.capacity : 0) + theme.items.length));
     rooms.set(r.code, r);
