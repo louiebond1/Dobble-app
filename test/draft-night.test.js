@@ -12,7 +12,8 @@ const { stripTypeScriptTypes } = require('node:module');
 const file = path.join(__dirname, '../draft-night/server.ts');
 const source = fs.readFileSync(file, 'utf8');
 
-function sandbox({ key = 'test-key', ai, image, cf } = {}) {
+// rev: share of reverse auctions (duds). Older scenarios script every lot as a normal auction, so it defaults to none.
+function sandbox({ key = 'test-key', ai, image, cf, rev = '0' } = {}) {
   let handler, t = 1_000_000;
   const calls = [];
   const fakeFetch = async (url, opts) => {
@@ -29,7 +30,7 @@ function sandbox({ key = 'test-key', ai, image, cf } = {}) {
     if (image) await image(url, opts);
     return Response.json({ data: [{ b64_json: Buffer.from('img' + calls.length).toString('base64') }] });
   };
-  const vars = { ...(key ? { OPENAI_API_KEY: key } : {}), ...(cf ? { CF_ACCOUNT_ID: 'acc123', CF_API_TOKEN: 'cf-token' } : {}) };
+  const vars = { DRAFT_REVERSE_SHARE: rev, ...(key ? { OPENAI_API_KEY: key } : {}), ...(cf ? { CF_ACCOUNT_ID: 'acc123', CF_API_TOKEN: 'cf-token' } : {}) };
   const ctx = { Bun: { env: vars, serve(o) { handler = o.fetch; } }, Response, Request, URL, FormData, Blob, Buffer, crypto, AbortSignal, fetch: fakeFetch, console: { error() {} }, setTimeout: (f, ms) => { const h = setTimeout(f, Math.min(ms, 5)); h.unref(); return h; }, clearTimeout };
   vm.runInNewContext(stripTypeScriptTypes(source) + '\nglobalThis.qa={rooms,images,setClock(f){clock=f},worldPrompt,lotPrompt,presetFor,tick};', ctx);
   ctx.qa.setClock(() => t);
@@ -66,7 +67,8 @@ async function setup(env, { theme = 'house', names = ['Ariel', 'Louie'], budget 
 function checkInvariants(r, budget) {
   for (const p of r.players) {
     assert.ok(p.budget >= 0, 'never negative');
-    const spent = r.history.filter(h => h.winner === r.players.indexOf(p)).reduce((s, h) => s + h.price, 0);
+    const me = r.players.indexOf(p);
+    const spent = r.history.reduce((s, h) => s + (h.winner === me ? h.price : 0) + (h.paid ? h.paid[me] : 0), 0);
     assert.equal(p.budget + spent, budget, 'budget accounting');
     if (r.theme.mode === 'property') assert.ok(p.won.filter(i => r.lots[i].kind === 'base').length <= 1, 'at most one house');
   }
@@ -197,8 +199,8 @@ test('Scenario D: four-player custom theme has 20 lots and separate budgets, inv
     await g.act(a.turn, a.turn === want ? 'bid' : 'pass', { amount: a.bid + 1 });
   }
   await flush();
-  // The last starting option goes free to the only player still without one.
-  r.players.forEach((p, i) => { same(p.won, [i, i + 4, i + 8, i + 12, i + 16]); assert.equal(p.budget, i === 3 ? 46 : 45); });
+  // The last starting option, and the last lot, go free to the only player who still needs them.
+  r.players.forEach((p, i) => { same(p.won, [i, i + 4, i + 8, i + 12, i + 16]); assert.equal(p.budget, i === 3 ? 47 : 45); });
   assert.equal(new Set(r.worlds.map((w, i) => i)).size, 4);
   for (let i = 0; i < 4; i++) {
     const prompt = env.qa.worldPrompt(r, i, 0, 5);
@@ -612,6 +614,238 @@ test('room-code joining still works and 12, 16 and 20 auctions are honoured', as
     assert.equal((await env.call('/api/action', { code: made.code, player: 0, token: made.token, type: 'start' })).status, 200);
     const r = env.qa.rooms.get(made.code);
     same([r.lots.length, r.lots.filter(l => l.kind === 'base').length], [n, 2]);
+  }
+});
+
+// ---------- Reverse auctions and exact allocations ----------
+// Every lot goes to exactly one player, everyone ends with their share (lots ÷ players, uneven splits differ by one),
+// one starting option each, the books balance, and nobody who paid to dodge a lot received it.
+function checkFinal(r, budget) {
+  const n = r.players.length, L = r.lots.length, lo = Math.floor(L / n), hi = Math.ceil(L / n);
+  assert.equal(r.status, 'finished');
+  assert.equal(r.history.length, L, 'one result per lot');
+  assert.ok(r.history.every(h => h.winner !== null), 'no lot goes unallocated');
+  same(r.players.flatMap(p => p.won).sort((a, b) => a - b), Array.from({ length: L }, (_, i) => i));
+  for (const p of r.players) assert.ok(p.won.length >= lo && p.won.length <= hi, `${p.name} has ${p.won.length}, share is ${lo}–${hi}`);
+  for (const h of r.history) if (h.paid) { assert.equal(h.paid[h.winner], 0, 'the player stuck with a dud never pays for it'); assert.ok(r.lots[h.lot].rev); }
+  if (r.lots[0].kind === 'base') for (const p of r.players) assert.equal(p.won.filter(i => r.lots[i].kind === 'base').length, 1);
+  checkInvariants(r, budget);
+}
+// Plays a game through the API with random choices. Secret bids are random from £0 to all-in; some players never
+// bid, so the timer has to settle those lots.
+async function playOut(env, g, budget) {
+  const r = g.room();
+  let moves = 0;
+  while (r.status === 'playing') {
+    assert.ok(++moves < 20000, 'game stalled');
+    const a = r.auction;
+    if (a.phase === 'sealed') {
+      const open = a.elig.map((e, i) => e && !r.players[i].cpu ? i : -1).filter(i => i >= 0);
+      assert.ok(a.elig.filter(Boolean).length >= 2, 'a reverse auction only runs with two or more possible receivers');
+      for (const p of open) {
+        if (r.auction.phase !== 'sealed' || Math.random() < 0.1) continue;
+        const amount = Math.floor(Math.random() * (r.players[p].budget + 1));
+        const res = await g.act(p, 'seal', { amount });
+        assert.equal(res.status, 200, JSON.stringify(res.body));
+      }
+      if (r.auction.phase === 'sealed') { g.touch(); env.advance(31000); g.touch(); await env.call('/api/room?code=' + g.code); }
+      assert.notEqual(r.auction.phase, 'sealed');
+      continue;
+    }
+    if (a.phase !== 'bidding') { await g.settle(); continue; }
+    const p = r.players[a.turn];
+    const res = (Math.random() < 0.5 || a.leader === null) && p.budget > a.bid ? await g.act(a.turn, 'bid', { amount: Math.min(p.budget, a.bid + 1 + Math.floor(Math.random() * 6)) }) : await g.act(a.turn, 'pass');
+    assert.equal(res.status, 200, JSON.stringify(res.body));
+    checkInvariants(r, budget);
+  }
+  checkFinal(r, budget);
+}
+
+test('random games with reverse auctions for 2 to 6 players always finish with every lot allocated and every share filled', async () => {
+  let revealed = 0, auto = 0;
+  for (const theme of ['house', 'pancakes', 'garage']) for (let n = 2; n <= 6; n++) for (const count of [n * 5, Math.min(30, n * 5 + 1), Math.min(30, n * 4 + 3)]) {
+    const env = sandbox({ key: '', rev: '0.2' });
+    const made = (await env.call('/api/create', { theme, name: 'P0', capacity: n, auctionCount: count, budget: [5, 20, 100][n % 3] })).body;
+    const seats = [made];
+    for (let i = 1; i < n; i++) seats.push((await env.call('/api/join', { code: made.code, name: 'P' + i })).body);
+    await flush();
+    const code = made.code, room = () => env.qa.rooms.get(code);
+    const touch = () => { for (const p of room().players) p.seen = env.now(); };
+    const g = { code, room, touch, act: (p, type, extra = {}) => env.call('/api/action', { code, token: seats[p].token, type, lot: room().lot, seen: room().auction.bid, ...extra }), settle: async () => { touch(); env.advance(6000); touch(); await env.call('/api/room?code=' + code); } };
+    assert.equal((await g.act(0, 'start')).status, 200);
+    const r = room();
+    assert.equal(r.lots.length, count);
+    const adds = r.lots.filter(l => l.kind === 'add').length;
+    assert.equal(r.lots.filter(l => l.rev).length, Math.min(8, Math.round(adds * 0.2)), `about one addition in five is a dud (${count} lots, ${n} players)`);
+    assert.ok(r.lots.every(l => !(l.kind === 'base' && l.rev)), 'starting options are never reverse auctions');
+    await playOut(env, g, r.budget);
+    revealed += r.history.filter(h => h.paid).length;
+    auto += r.history.filter(h => r.lots[h.lot].rev && !h.paid).length;
+  }
+  assert.ok(revealed > 50 && auto > 0, `secret bids were revealed ${revealed} times; ${auto} duds had only one possible taker`);
+});
+
+test('two players finish with exactly 5, 6, 8 and 10 items from 10, 12, 16 and 20 auctions, duds included', async () => {
+  for (const count of [10, 12, 16, 20]) for (let run = 0; run < 6; run++) {
+    const env = sandbox({ key: '', rev: '0.2' });
+    const made = (await env.call('/api/create', { theme: 'house', name: 'Louie', capacity: 2, auctionCount: count, budget: run % 2 ? 5 : 50 })).body;
+    const j = (await env.call('/api/join', { code: made.code, name: 'Mario' })).body;
+    await flush();
+    const seats = [made, j], code = made.code, room = () => env.qa.rooms.get(code);
+    const touch = () => { for (const p of room().players) p.seen = env.now(); };
+    const g = { code, room, touch, act: (p, type, extra = {}) => env.call('/api/action', { code, token: seats[p].token, type, lot: room().lot, seen: room().auction.bid, ...extra }), settle: async () => { touch(); env.advance(6000); touch(); await env.call('/api/room?code=' + code); } };
+    assert.equal((await g.act(0, 'start')).status, 200);
+    await playOut(env, g, room().budget);
+    same(room().players.map(p => p.won.length), [count / 2, count / 2]);
+  }
+});
+
+// Starts a 2+ player game whose lot `at` is turned into a reverse auction, and moves on to it.
+async function reverseAt(env, opts, at) {
+  const g = await setup(env, opts);
+  const r = g.room();
+  r.lots[at] = { ...r.lots[at], rev: true };
+  let guard = 0;
+  while (r.lot < at && guard++ < 200) {
+    if (r.auction.phase === 'bidding') { await g.act(r.auction.turn, r.auction.leader === null ? 'bid' : 'pass', { amount: 1 }); continue; }
+    await g.settle();
+  }
+  assert.equal(r.lot, at); assert.equal(r.auction.phase, 'sealed');
+  return g;
+}
+
+test('reverse auction: Louie bids £12 and Mario £18 to avoid it, so Mario pays £18 and Louie gets it free', async () => {
+  const env = sandbox();
+  const g = await reverseAt(env, { names: ['Louie', 'Mario'], budget: 50 }, 2);
+  const r = g.room();
+  const before = r.players.map(p => p.budget);
+  assert.equal((await g.act(0, 'seal', { amount: 12 })).status, 200);
+  // Bids stay secret: Mario sees that Louie has locked one in, never the amount.
+  const marioView = (await env.call(`/api/room?code=${g.code}&t=${g.seats[1].token}`)).body;
+  same([marioView.auction.phase, marioView.auction.rev, marioView.auction.sealed, marioView.auction.mine, marioView.auction.result, marioView.auction.log], ['sealed', true, [true, false], null, null, []]);
+  assert.ok(!JSON.stringify(marioView).includes('"mine":12'));
+  assert.equal((await env.call(`/api/room?code=${g.code}&t=${g.seats[0].token}`)).body.auction.mine, 12, 'Louie sees his own bid');
+  assert.equal(marioView.lots[2].rev, true);
+  assert.equal(marioView.lots.length, 3, 'later lots stay hidden');
+  // A locked bid cannot be changed, and nobody can bid more than they have.
+  assert.equal((await g.act(0, 'seal', { amount: 30 })).status, 400);
+  for (const amount of [-1, 1.5, 51, 'x']) assert.equal((await g.act(1, 'seal', { amount })).status, 400);
+  assert.equal((await g.act(1, 'bid', { amount: 5 })).status, 400, 'no open bidding on a reverse lot');
+  assert.equal((await g.act(1, 'seal', { amount: 18 })).status, 200);
+  assert.equal(r.auction.phase, 'sold', 'revealed as soon as every bid is in');
+  same(r.auction.result, { winner: 0, price: 0, note: '', bids: [{ p: 1, a: 18 }, { p: 0, a: 12 }] });
+  same(r.players.map(p => p.budget), [before[0], before[1] - 18]);
+  assert.ok(r.players[0].won.includes(2) && !r.players[1].won.includes(2));
+  same(r.history.at(-1), { lot: 2, winner: 0, price: 0, paid: [0, 18] });
+  assert.equal(r.auction.deadline - env.now(), 5000, 'the reveal stays up longer than a normal sale');
+  await flush(); await flush();
+  assert.ok(env.qa.worldPrompt(r, 0, 1, r.players[0].won.length).includes(r.lots[2].name + ':'), 'the dud is drawn into Louie\'s picture');
+  checkInvariants(r, 50);
+});
+
+test('reverse auction: £0 bids, ties drawn at random, three players, and the payers never receive it', async () => {
+  const losers = new Set();
+  for (let run = 0; run < 30; run++) {
+    const env = sandbox({ key: '' });
+    const g = await reverseAt(env, { theme: 'burger', names: ['A', 'B', 'C'], budget: 20 }, 3);
+    const r = g.room();
+    const before = r.players.map(p => p.budget);
+    await g.act(0, 'seal', { amount: 5 }); await g.act(1, 'seal', { amount: 0 }); await g.act(2, 'seal', { amount: 0 });
+    const res = r.auction.result;
+    assert.ok(res.winner === 1 || res.winner === 2); losers.add(res.winner);
+    assert.equal(res.note, 'Tied at £0: drawn at random');
+    same(r.players.map(p => p.budget), [before[0] - 5, before[1], before[2]], 'only the escapers pay, £0 costs nothing');
+    checkInvariants(r, 20);
+  }
+  assert.equal(losers.size, 2, 'either tied player can be drawn');
+});
+
+test('reverse auction: missing bids count as £0 after 30 seconds, and players who stopped polling do not hold it up', async () => {
+  const env = sandbox({ key: '' });
+  let g = await reverseAt(env, { theme: 'pizza', names: ['A', 'B', 'C'], budget: 20 }, 4);
+  let r = g.room();
+  await g.act(0, 'seal', { amount: 3 });
+  g.touch(); env.advance(29000); g.touch(); await env.call('/api/room?code=' + g.code);
+  assert.equal(r.auction.phase, 'sealed', 'still waiting for players who are there');
+  env.advance(2000); g.touch(); await env.call('/api/room?code=' + g.code);
+  assert.equal(r.auction.phase, 'sold');
+  same(r.auction.result.bids.slice(1).map(b => [b.a, b.why]), [[0, 'no bid in time'], [0, 'no bid in time']]);
+  assert.notEqual(r.auction.result.winner, 0);
+  // B's phone goes quiet: once A and C are in, the reveal does not wait for B.
+  const env2 = sandbox({ key: '' });
+  g = await reverseAt(env2, { theme: 'pizza', names: ['A', 'B', 'C'], budget: 20 }, 4);
+  r = g.room();
+  await g.act(0, 'seal', { amount: 2 });
+  env2.advance(21000); r.players[0].seen = r.players[2].seen = env2.now();
+  await g.act(2, 'seal', { amount: 1 });
+  assert.equal(r.auction.phase, 'sold');
+  same([r.auction.result.winner, r.auction.result.bids.at(-1)], [1, { p: 1, a: 0, why: 'away' }]);
+});
+
+test('reverse auction: only players who can still take the lot bid; one possible taker gets it with no bidding', async () => {
+  const env = sandbox({ key: '' });
+  const g = await setup(env, { theme: 'pancakes', names: ['A', 'B'], budget: 50 });
+  const r = g.room();
+  r.lots = r.lots.map((l, i) => i >= 2 ? { ...l, rev: i >= 6 } : l);
+  // A wins everything until full (5 of 10): the rest, duds included, can only go to B.
+  while (r.lot < 6) {
+    if (r.auction.phase === 'bidding') await g.act(r.auction.turn, r.auction.turn === 0 || r.auction.leader === null ? 'bid' : 'pass', { amount: r.auction.bid + 1 });
+    else await g.settle();
+  }
+  assert.equal(r.players[0].won.length, 5);
+  assert.equal(r.auction.phase, 'sold', 'no secret bidding when only B can take it');
+  same([r.auction.result.winner, r.auction.result.price, r.auction.result.note], [1, 0, 'Everyone else has their full set']);
+  assert.equal((await g.act(0, 'seal', { amount: 0 })).status, 400);
+  while (r.status === 'playing') await g.settle();
+  checkFinal(r, 50);
+  assert.equal(r.history.filter(h => h.paid).length, 0, 'nobody paid for a dud they could never have received');
+});
+
+test('reverse auction: the CPU places its own secret bids', async () => {
+  const env = sandbox({ key: '', rev: '0.5' });
+  const g = await setup(env, { theme: 'garage', names: ['Solo'], cpu: true, budget: 40 });
+  const r = g.room();
+  let moves = 0, cpuBids = 0;
+  while (r.status === 'playing') {
+    assert.ok(++moves < 3000);
+    g.touch();
+    const a = r.auction;
+    if (a.phase === 'sealed') {
+      assert.ok(a.sealed[1] !== null, 'the CPU bids as soon as the lot opens'); cpuBids++;
+      assert.ok(a.sealed[1] >= 0 && a.sealed[1] <= r.players[1].budget);
+      if (a.elig[0]) await g.act(0, 'seal', { amount: Math.floor(Math.random() * (r.players[0].budget + 1)) });
+    } else if (a.phase === 'bidding' && a.turn === 0) await g.act(0, (Math.random() < 0.5 || a.leader === null) && r.players[0].budget > a.bid ? 'bid' : 'pass', { amount: a.bid + 1 });
+    else { env.advance(1000); await env.call('/api/room?code=' + g.code); }
+  }
+  assert.ok(cpuBids > 0);
+  checkFinal(r, 40);
+});
+
+test('duds: typed themes get them from the AI, pictures are prepared in the lobby, and a game never reveals which lots are coming', async () => {
+  const ai = (body) => {
+    const n = Number(/N = (\d+)/.exec(body.messages[1].content)[1]);
+    assert.match(body.messages[0].content, /bad_items/);
+    return { status: 'ok', question: '', options: [], title: 'Garden', emoji: '🌻', kind: 'build', noun: 'garden', label: 'Feature', base_name: 'Bare lawn', base_blurb: '', base_visual: 'a bare lawn', scene: 'Garden photo', start_label: 'Garden', bases: Array.from({ length: 8 }, (_, i) => ({ name: 'Garden ' + i, blurb: 'x', visual: 'garden ' + i })), items: Array.from({ length: n }, (_, i) => ({ name: 'Feature ' + i, blurb: 'x', visual: 'feature ' + i + ' in the garden' })), bad_items: Array.from({ length: 8 }, (_, i) => ({ name: 'Dud ' + i, blurb: 'x', visual: 'dud ' + i + ' in the garden' })) };
+  };
+  const env = sandbox({ ai, rev: '0.2' });
+  const t = (await env.call('/api/theme', { topic: 'My garden', players: 2 })).body;
+  const made = (await env.call('/api/create', { theme: t.theme.id, name: 'A', capacity: 2, auctionCount: 12 })).body;
+  const j = (await env.call('/api/join', { code: made.code, name: 'B' })).body;
+  const room = env.qa.rooms.get(made.code);
+  await flush(); await flush();
+  const prep = (await env.call('/api/room?code=' + made.code)).body.prep;
+  assert.equal(prep.total, 1 + 2 + 10, 'bare lawn + 2 gardens + 10 additions (2 of them duds)');
+  assert.equal(Object.keys(room.lotImg).filter(k => k.startsWith('bad')).length, 2);
+  assert.equal((await env.call('/api/action', { code: made.code, token: made.token, type: 'start' })).status, 200);
+  same(room.lots.filter(l => l.rev).map(l => l.name.startsWith('Dud')), [true, true]);
+  for (let i = 0; i < 12 && room.status === 'playing'; i++) {
+    const v = (await env.call(`/api/room?code=${made.code}&t=${j.token}`)).body;
+    assert.equal(v.lots.length, room.lot + 1, 'only lots that have come up are sent');
+    for (const l of room.lots.slice(room.lot + 1)) assert.ok(!JSON.stringify(v).includes('"' + l.name + '"'), 'upcoming lot leaked: ' + l.name);
+    for (const p of room.players) p.seen = env.now();
+    if (room.auction.phase === 'bidding') await env.call('/api/action', { code: made.code, token: [made, j][room.auction.turn].token, type: room.auction.leader === null ? 'bid' : 'pass', lot: room.lot, seen: room.auction.bid, amount: 1 });
+    else if (room.auction.phase === 'sealed') for (const s of [made, j]) await env.call('/api/action', { code: made.code, token: s.token, type: 'seal', lot: room.lot, amount: 0 });
+    env.advance(6000); for (const p of room.players) p.seen = env.now(); await env.call('/api/room?code=' + made.code);
   }
 });
 

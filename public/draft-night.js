@@ -110,7 +110,7 @@
       '<div class="eyebrow">Players</div><div class="seg">' + counts + '</div>' +
       (ui.cpu ? '' : '<label class="check"><input type="checkbox" id="private"' + (ui.listed ? '' : ' checked') + '><span>Private game: friends join with the room code instead of finding it under Join</span></label>') +
       '<div class="eyebrow">Total auctions</div><div class="seg">' + [0, 12, 16, 20, 24, 30].map(function (c) { return '<button data-auctions="' + c + '" aria-pressed="' + (ui.auctionCount === c) + '">' + (c === 0 ? 'Auto (' + (n * 5) + ')' : c) + '</button>'; }).join('') + '</div>' +
-      '<div class="hint">Each player can win auctions ÷ players, e.g. 12 auctions for 2 players is 6 each.</div>' +
+      '<div class="hint">Everyone ends with auctions ÷ players items, e.g. 12 auctions for 2 players is 6 each. About 1 in 5 is a dud you bid to avoid.</div>' +
       '<div class="eyebrow">Budget each</div><div class="seg">' + BUDGETS.map(function (b) { return '<button data-budget="' + b + '" aria-pressed="' + (ui.budget === b) + '">' + money(b) + '</button>'; }).join('') + '</div>' +
       '<label class="budget-other"><span>Or any amount £</span><input id="budgetOther" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="4" autocomplete="off" placeholder="e.g. 30" value="' + (BUDGETS.indexOf(ui.budget) < 0 ? ui.budget : '') + '"></label>' +
       (ui.error ? '<div class="error">' + esc(ui.error) + '</div>' : '') + '</div>' +
@@ -260,7 +260,8 @@
     var prev = room; room = r; offset = r.now - Date.now();
     var v = r.status === 'lobby' ? 'lobby' : r.status === 'finished' ? 'final' : 'game';
     if (ui.view !== v) { ui.view = v; built = false; }
-    if (prev && prev.auction && r.auction && r.status === 'playing' && r.auction.turn === me() && (prev.auction.turn !== me() || prev.lot !== r.lot) && navigator.vibrate) navigator.vibrate(18);
+    var wanted = function (x) { return x.auction.turn === me() || (x.auction.phase === 'sealed' && x.auction.elig && x.auction.elig[me()]); };
+    if (prev && prev.auction && r.auction && r.status === 'playing' && wanted(r) && (!wanted(prev) || prev.lot !== r.lot) && navigator.vibrate) navigator.vibrate(18);
     render();
   }
   function poll() {
@@ -314,7 +315,7 @@
     var link = location.origin + location.pathname + '?room=' + room.code;
     app.innerHTML = '<div class="screen"><div class="bar"><button class="link" data-leave>‹ Leave</button><span class="wordmark">Draft Night</span><span style="width:48px"></span></div><div class="content">' +
       (room.listed || room.cpu ? '' : '<div class="eyebrow" style="margin-top:12px">Room code</div><div class="code num">' + esc(room.code) + '</div><p class="muted" style="margin:0">Private game. Friends tap Join game, then Join with room code.</p>') +
-      '<div class="eyebrow"' + (room.listed || room.cpu ? ' style="margin-top:12px"' : '') + '>Tonight</div><div class="brief"><span class="em">' + esc(t.emoji) + '</span><div><b>' + esc(t.title) + '</b><p>' + brief + '</p><p>' + (room.auctionCount || n * 5) + ' auctions · ' + (room.maxWins || 5) + ' possible wins per player · ' + money(room.budget) + ' each</p></div></div>' +
+      '<div class="eyebrow"' + (room.listed || room.cpu ? ' style="margin-top:12px"' : '') + '>Tonight</div><div class="brief"><span class="em">' + esc(t.emoji) + '</span><div><b>' + esc(t.title) + '</b><p>' + brief + '</p>' + (t.duds ? '<p>About 1 in 5 lots is a dud: bid in secret to avoid it. The lowest bid gets it free and everyone else pays what they bid.</p>' : '') + '<p>' + (room.auctionCount || n * 5) + ' auctions · ' + shareText() + ' per player · ' + money(room.budget) + ' each</p></div></div>' +
       '<div class="eyebrow split"><span>Players</span><span>' + n + ' of ' + room.capacity + ' joined</span></div><ul class="roster">' + slots + '</ul>' +
       (room.notice ? '<p class="notice">' + esc(room.notice) + '</p>' : '') +
       (room.listed && !room.cpu ? '<p class="muted small">' + (n < room.capacity ? 'Friends open Draft Night and tap Join game to take a seat. ' : '') + 'Room code <span class="num">' + esc(room.code) + '</span> · <button class="link inline" data-share="' + esc(link) + '">Share invite</button></p>' : '') + '</div>' +
@@ -322,6 +323,8 @@
       prepHtml() + (host ? startButton(n) : '<div class="hint">' + (prepReady() ? 'Waiting for ' + esc(room.players[0].name) + ' to start' : 'Preparing pictures…') + '</div>') + '</div></div>';
   }
 
+  // Everyone ends with exactly their share; an uneven split gives some players one more.
+  function shareText() { return room.minWins === room.maxWins ? room.maxWins + ' items' : room.minWins + '–' + room.maxWins + ' items'; }
   // Pictures are prepared while the lobby fills; the host can start once every one is ready.
   function prepReady() { var p = room.prep; return !p || !p.enabled || p.ready + p.failed >= p.total; }
   function prepHtml() {
@@ -380,16 +383,15 @@
       if (w.key && !noImages) showImage(img, imgUrl(w.key));
       var hasImg = img.classList.contains('on');
       patch(el.querySelector('.ph'), hasImg ? '' : noImages ? '' : placeholder(i));
-      var status = worldStatus(i);
-      var gain = a.phase === 'sold' && a.result && a.result.winner === i && room.lots[room.lot] && room.lots[room.lot].kind === 'add' ? '<div class="gain">+ ' + esc(room.lots[room.lot].name) + '</div>' : '';
-      // Show newly purchased items instantly over the saved scene while AI batches a polished update.
-      var pendingItems = p.won.slice(Math.max(0, w.v)).filter(function (n) { return n !== p.base; });
-      var previews = pendingItems.map(function (n) {
+      var gain = a.phase === 'sold' && a.result && a.result.winner === i && room.lots[room.lot] && room.lots[room.lot].kind === 'add' ? '<div class="gain' + (a.rev ? ' dud' : '') + '">+ ' + esc(room.lots[room.lot].name) + '</div>' : '';
+      // Items won since the last picture show straight away as chips; the server folds them into the picture in batches.
+      var chipsHtml = hasImg && !noImages ? p.won.slice(Math.max(0, w.v)).filter(function (n) { return n !== p.base && room.lots[n]; }).map(function (n) {
         var l = room.lots[n];
-        return l ? '<span style="display:inline-flex;align-items:center;gap:5px;padding:4px 7px;border-radius:9px;background:rgba(15,20,25,.82);color:white;font-size:10px;max-width:135px"><img alt="" src="' + esc(imgUrl(l.key)) + '" style="width:27px;height:27px;object-fit:cover;border-radius:5px" onerror="this.style.display=\'none\'"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + esc(l.name) + '</span></span>' : '';
-      }).join('');
-      var additions = previews ? '<div style="position:absolute;bottom:8px;left:6px;right:6px;display:flex;flex-wrap:wrap;gap:4px;justify-content:center;pointer-events:none;z-index:2">' + previews + '</div>' : '';
-      patch(el.querySelector('.slot'), (noImages ? inventory(i) : '') + gain + additions + (status && hasImg ? '<div class="status">' + esc(status) + '</div>' : ''));
+        return '<span class="pend' + (l.rev ? ' dud' : '') + '"><img alt="" src="' + esc(imgUrl(l.key)) + '" onerror="this.remove()">' + esc(l.name) + '</span>';
+      }).join('') : '';
+      var working = (w.state === 'updating' || w.state === 'retrying') && hasImg;
+      var stack = chipsHtml || working ? '<div class="stack">' + (chipsHtml ? '<div class="pends">' + chipsHtml + '</div>' : '') + (working ? '<div class="status">' + (w.state === 'retrying' ? 'Retrying picture…' : 'Updating picture…') + '</div>' : '') + '</div>' : '';
+      patch(el.querySelector('.slot'), (noImages ? inventory(i) : '') + gain + stack);
       patch(el.querySelector('b'), esc(p.name) + (i === me() ? ' <span class="muted" style="font-weight:500">(you)</span>' : ''));
       patch(el.querySelector('.money'), money(p.budget));
       var sub = '', hot = false;
@@ -397,6 +399,11 @@
         if (a.leader === i) { sub = 'Leading at ' + money(a.bid); hot = true; }
         else if (a.turn === i) { sub = i === me() ? 'Your turn' : 'Deciding…'; hot = true; }
         else if (a.passed[i]) sub = 'Passed';
+      } else if (room.status === 'playing' && a.phase === 'sealed') {
+        if (a.elig[i]) { sub = a.sealed[i] ? 'Bid locked in' : 'Deciding…'; hot = true; } else sub = 'Safe';
+      } else if (room.status === 'playing' && a.phase === 'sold' && a.rev && a.result) {
+        var paid = (a.result.bids || []).filter(function (x) { return x.p === i; })[0];
+        if (a.result.winner === i) { sub = 'Stuck with it'; hot = true; } else if (paid) sub = paid.a ? 'Paid ' + money(paid.a) + ' to escape' : 'Escaped for free';
       }
       if (!sub) { var count = p.won.filter(function (x) { return x !== p.base; }).length; sub = count + ' ' + (count === 1 ? 'item' : 'items') + (p.away ? ' · away' : ''); }
       var subEl = el.querySelector('.sub'); patch(subEl, esc(sub)); subEl.classList.toggle('hot', hot);
@@ -405,10 +412,17 @@
   }
   function updateLot() {
     var a = room.auction, lot = room.lots[room.lot], t = room.theme; if (!lot) return;
-    var kind = lot.kind === 'base' ? startWord(t) + ' ' + (room.lot + 1) + ' of ' + room.players.length : t.label + ' · Lot ' + (room.lot + 1);
+    var kind = lot.kind === 'base' ? startWord(t) + ' ' + (room.lot + 1) + ' of ' + room.players.length : (lot.rev ? 'Reverse auction' : t.label) + ' · Lot ' + (room.lot + 1);
     var leader = a.leader !== null ? room.players[a.leader] : null;
     var priceHtml;
-    if (a.phase === 'sold') {
+    if (a.phase === 'sold' && a.rev) priceHtml = revealHtml();
+    else if (a.phase === 'sealed') {
+      var inn = room.players.filter(function (_, i) { return a.elig[i] && a.sealed[i]; }).length, of = a.elig.filter(Boolean).length;
+      priceHtml = '<div class="price"><div><div class="muted" style="font-size:12px;font-weight:600;letter-spacing:.06em;text-transform:uppercase">Secret bids</div><div class="amt num">' + inn + ' of ' + of + ' in</div></div>' +
+        '<div class="who" style="--c:var(--bad)"><b>Lowest bid gets it</b>The rest pay their bid</div></div>' + chips(room.players.map(function (p, i) {
+          return a.elig[i] ? '<span class="chip' + (a.sealed[i] ? ' in' : '') + '" style="--c:' + p.color + '">' + esc(i === me() ? 'You' : p.name) + (a.sealed[i] ? ' · locked' : ' · …') + '</span>' : '';
+        }).join(''));
+    } else if (a.phase === 'sold') {
       var w = room.players[a.result.winner];
       priceHtml = '<div class="verdict-bar" style="--c:' + w.color + '"><span>' + (a.result.winner === me() ? 'You won it' : 'Sold to ' + esc(w.name)) + '</span><span class="num">' + (a.result.price ? money(a.result.price) : 'Free') + '</span></div>' +
         (a.result.note ? '<div class="trail">' + esc(a.result.note) + '</div>' : '<div class="trail"></div>');
@@ -435,6 +449,18 @@
     patch($('#price'), priceHtml);
     patch($('#homes'), homes);
     lotEl.classList.toggle('has-homes', !!homes);
+    lotEl.classList.toggle('rev', !!lot.rev);
+  }
+  function chips(html) { return '<div class="chips">' + html + '</div>'; }
+  // The reveal: every secret bid side by side, highest first; the lowest is stuck with the dud.
+  function revealHtml() {
+    var a = room.auction, w = room.players[a.result.winner], mine = a.result.winner === me();
+    var bar = '<div class="verdict-bar dud"><span>' + (mine ? 'You’re stuck with it' : esc(w.name) + ' is stuck with it') + '</span><span>Free</span></div>';
+    if (!a.result.bids) return bar + '<div class="trail">' + esc(a.result.note) + '</div>';
+    return bar + chips(a.result.bids.map(function (b, k) {
+      var p = room.players[b.p], stuck = b.p === a.result.winner;
+      return '<span class="chip in' + (stuck ? ' stuck' : '') + '" style="--c:' + p.color + ';--k:' + k + '">' + esc(b.p === me() ? 'You' : p.name) + ' <b class="num">' + money(b.a) + '</b>' + (stuck ? ' · stuck' : b.a ? ' · paid' : ' · free') + (b.why ? ' (' + esc(b.why) + ')' : '') + '</span>';
+    }).join('')) + (a.result.note ? '<div class="trail">' + esc(a.result.note) + '</div>' : '');
   }
   function trail() {
     var a = room.auction;
@@ -448,9 +474,11 @@
     if (!p) return;
     var head = '<div class="dock-head"><span>You have <b class="num">' + money(p.budget) + '</b></span><span class="muted" id="tleft"></span></div>';
     var body;
-    if (a.phase !== 'bidding') {
+    if (a.phase !== 'bidding' && a.phase !== 'sealed') {
       var last = room.lot + 1 >= room.total;
       body = '<div class="wait"><b>' + (last ? 'Final lot complete' : 'Next lot coming up') + '</b><span>' + (last ? 'Revealing every creation…' : 'Lot ' + (room.lot + 2) + ' of ' + room.total) + '</span></div>';
+    } else if (a.phase === 'sealed') {
+      body = sealDock(p);
     } else if (a.turn === mine) {
       var steps = [1, 2, 5, 10], base = a.bid;
       body = '<div class="bids">' + steps.map(function (s, i) {
@@ -460,20 +488,40 @@
         (a.leader === null ? '<div class="opening">You open the bidding</div>' : '<button class="pass" data-pass' + (sending ? ' disabled' : '') + '>Pass</button>') + '</div>';
     } else {
       var turn = a.turn !== null ? room.players[a.turn] : null, msg, sub;
-      if (room.players[mine].won.length >= 5) { msg = 'You have your 5'; sub = 'Watch the others fill theirs'; }
-      else if (!eligibleMe()) { msg = room.lots[room.lot].kind === 'base' ? 'You already have your ' + esc(startWord(room.theme).toLowerCase()) : 'Sitting this one out'; sub = room.lots[room.lot].kind === 'base' ? 'Everyone gets exactly one' : ''; }
+      if (!eligibleMe()) { msg = notMine(); sub = room.lots[room.lot].kind === 'base' ? 'Everyone gets exactly one' : p.won.length >= room.maxWins ? 'Watch the others fill theirs' : 'The others still need items to finish'; }
       else if (a.leader === mine) { msg = 'You lead at ' + money(a.bid); sub = turn ? esc(turn.name) + ' can raise or pass' : ''; }
       else if (a.passed[mine]) { msg = 'You passed'; sub = p.budget <= a.bid ? 'Not enough left to raise' : turn ? esc(turn.name) + ' is deciding' : ''; }
       else { msg = turn ? esc(turn.name) + '’s turn' : 'Waiting…'; sub = a.leader === null ? (turn ? esc(turn.name) + ' opens the bidding at £1 or more' : '') : 'You’re up next if they raise or pass'; }
       body = '<div class="wait"><b>' + msg + '</b><span>' + sub + '</span></div>';
     }
     // Keep whatever the player is typing if the dock redraws mid-turn.
-    var typed = $('#customBid'), keep = typed ? typed.value : '', focused = typed && document.activeElement === typed;
+    var typed = $('#customBid') || $('#sealBid'), keep = typed ? typed.value : '', focused = typed && document.activeElement === typed;
     patch(dock, head + '<div class="clock"><i id="clock"></i></div>' + body);
-    var input = $('#customBid');
+    var input = $('#customBid') || $('#sealBid');
     if (input && keep && !input.value) { input.value = keep; if (focused) input.focus(); }
   }
+  function notMine() {
+    var p = room.players[me()];
+    if (room.lots[room.lot].kind === 'base') return 'You already have your ' + esc(startWord(room.theme).toLowerCase());
+    return p.won.length >= room.maxWins ? 'You have your full set of ' + p.won.length : 'Sitting this one out';
+  }
+  // Reverse auction: pick a secret amount to avoid the dud (£0 is allowed), then wait for the reveal.
+  function sealDock(p) {
+    var a = room.auction, b = p.budget;
+    if (!eligibleMe()) return '<div class="wait"><b>You’re safe from this one</b><span>' + (p.won.length >= room.maxWins ? 'You have your full set, so it can’t go to you' : 'The others still need items, so it can’t go to you') + '</span></div>';
+    if (a.mine !== null && a.mine !== undefined) {
+      var left = a.elig.filter(function (e, i) { return e && !a.sealed[i]; }).length;
+      return '<div class="wait"><b>Locked in: ' + money(a.mine) + ' to avoid it</b><span>' + (left ? 'Waiting for ' + left + ' more secret bid' + (left > 1 ? 's' : '') : 'Revealing…') + '</span></div>';
+    }
+    var amts = [0];
+    [0.05, 0.1, 0.2].forEach(function (f) { var x = Math.max(amts[amts.length - 1] + 1, Math.round(b * f)); if (x <= b) amts.push(x); });
+    return '<div class="bids">' + amts.map(function (x, i) {
+      return '<button data-seal="' + x + '"' + (sending ? ' disabled' : '') + ' aria-label="Secret bid ' + money(x) + '"><b class="num">' + money(x) + '</b><small>' + (i ? 'to dodge' : 'risk it') + '</small></button>';
+    }).join('') + '</div><div class="dock-row"><form class="custom" id="sealForm"><span>£</span><input id="sealBid" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="4" autocomplete="off" placeholder="Amount" aria-label="Secret bid amount"><button' + (sending ? ' disabled' : '') + '>Lock in</button></form>' +
+      '<div class="opening">Bid to avoid it.<br>Lowest gets it.</div></div>';
+  }
   function eligibleMe() {
+    if (room.auction.elig) return !!room.auction.elig[me()];
     var lot = room.lots[room.lot], p = room.players[me()];
     if (lot.kind === 'base') return p.base === null;
     return !hasStarts(room.theme) || p.base !== null;
@@ -489,7 +537,12 @@
     var bar = document.getElementById('clock'), label = document.getElementById('tleft');
     if (!bar || !room || room.status !== 'playing') return;
     var a = room.auction;
-    if (a.phase === 'bidding' && a.turn !== null && !room.players[a.turn].cpu) {
+    if (a.phase === 'sealed') {
+      var l2 = Math.max(0, a.deadline - now());
+      bar.style.transform = 'scaleX(' + Math.min(1, l2 / 30000) + ')';
+      bar.style.background = l2 < 8000 ? '#ff8a7a' : '';
+      if (label) label.textContent = 'Secret bids · ' + Math.ceil(l2 / 1000) + 's';
+    } else if (a.phase === 'bidding' && a.turn !== null && !room.players[a.turn].cpu) {
       var left = Math.max(0, a.deadline - now()), frac = Math.min(1, left / 30000);
       bar.style.transform = 'scaleX(' + frac + ')';
       bar.style.background = left < 8000 ? '#ff8a7a' : '';
@@ -504,10 +557,15 @@
     var spent = room.budget - p.budget;
     var items = p.won.map(function (x) {
       var h = room.history.filter(function (e) { return e.lot === x; })[0];
-      return '<li class="' + (x === p.base ? 'basei' : '') + '"><span>' + esc(lotName(x)) + '</span><span class="num">' + (h && h.price ? money(h.price) : 'Free') + '</span></li>';
+      var dud = room.lots[x] && room.lots[x].rev;
+      return '<li class="' + (x === p.base ? 'basei' : dud ? 'dudi' : '') + '"><span>' + esc(lotName(x)) + '</span><span class="num">' + (dud ? 'Stuck with it' : h && h.price ? money(h.price) : 'Free') + '</span></li>';
+    }).join('');
+    // What they paid to dodge duds that went to someone else.
+    items += room.history.filter(function (h) { return h.paid && h.paid[i] > 0; }).map(function (h) {
+      return '<li class="dodge"><span>Dodged ' + esc(lotName(h.lot)) + '</span><span class="num">' + money(h.paid[i]) + '</span></li>';
     }).join('');
     var showImg = w.key && w.state !== 'none';
-    var status = worldStatus(i);
+    var status = w.state === 'updating' || w.state === 'retrying' ? worldStatus(i) : '';
     return '<div class="entry" style="--c:' + p.color + '" data-entry="' + i + '"><div class="canvas">' + (showImg ? '<img alt="' + esc(p.name) + '’s ' + esc(t.noun) + '" data-src="' + esc(imgUrl(w.key)) + '">' : inventory(i)) +
       (status && showImg ? '<div class="status">' + esc(status) + '</div>' : '') + '</div>' +
       '<h2><span class="dot"></span>' + esc(p.name) + (i === me() ? ' <span class="muted" style="font-weight:500;font-size:14px">you</span>' : '') + '</h2><div class="spend num">Spent ' + money(spent) + ' · ' + money(p.budget) + ' left</div>' +
@@ -562,6 +620,7 @@
     if (b.dataset.name !== undefined && ui.view === 'join') { ui.name = b.dataset.name; $('#name').value = ui.name; return; }
     if (b.hasAttribute('data-bid')) return act('bid', { amount: +b.dataset.bid });
     if (b.hasAttribute('data-pass')) return act('pass');
+    if (b.hasAttribute('data-seal')) return act('seal', { amount: +b.dataset.seal });
     if (b.hasAttribute('data-start')) return act('start', b.hasAttribute('data-force') ? { force: true } : {});
     if (b.dataset.world) return openWorld(+b.dataset.world);
     if (b.hasAttribute('data-leave') || b.hasAttribute('data-again')) return leave();
@@ -582,6 +641,12 @@
     e.preventDefault();
     if (e.target.id === 'ask') { ui.name = $('#name').value; ui.customTopic = ui.lastAsked = $('#topic').value.trim(); askTheme(ui.customTopic, false); }
     if (e.target.id === 'joinForm') joinRoom();
+    if (e.target.id === 'sealForm') {
+      var sa = Number(($('#sealBid').value || '').trim()), me2 = room.players[me()];
+      if (!Number.isInteger(sa) || sa < 0) return toast('Enter £0 or more');
+      if (sa > me2.budget) return toast('You only have ' + money(me2.budget));
+      return act('seal', { amount: sa });
+    }
     if (e.target.id === 'customForm') {
       var amount = Number(($('#customBid').value || '').trim()), p = room.players[me()], low = room.auction.bid + 1;
       if (!Number.isInteger(amount) || amount < low) return toast('Bid at least ' + money(low));

@@ -107,7 +107,8 @@ const lotNo = async page => { const t = await page.textContent('#prog', { timeou
 async function finished(page) { return (await page.$('.compare')) !== null; }
 
 // Drives a whole game through the UI. decide(seat, lot, page) returns 'pass' or an index into the bid buttons.
-async function play(pages, decide, onLot) {
+// On a reverse auction (a dud) each phone locks in a secret bid: seal(seat, lot) picks one of its amount buttons.
+async function play(pages, decide, onLot, seal = (seat, lot) => (seat + lot) % 4) {
   const seen = new Set();
   for (let guard = 0; guard < 4000; guard++) {
     if (await finished(pages[0])) return;
@@ -117,6 +118,10 @@ async function play(pages, decide, onLot) {
       const lot = await lotNo(p);
       if (lot < 0) continue; // the game just ended on this phone
       if (onLot && !seen.has(lot) && i === 0) { seen.add(lot); await onLot(lot); }
+      const secret = await p.$$('[data-seal]:not([disabled])');
+      const pick = secret.length ? seal(i, lot) : null;
+      if (pick !== null && secret.length) { await secret[Math.min(pick, secret.length - 1)].click(); await p.waitForTimeout(120); continue; }
+      if (secret.length) continue;
       const btn = await p.$('.bids button:not([disabled])');
       if (!btn) continue;
       const choice = await decide(i, lot, p);
@@ -168,7 +173,7 @@ await scenario('A-property-2p', async () => {
   await ariel.evaluate(() => scrollTo(0, 0));
   await shot(ariel, 'A5-final.png');
   await ariel.screenshot({ path: path.join(shots, 'A5-final-full.png'), fullPage: true });
-  const lists = await ariel.$$eval('.entry', es => es.map(e => [...e.querySelectorAll('li span:first-child')].map(s => s.textContent)));
+  const lists = await ariel.$$eval('.entry', es => es.map(e => [...e.querySelectorAll('li:not(.dodge) span:first-child')].map(s => s.textContent)));
   assert.equal(lists.length, 2);
   assert.equal(lists[0].length, 5); assert.equal(lists[1].length, 5);
   await ariel.context().close(); await louie.context().close();
@@ -234,7 +239,8 @@ await scenario('Q-quick-play', async () => {
   await louie.waitForFunction(() => document.querySelector('.eyebrow.split').textContent.includes('2 of 2'));
   assert.deepEqual(await tags(louie), ['LouiePlayer 1 · Host · You', 'MarioPlayer 2 · Ready']);
   assert.deepEqual(await tags(mario), ['LouiePlayer 1 · Host', 'MarioPlayer 2 · Ready · You']);
-  assert.match(await louie.textContent('.brief'), /12 auctions · 6 possible wins per player/);
+  assert.match(await louie.textContent('.brief'), /12 auctions · 6 items per player/);
+  assert.match(await louie.textContent('.brief'), /About 1 in 5 lots is a dud/);
   await shot(mario, 'Q2-lobby-mario.png'); await shot(louie, 'Q3-lobby-louie.png'); await layoutCheck(louie, 'lobby');
   // A full game no longer shows up for a third phone.
   const sam = await phone('Sam');
@@ -284,6 +290,54 @@ await scenario('Q-three-players-and-private', async () => {
   await join(guest, code);
   assert.equal((await tags(guest)).length, 2);
   for (const p of [...ps, host, guest]) await p.context().close();
+});
+
+// Reverse auctions with three phones: secret bids stay hidden until the reveal, the lowest bid gets the dud,
+// and everyone finishes with exactly their share (15 auctions for 3 players is 5 each).
+await scenario('R-reverse-3p', async () => {
+  const ps = [await phone('Louie'), await phone('Mario'), await phone('Ariel')];
+  await create(ps[0], { theme: 'house', players: 3, budget: 50 });
+  await ps[0].click('#create');
+  const code = await created(ps[0]);
+  await join(ps[1], code); await join(ps[2], code);
+  await ps[0].waitForSelector('[data-start]:not([disabled])'); await ps[0].click('[data-start]');
+  await ps[0].waitForSelector('.game');
+  let dudShots = 0, reveals = 0;
+  const checked = new Set(); // phones hold their secret bids until Louie's phone has looked at that lot
+  await play(ps, async (seat, lot) => lot % 3 === seat ? 0 : 'pass', async lot => {
+    const kind = await ps[0].textContent('.lot-kind');
+    if (!/Reverse auction/.test(kind)) { checked.add(lot); return; }
+    // Everyone who can take the dud sees the secret-bid dock; nobody sees anyone else's amount.
+    await ps[0].waitForSelector('[data-seal], .wait');
+    if (dudShots++ === 0) {
+      await ps[0].waitForSelector('.chips .chip');
+      await shot(ps[0], 'R1-secret-bid.png'); await layoutCheck(ps[0], 'secret bid');
+      const first = await ps[1].$('[data-seal]');
+      if (first && await ps[0].$('[data-seal]')) {
+        await ps[0].click('[data-seal="0"]');
+        await ps[1].waitForFunction(() => /locked/.test(document.querySelector('.chips').textContent));
+        assert.ok(!/£0/.test(await ps[1].textContent('.chips')), 'Louie\'s amount stays hidden from Mario');
+        assert.match(await ps[0].textContent('.wait b'), /Locked in: £0/);
+        await shot(ps[1], 'R2-others-see-locked.png'); await layoutCheck(ps[1], 'locked');
+        for (const p of ps.slice(1)) { const b = await p.$$('[data-seal]'); if (b.length) await b[b.length - 1].click(); }
+        await ps[0].waitForSelector('.verdict-bar.dud');
+        await ps[0].waitForTimeout(1500);
+        await shot(ps[0], 'R3-reveal.png'); await layoutCheck(ps[0], 'reveal');
+        assert.match(await ps[0].textContent('.verdict-bar.dud'), /stuck with it/);
+        reveals++;
+      }
+    }
+    checked.add(lot);
+  }, (seat, lot) => checked.has(lot) ? (seat * 2 + lot) % 4 : null);
+  assert.ok(dudShots >= 1, 'a 15-lot game has duds');
+  assert.ok(reveals >= 1, 'a dud went to a secret-bid reveal');
+  await ps[0].waitForTimeout(6000);
+  const lists = await ps[0].$$eval('.entry', es => es.map(e => [...e.querySelectorAll('li:not(.dodge) span:first-child')].map(s => s.textContent)));
+  assert.deepEqual(lists.map(l => l.length), [5, 5, 5], 'everyone finishes with exactly 5');
+  assert.ok((await ps[0].$$('.entry li.dudi')).length >= 1, 'duds are listed in the final collections');
+  await ps[0].evaluate(() => scrollTo(0, 0)); await shot(ps[0], 'R4-final.png');
+  await ps[0].screenshot({ path: path.join(shots, 'R4-final-full.png'), fullPage: true });
+  for (const p of ps) await p.context().close();
 });
 
 await scenario('narrow-320', async () => {

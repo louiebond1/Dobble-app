@@ -5,16 +5,18 @@
 type Item = { name: string; blurb: string; visual: string };
 type Mode = 'property' | 'build' | 'collection';
 // bases: the starting options auctioned first (one per player). base: what everyone holds before winning one.
-type Theme = { id: string; title: string; emoji: string; mode: Mode; noun: string; label: string; startLabel: string; base: Item | null; scene: string; bases: Item[]; items: Item[]; created: number };
-type Lot = Item & { kind: 'base' | 'add' };
+type Theme = { id: string; title: string; emoji: string; mode: Mode; noun: string; label: string; startLabel: string; base: Item | null; scene: string; bases: Item[]; items: Item[]; bad: Item[]; created: number };
+// rev: a reverse auction for a dud (players bid in secret to avoid it). key: its picture.
+type Lot = Item & { kind: 'base' | 'add'; rev?: boolean; key: string };
 type Player = { name: string; color: string; budget: number; won: number[]; base: number | null; cpu: boolean; seen: number; device: string };
 type Entry = { p: number; a: number | null; why?: string };
-type Auction = { bid: number; leader: number | null; turn: number | null; passed: boolean[]; phase: 'bidding' | 'sold' | 'unsold'; deadline: number; log: Entry[]; result: { winner: number | null; price: number; note: string } | null };
+// elig: who may receive this lot. sealed: secret reverse-auction bids, never sent to other players before the reveal.
+type Auction = { bid: number; leader: number | null; turn: number | null; passed: boolean[]; phase: 'bidding' | 'sealed' | 'sold' | 'unsold'; deadline: number; log: Entry[]; result: { winner: number | null; price: number; note: string; bids?: Entry[] } | null; rev: boolean; elig: boolean[]; sealed: Array<number | null> };
 type World = { v: number; state: string; busy: boolean; tries: number };
 type Room = {
   code: string; rev: number; created: number; auctionCount: number; listed: boolean; notice: string; sig?: string; status: 'lobby' | 'playing' | 'finished'; theme: Theme; budget: number; capacity: number; cpu: boolean;
-  players: Player[]; tokens: string[]; deckBases: Item[]; deckAdds: Item[]; lots: Lot[]; lot: number; auction: Auction;
-  history: Array<{ lot: number; winner: number | null; price: number }>; lotImg: Record<string, string>; baseImg: string; imageError: string; worlds: World[]; verdict: string | null;
+  players: Player[]; tokens: string[]; deckBases: Item[]; deckAdds: Item[]; deckBad: Item[]; lots: Lot[]; lot: number; auction: Auction;
+  history: Array<{ lot: number; winner: number | null; price: number; paid?: number[] }>; lotImg: Record<string, string>; baseImg: string; imageError: string; worlds: World[]; verdict: string | null;
 };
 
 const env = (k: string, d: string) => String(Bun.env[k] || d);
@@ -23,6 +25,8 @@ const AWAY_MS = Number(env('DRAFT_AWAY_MS', '20000'));
 const SOLD_MS = Number(env('DRAFT_SOLD_MS', '2400'));
 const UNSOLD_MS = Number(env('DRAFT_UNSOLD_MS', '1600'));
 const CPU_MS = Number(env('DRAFT_CPU_MS', '900'));
+const REVEAL_MS = Number(env('DRAFT_REVEAL_MS', '5000'));
+const REV_SHARE = Number(env('DRAFT_REVERSE_SHARE', '0.2'));
 const LOTS_PER_PLAYER = 5;
 const MAX_PLAYERS = 6;
 const COLORS = ['#FF7A59', '#4EA8FF', '#3FD4A2', '#FFC145', '#B48CFF', '#FF6FAE'];
@@ -51,7 +55,15 @@ City Penthouse Building|The top floor is yours|a sleek glass apartment tower pho
 Alpine Chalet|Snowy peaks and a wood burner|a traditional wooden alpine chalet with a steep roof and balconies on a snowy mountain slope with pine trees`);
 
 const PRESETS: Theme[] = [
-  { id: 'house', title: 'Dream House', emoji: '🏡', mode: 'property', noun: 'home', label: 'Upgrade', startLabel: 'Home', base: { name: 'Empty plot', blurb: 'Bid for your home first', visual: 'an empty grassy building plot with a low fence around it on a quiet residential street, neighbouring houses at the edges' }, scene: 'Elevated drone photograph from above and in front at about 45 degrees, showing the whole house, its roof and its entire plot including the back garden, with a little space around the boundaries', bases: HOUSES, created: 0, items: parse(`
+  { id: 'house', title: 'Dream House', emoji: '🏡', mode: 'property', noun: 'home', label: 'Upgrade', startLabel: 'Home', base: { name: 'Empty plot', blurb: 'Bid for your home first', visual: 'an empty grassy building plot with a low fence around it on a quiet residential street, neighbouring houses at the edges' }, scene: 'Elevated drone photograph from above and in front at about 45 degrees, showing the whole house, its roof and its entire plot including the back garden, with a little space around the boundaries', bases: HOUSES, created: 0, bad: parse(`
+Mouldy Shed|Damp, green and sagging|a sagging rotten wooden garden shed streaked with green mould in the garden
+Leaking Roof|Buckets in every room|a torn blue tarpaulin weighed down with bricks over a hole in the roof
+Rusty Caravan|Abandoned by a cousin|a rusty abandoned caravan with flat tyres parked in the front garden
+Pigeon Colony|Every ledge taken|dozens of grey pigeons crowding the roof ridge and gutters, white droppings below
+Electricity Pylon|Buzzing all night|a tall grey steel electricity pylon with sagging cables right beside the plot
+Overflowing Bins|The foxes love them|three overflowing wheelie bins with split rubbish bags spilling across the front path
+Burnt-out Car|Not going anywhere|a burnt-out rusty car shell on bricks on the driveway
+Weed Jungle|Brambles everywhere|overgrown brambles, nettles and waist-high weeds swallowing the whole garden`), items: parse(`
 Swimming Pool|A sparkling outdoor pool|a rectangular outdoor swimming pool with stone edging in the garden beside the house
 Hot Tub|Bubbles under the stars|a round cedar hot tub with steam rising, on a patio beside the house
 Supercar|Red, loud and Italian|a glossy red Italian supercar parked on the driveway or kerb directly outside the house
@@ -97,7 +109,15 @@ Japanese Soufflé Pancakes|Tall and wobbly|two tall jiggly Japanese soufflé pan
 Dutch Baby|A puffy oven pancake|a plain puffed golden Dutch baby pancake in a small black cast-iron pan on the plate, nothing on top
 Scotch Pancakes|Little thick drop scones|a neat pile of five small plain Scotch pancakes on a round white plate, nothing on top
 Churro Waffle|Cinnamon-sugar crunch|a plain churro waffle dusted with cinnamon sugar on a round white plate, nothing else on top`),
-    scene: 'Food photograph on a pale oak table, three-quarter view from slightly above, soft window daylight, the whole plate in frame with space around it', items: parse(`
+    scene: 'Food photograph on a pale oak table, three-quarter view from slightly above, soft window daylight, the whole plate in frame with space around it', bad: parse(`
+Ketchup|Wrong breakfast entirely|a squiggle of tomato ketchup across the top of the stack
+Sardines|Straight from the tin|three oily tinned sardines laid across the top
+Raw Onion|Eye-watering crunch|chunks of raw white onion scattered over the top
+Cold Baked Beans|Congealed and orange|a spoonful of cold baked beans on top of the stack
+Brussels Sprouts|Boiled grey-green|boiled Brussels sprouts piled on top
+Burnt Pancake|Charcoal on top|a blackened burnt pancake added on top of the stack
+Pickled Gherkins|Sour surprise|sliced pickled gherkins on top of the stack
+English Mustard|A fiery squirt|a zigzag of bright yellow mustard over the stack`), items: parse(`
 Fresh Strawberries|Sweet, sliced, scattered|sliced fresh strawberries scattered over the top of the stack
 Nutella|The chocolate-hazelnut classic|a thick glossy swirl of Nutella chocolate-hazelnut spread across the top pancake
 Maple Syrup|Poured until it drips|amber maple syrup poured over the stack and dripping down the sides
@@ -142,7 +162,15 @@ Lamb Burger|Spiced and juicy|a burger with one spiced lamb patty in a plain sesa
 Fish Burger|Golden battered fillet|a burger with one golden battered fish fillet in a plain sesame-seed bun, nothing else inside
 Halloumi Burger|Two grilled slabs|a burger with two thick slabs of grilled halloumi in a plain sesame-seed bun, nothing else inside`),
 
-    scene: 'Food photograph on a dark slate board, eye-level side view so every layer of the burger is visible, warm restaurant lighting, the whole burger in frame', items: parse(`
+    scene: 'Food photograph on a dark slate board, eye-level side view so every layer of the burger is visible, warm restaurant lighting, the whole burger in frame', bad: parse(`
+Soggy Lettuce|Limp, brown and wet|limp wilted brown soggy lettuce hanging out of the burger
+Tinned Sardines|A fishy disaster|oily tinned sardines layered on the patty
+Gummy Bears|Wrong aisle|colourful gummy bears scattered on the patty
+Custard|A sweet yellow puddle|yellow custard dripping from the patty
+Brussels Sprouts|Boiled and sad|halved boiled Brussels sprouts on the patty
+Tinned Spaghetti|Floppy and orange|tinned spaghetti in tomato sauce spilling out of the burger
+Stale Bun|Hard as a rock|a dry cracked stale bun replacing the sesame bun
+Burnt Onions|Bitter and black|a heap of blackened burnt onions on the patty`), items: parse(`
 Crispy Bacon|Smoky streaky rashers|crispy streaky bacon rashers layered on the patty
 Mature Cheddar|Melted right over the edge|a slice of melted orange cheddar draped over the patty
 American Cheese|The classic melt|a melted slice of yellow American cheese on the patty
@@ -187,7 +215,15 @@ Sicilian Sfincione|Thick and spongy|a thick square Sicilian pizza with tomato sa
 White Pizza|No tomato, all cheese|a round white pizza with mozzarella, ricotta and olive oil only, no tomato
 Sourdough Flatbread|Long and blistered|a long blistered sourdough flatbread pizza with tomato sauce and mozzarella only`),
 
-    scene: 'Overhead flat-lay food photograph of the whole pizza on a large wooden pizza peel on a light stone counter, soft daylight', items: parse(`
+    scene: 'Overhead flat-lay food photograph of the whole pizza on a large wooden pizza peel on a light stone counter, soft daylight', bad: parse(`
+Gummy Worms|Sweet and squidgy|colourful gummy worms across the pizza
+Brussels Sprouts|Boiled and bitter|halved boiled Brussels sprouts across the pizza
+Banana Slices|Fruit gone wrong|banana slices across the pizza
+Cold Baked Beans|A breakfast mistake|baked beans spooned across the pizza
+Custard|A sweet yellow puddle|yellow custard poured over the middle of the pizza
+Whole Sardines|Staring back at you|whole sardines laid across the pizza
+Cornflakes|Breakfast on a pizza|cornflakes sprinkled over the pizza
+Burnt Crust|Charcoal edges|a burnt blackened crust all around the edge of the pizza`), items: parse(`
 Pepperoni|Crispy-edged cups|crispy pepperoni slices spread across the pizza
 Mushrooms|Sliced chestnut mushrooms|sliced chestnut mushrooms scattered across the pizza
 Fresh Basil|Bright green leaves|fresh basil leaves scattered on top
@@ -230,7 +266,15 @@ Loft Battle Station|Under the eaves|a simple desk with one monitor under a slopi
 Living Room Console Corner|Sofa and a big TV|a plain grey sofa facing a TV on a low white TV unit in a simple living room corner
 Minimalist Studio Desk|Clean wood and white walls|a slim light-oak desk with one monitor and a white chair against a clean white wall with a large window`),
 
-    scene: 'Wide interior photograph from behind and slightly to the side of the seating, showing the whole setup, the wall above it and the floor around it, evenly lit', items: parse(`
+    scene: 'Wide interior photograph from behind and slightly to the side of the seating, showing the whole setup, the wall above it and the floor around it, evenly lit', bad: parse(`
+Tangled Cables|A rat's nest|a huge tangle of cables spilling over and under the desk
+Cracked Monitor|Spider-web screen|a spider-web crack across the monitor screen
+Wobbly Stool|Back pain guaranteed|a cheap wobbly wooden stool replacing the chair
+Beige CRT Monitor|1998 called|a bulky beige CRT monitor squeezed onto the desk
+Dirty Laundry|A growing pile|a pile of dirty laundry heaped on the floor beside the desk
+Mouldy Pizza Boxes|Science experiment|a stack of greasy mouldy pizza boxes on the desk
+Leaking Ceiling|Drip, drip, drip|a brown water stain on the ceiling and a bucket on the floor catching drips
+Broken Desk Fan|Rattles and wheezes|a dusty broken desk fan with a missing blade on the desk`), items: parse(`
 Ultrawide Monitor|A huge curved screen|a huge curved ultrawide monitor replacing the ordinary monitor
 Second Monitor|Double the screens|a second monitor beside the first on the desk
 RGB Light Strips|Glowing everything|glowing purple and blue LED strips along the back of the desk and wall
@@ -273,7 +317,15 @@ Converted Barn Garage|Oak beams and brick|an empty converted barn with exposed o
 Racing Pit Garage|Race-day ready|an empty racing pit garage with a grey epoxy floor, tool chests along the walls and bright lights, room for several cars
 Mews Garage|A cobbled London classic|an empty old mews garage with whitewashed brick walls, a cobbled floor and big timber doors open, room for several cars`),
 
-    scene: 'Wide interior photograph from the open entrance, the whole floor visible, even soft lighting', items: parse(`
+    scene: 'Wide interior photograph from the open entrance, the whole floor visible, even soft lighting', bad: parse(`
+Rusty Shopping Trolley|Who brought this?|a rusty abandoned shopping trolley in the garage
+Wheel-clamped Banger|Going nowhere|a battered old brown hatchback with a yellow wheel clamp parked in the garage
+Oil Leak|A spreading black puddle|a huge black oil puddle spreading across the floor
+Reliant Robin|Three wheels, no dignity|a battered yellow three-wheeled Reliant Robin parked in the garage
+Rusty Caravan|Flat tyres included|a rusty old caravan with a flat tyre parked in the garage
+Pile of Tyres|Bald and smelly|a heap of old bald tyres in the corner of the garage
+Pigeons|Nesting in the rafters|a flock of pigeons perched up high with droppings on the floor below
+Leaking Roof|Buckets everywhere|buckets on the floor catching drips under a water-stained ceiling`), items: parse(`
 Porsche 911|The timeless sports car|a silver Porsche 911 sports car parked in the garage
 Lamborghini Huracán|Wild, bright and loud|a lime-green Lamborghini Huracán parked in the garage
 Ferrari F8|Italian red perfection|a red Ferrari F8 parked in the garage
@@ -332,21 +384,42 @@ const bump = (r: Room) => { r.rev++; };
 const isBaseLot = (r: Room) => r.lots[r.lot]?.kind === 'base';
 // Themes with starting options auction them first, one per player, before any additions.
 const hasBases = (t: Theme) => t.bases.length > 0;
-// Each player can win their share of the auctions (starting option included): 12 auctions for 2 players is 6 each.
-// An uneven split rounds up, so with 15 auctions for 2 players one of them can win 8.
+// Everyone finishes with exactly their share of the lots (starting option included): 12 lots for 2 players is 6 each.
+// An uneven split gives some players one more (15 for 2 is 8 and 7); the auctions decide who.
 // In the lobby it is worked out from the seats; once started, from the players actually playing.
-const maxWins = (r: Room) => Math.ceil(r.auctionCount / (r.status === 'lobby' ? r.capacity : r.players.length));
-function eligible(r: Room, p: number) { return r.status === 'playing' && p >= 0 && p < r.players.length && r.players[p].won.length < maxWins(r) && (isBaseLot(r) ? r.players[p].base === null : !hasBases(r.theme) || r.players[p].base !== null); }
+function quota(r: Room) {
+  const L = r.status === 'lobby' ? r.auctionCount : r.lots.length, n = r.status === 'lobby' ? r.capacity : r.players.length;
+  return { lo: Math.floor(L / n), hi: Math.ceil(L / n) };
+}
+// Who may receive the current lot so that everyone can still finish with their share: nobody already at the most they
+// can hold, and once the lots left are exactly what the players below their share still need, only those players.
+// This keeps "items still owed ≤ lots left ≤ room left" true after every lot, so every lot always has a taker.
+function recipients(r: Room) {
+  const { lo, hi } = quota(r), left = r.lots.length - r.lot, base = isBaseLot(r);
+  const need = r.players.map(p => Math.max(0, lo - p.won.length)), owed = need.reduce((s, x) => s + x, 0);
+  return r.players.map((p, i) => (base ? p.base === null : !hasBases(r.theme) || p.base !== null) && p.won.length < hi && (owed < left || need[i] > 0));
+}
+const eligible = (r: Room, p: number) => r.status === 'playing' && !!r.auction.elig[p];
 const eligibleSeats = (r: Room) => r.players.map((_, i) => i).filter(i => eligible(r, i));
 const canAct = (r: Room, p: number) => eligible(r, p) && !r.auction.passed[p] && r.auction.leader !== p;
 const away = (r: Room, p: number) => !r.players[p].cpu && clock() - r.players[p].seen > AWAY_MS;
 
 function beginLot(r: Room) {
-  const n = r.players.length;
-  r.auction = { bid: 0, leader: null, turn: null, passed: Array(n).fill(false), phase: 'bidding', deadline: 0, log: [], result: null };
+  const n = r.players.length, rev = !!r.lots[r.lot].rev;
+  r.auction = { bid: 0, leader: null, turn: null, passed: Array(n).fill(false), phase: rev ? 'sealed' : 'bidding', deadline: 0, log: [], result: null, rev, elig: recipients(r), sealed: Array(n).fill(null) };
   const seats = eligibleSeats(r);
-  if (isBaseLot(r) && seats.length === 1) { award(r, seats[0], 0, 'Last one left: theirs for free'); return; }
+  // Only one player can take it: no bidding, it is theirs for free.
+  if (seats.length === 1) {
+    const p = seats[0], full = r.players.every((x, i) => i === p || x.won.length >= quota(r).hi);
+    award(r, p, 0, isBaseLot(r) ? 'Last one left: theirs for free' : full ? 'Everyone else has their full set' : 'They need every lot left to finish their set');
+    return;
+  }
   if (!seats.length) { closeLot(r); return; }
+  if (rev) {
+    r.auction.deadline = clock() + TURN_MS;
+    for (const p of seats) if (r.players[p].cpu) r.auction.sealed[p] = cpuDodge(r, p);
+    return;
+  }
   passTo(r, (r.lot % n) - 1);
 }
 // Moves the turn to the next player who can still raise; resolves the lot when nobody can.
@@ -362,17 +435,21 @@ function passTo(r: Room, from: number) {
 function closeLot(r: Room) {
   const a = r.auction;
   if (a.leader !== null) return award(r, a.leader, a.bid, '');
+  // Every lot goes to someone: if nobody who can take it could afford £1, it is drawn at random among them.
   const seats = eligibleSeats(r);
-  if (isBaseLot(r) && seats.length) return award(r, seats[Math.floor(Math.random() * seats.length)], 0, 'No bids: drawn at random');
+  if (seats.length) return award(r, seats[Math.floor(Math.random() * seats.length)], 0, 'No bids: drawn at random');
   a.phase = 'unsold'; a.turn = null; a.result = { winner: null, price: 0, note: 'No bids' }; a.deadline = clock() + UNSOLD_MS;
   r.history.push({ lot: r.lot, winner: null, price: 0 });
 }
-function award(r: Room, p: number, price: number, note: string) {
+// paid: what each player paid to dodge a reverse lot (the receiver pays nothing). bids: the revealed secret bids.
+function award(r: Room, p: number, price: number, note: string, paid?: number[], bids?: Entry[]) {
   const pl = r.players[p], a = r.auction;
-  if (!eligible(r, p) || price > pl.budget || price < 0) throw Error('Invalid allocation');
+  if (!eligible(r, p) || price > pl.budget || price < 0 || paid?.[p] || paid?.some((x, i) => x < 0 || x > r.players[i].budget)) throw Error('Invalid allocation');
   pl.budget -= price; pl.won.push(r.lot); if (r.lots[r.lot].kind === 'base') pl.base = r.lot;
-  r.history.push({ lot: r.lot, winner: p, price });
-  a.phase = 'sold'; a.turn = null; a.bid = price; a.leader = p; a.result = { winner: p, price, note }; a.deadline = clock() + SOLD_MS;
+  paid?.forEach((x, i) => { r.players[i].budget -= x; });
+  r.history.push(paid ? { lot: r.lot, winner: p, price, paid } : { lot: r.lot, winner: p, price });
+  a.phase = 'sold'; a.turn = null; a.bid = price; a.leader = p; a.result = bids ? { winner: p, price, note, bids } : { winner: p, price, note };
+  a.deadline = clock() + (bids ? REVEAL_MS : SOLD_MS);
   void ensureWorld(r, p);
 }
 function nextLot(r: Room) {
@@ -400,9 +477,35 @@ function forcePass(r: Room, p: number, why: string) {
   a.passed[p] = true; a.log.push({ p, a: null, why });
   passTo(r, p);
 }
+// ---------- Reverse auctions ----------
+// Everyone who could be landed with a dud bids in secret (£0 up to their money) to avoid it. All bids are revealed
+// together: the lowest bidder gets the dud for free and everyone else pays what they bid to escape it.
+// A tie for lowest is drawn at random among the tied players.
+function seal(r: Room, p: number, amount: number) {
+  const a = r.auction;
+  if (a.phase !== 'sealed' || !eligible(r, p)) throw Error('You are safe from this one');
+  if (a.sealed[p] !== null) throw Error('Your bid is already locked in');
+  if (!Number.isSafeInteger(amount) || amount < 0 || amount > r.players[p].budget) throw Error('Invalid bid');
+  a.sealed[p] = amount;
+}
+// Bids missing at the deadline, or from players who have stopped polling, count as £0.
+function reveal(r: Room) {
+  const a = r.auction, seats = eligibleSeats(r);
+  const bids: Entry[] = seats.map(p => a.sealed[p] === null ? { p, a: 0, why: away(r, p) ? 'away' : 'no bid in time' } : { p, a: a.sealed[p] });
+  bids.sort((x, y) => y.a! - x.a!);
+  const low = bids[bids.length - 1].a!, tied = bids.filter(b => b.a === low).map(b => b.p);
+  const loser = tied[Math.floor(Math.random() * tied.length)];
+  const paid = r.players.map((_, i) => i === loser ? 0 : bids.find(b => b.p === i)?.a || 0);
+  award(r, loser, 0, tied.length > 1 ? `Tied at £${low}: drawn at random` : '', paid, bids);
+}
+// A dud takes one of the CPU's remaining slots, so it pays more to dodge when it has few left.
+function cpuDodge(r: Room, p: number) {
+  const pl = r.players[p], slots = Math.max(1, quota(r).hi - pl.won.length);
+  return Math.min(pl.budget, Math.floor((pl.budget / slots) * (0.2 + Math.random() * 0.6)));
+}
 function cpuMove(r: Room, p: number) {
   const pl = r.players[p], a = r.auction, lot = r.lots[r.lot];
-  const left = r.lots.length - r.lot, share = Math.max(1, Math.round(left / r.players.length));
+  const share = Math.max(1, quota(r).hi - pl.won.length);
   let value = lot.kind === 'base' ? pl.budget * (0.25 + Math.random() * 0.3) : (pl.budget / share) * (0.6 + Math.random() * 0.9);
   value = Math.floor(Math.min(value, pl.budget));
   if (a.bid < value || a.leader === null) bid(r, p, Math.min(pl.budget, a.bid + (value - a.bid > 5 && Math.random() < 0.5 ? 2 : 1)));
@@ -419,6 +522,10 @@ function tick(r: Room) {
       if (r.players[p].cpu) { if (a.deadline > now) break; cpuMove(r, p); }
       else if (a.leader === null) bid(r, p, 1, away(r, p) ? 'away, opened automatically' : 'time ran out, opened automatically');
       else forcePass(r, p, away(r, p) ? 'away' : 'time ran out');
+    } else if (a.phase === 'sealed') {
+      // Reveal once every bid is in, the time is up, or everyone still to bid has stopped polling.
+      if (a.deadline > now && !eligibleSeats(r).every(p => a.sealed[p] !== null || away(r, p))) break;
+      reveal(r);
     } else if (a.deadline <= now) nextLot(r);
     else break;
     bump(r);
@@ -432,13 +539,19 @@ function schedule(r: Room) {
   const t = setTimeout(() => { if (rooms.get(r.code) === r) tick(r); }, wait);
   t?.unref?.(); timers.set(r.code, t);
 }
+// About one addition in five (DRAFT_REVERSE_SHARE) is a reverse auction for a dud. Starting options never are.
+const revCount = (r: Room, adds: number) => Math.min(r.deckBad.length, Math.round(adds * REV_SHARE));
 function start(r: Room) {
-  const n = r.players.length;
-  r.lots = hasBases(r.theme)
-    ? [...r.deckBases.slice(0, n).map(x => ({ ...x, kind: 'base' as const })), ...r.deckAdds.slice(0, Math.max(0, r.auctionCount - n)).map(x => ({ ...x, kind: 'add' as const }))]
-    : r.deckAdds.slice(0, r.auctionCount).map(x => ({ ...x, kind: 'add' as const }));
+  const n = r.players.length, nb = hasBases(r.theme) ? n : 0, adds = Math.max(0, r.auctionCount - nb), k = revCount(r, adds);
+  const good: Lot[] = r.deckAdds.slice(0, adds - k).map((x, i) => ({ ...x, kind: 'add', key: 'add' + i }));
+  const bad: Lot[] = r.deckBad.slice(0, k).map((x, i) => ({ ...x, kind: 'add', key: 'bad' + i, rev: true }));
+  // Spread the duds out: one at a random spot in each of k equal stretches of the additions.
+  const T = good.length + bad.length, at = new Set<number>();
+  for (let j = 0; j < k; j++) { const s = Math.floor((j * T) / k), e = Math.floor(((j + 1) * T) / k); at.add(s + Math.floor(Math.random() * (e - s))); }
+  const mixed = Array.from({ length: T }, (_, t) => (at.has(t) ? bad.shift() : good.shift())!);
+  r.lots = [...r.deckBases.slice(0, nb).map((x, i) => ({ ...x, kind: 'base' as const, key: 'lot' + i })), ...mixed];
   r.status = 'playing'; r.lot = 0;
-  prefetch(r, r.lots.filter(l => l.kind === 'add').length);
+  prefetch(r, adds);
   r.worlds = r.players.map(() => ({ v: r.baseImg === 'ready' ? 0 : -1, state: 'idle', busy: false, tries: 0 }));
   beginLot(r);
 }
@@ -496,7 +609,8 @@ function worldPrompt(r: Room, p: number, from: number, to: number, withRef = fal
   let forbid = 'Do not add anything else that is not listed.';
   if (t.mode === 'property') {
     const owned = adds.map(x => (x.name + ' ' + x.visual).toLowerCase()).join(' ');
-    const missing = LUXURIES.filter(l => !owned.includes(l.split(' ')[0]));
+    // A shed, office or caravan they own is an outbuilding, so outbuildings are not forbidden then.
+    const missing = LUXURIES.filter(l => !owned.includes(l.split(' ')[0]) && !(l === 'outbuildings' && /shed|office|sauna|greenhouse|coop|caravan/.test(owned)));
     forbid = `Do not enlarge the house or its plot and do not change its architecture. Do not add: ${missing.join(', ')}, or any other feature that is not listed above.`;
   } else if (t.mode === 'build') forbid = `Do not add any other toppings, ingredients, accessories or objects. Keep the ${t.noun} the same size and shape.`;
   else forbid = 'Do not add any other items. Do not remove, move or restyle the items already there.';
@@ -618,16 +732,14 @@ async function ensureWorld(r: Room, p: number) {
     }
   });
 }
+// adds: how many additions the game will have; about one in five of them is a dud (see start).
 function prefetch(r: Room, adds: number) {
+  const k = revCount(r, adds);
   if (hasBases(r.theme)) r.deckBases.slice(0, r.capacity).forEach((it, i) => genLot(r, 'lot' + i, it, 'base', 1 + i / 100));
-  r.deckAdds.slice(0, adds).forEach((it, i) => genLot(r, 'add' + i, it, 'add', 2 + i / 100));
+  r.deckAdds.slice(0, adds - k).forEach((it, i) => genLot(r, 'add' + i, it, 'add', 2 + i / 100));
+  r.deckBad.slice(0, k).forEach((it, i) => genLot(r, 'bad' + i, it, 'add', 2 + i / 100));
 }
-// Lots are assembled at start; map each lot to its prefetched image key.
-function lotImageKey(r: Room, i: number) {
-  const n = r.players.length;
-  if (hasBases(r.theme)) return i < n ? 'lot' + i : 'add' + (i - n);
-  return 'add' + i;
-}
+const lotImageKey = (r: Room, i: number) => r.lots[i]?.key || '';
 
 // ---------- Text AI ----------
 async function openaiJSON(system: string, user: string, schema: any, maxTokens: number, timeout = 45000) {
@@ -650,6 +762,7 @@ const THEME_SCHEMA = S({
   base_name: str, base_blurb: str, base_visual: str, scene: str, start_label: str,
   bases: { type: 'array', items: S({ name: str, blurb: str, visual: str }) },
   items: { type: 'array', items: S({ name: str, blurb: str, visual: str }) },
+  bad_items: { type: 'array', items: S({ name: str, blurb: str, visual: str }) },
 });
 const THEME_SYSTEM = `You set up rounds of Draft Night, a party auction game. Players type a subject; every player starts with the same plain BASE and wins items at auction that visibly change their own version of it. Images of each player's creation are generated from your descriptions, so everything must be concrete and photographable.
 
@@ -664,6 +777,7 @@ When ok:
 - scene: one sentence on camera angle, surface/setting and lighting so the whole base and every addition is visible.
 - noun: 1-3 words for what each player builds (e.g. "pancake stack", "garage"). label: one word for an auction lot (e.g. "Topping", "Upgrade", "Car", "Signing").
 - items: exactly N distinct additions (not starting options), real, instantly recognisable things that make sense for THIS subject and can be seen in the picture. Use plain common names people know ("Nutella", "Maple Syrup", "Carbon-Fibre Wheels", "Rooftop Pool"). Mix desirable and cheaper options; one or two may be funny-but-plausible (e.g. "Bacon" on pancakes). Never include unrelated objects, characters, mascots, plush toys, fantasy concepts, buildings unrelated to the subject, or real named people.
+- bad_items: exactly 8 distinct DUDS for reverse auctions, where players bid to avoid them: things nobody wants on THIS subject that are funny, harmless and clearly visible in the picture (house: Mouldy Shed, Leaking Roof, Rusty Caravan; pancakes: Ketchup, Sardines, Raw Onion). Same rules as items, never gross-out, cruel or about people.
 - blurb: at most 7 natural words. visual: at most 22 words describing what it looks like and exactly where it goes on the base.
 - title: 1-3 words. emoji: one emoji.`;
 async function interpret(topic: string, n: number, confirmed: boolean): Promise<any> {
@@ -675,24 +789,25 @@ async function interpret(topic: string, n: number, confirmed: boolean): Promise<
     .filter((x: Item) => x.name && x.visual && !seen.has(x.name.toLowerCase()) && seen.add(x.name.toLowerCase()));
   const clean = (x: any): Item => ({ name: String(x.name || '').trim().slice(0, 32), blurb: String(x.blurb || '').trim().slice(0, 60), visual: String(x.visual || '').trim().slice(0, 220) });
   const bases = (Array.isArray(out.bases) ? out.bases : []).map(clean).filter((x: Item) => x.name && x.visual && !seen.has(x.name.toLowerCase()) && seen.add(x.name.toLowerCase()));
+  const bad = (Array.isArray(out.bad_items) ? out.bad_items : []).map(clean).filter((x: Item) => x.name && x.visual && !seen.has(x.name.toLowerCase()) && seen.add(x.name.toLowerCase())).slice(0, 10);
   if (items.length < LOTS_PER_PLAYER * 2 || bases.length < 2) throw Error('Could not build that theme. Try describing it a little more.');
   const t: Theme = {
     id: crypto.randomUUID().slice(0, 8), title: String(out.title || topic).slice(0, 28), emoji: String(out.emoji || '✨').slice(0, 4),
     mode: out.kind === 'collection' ? 'collection' : 'build', noun: String(out.noun || topic).slice(0, 24).toLowerCase(), label: String(out.label || 'Lot').slice(0, 14),
     base: { name: String(out.base_name || 'Nothing yet').slice(0, 32), blurb: String(out.base_blurb || '').slice(0, 60), visual: String(out.base_visual || '').slice(0, 240) },
-    startLabel: String(out.start_label || 'Base').slice(0, 14), scene: String(out.scene || 'Clear, evenly lit photograph showing the whole subject').slice(0, 240), bases, items, created: clock(),
+    startLabel: String(out.start_label || 'Base').slice(0, 14), scene: String(out.scene || 'Clear, evenly lit photograph showing the whole subject').slice(0, 240), bases, items, bad, created: clock(),
   };
   themes.set(t.id, t);
   return { status: 'ok', theme: themeSummary(t) };
 }
 function themeSummary(t: Theme) {
-  return { id: t.id, title: t.title, emoji: t.emoji, mode: t.mode, noun: t.noun, label: t.label, startLabel: t.startLabel, hasBases: hasBases(t), base: t.base && { name: t.base.name, blurb: t.base.blurb }, maxPlayers: Math.min(MAX_PLAYERS, hasBases(t) ? Math.min(t.bases.length, Math.floor(t.items.length / 4)) : Math.floor(t.items.length / 5)), starts: t.bases.slice(0, 8).map(x => x.name), examples: t.items.slice(0, 8).map(x => x.name) };
+  return { id: t.id, title: t.title, emoji: t.emoji, mode: t.mode, noun: t.noun, label: t.label, startLabel: t.startLabel, hasBases: hasBases(t), base: t.base && { name: t.base.name, blurb: t.base.blurb }, maxPlayers: Math.min(MAX_PLAYERS, hasBases(t) ? Math.min(t.bases.length, Math.floor(t.items.length / 4)) : Math.floor(t.items.length / 5)), starts: t.bases.slice(0, 8).map(x => x.name), examples: t.items.slice(0, 8).map(x => x.name), duds: t.bad.length > 0 };
 }
 async function judge(r: Room) {
   if (!Bun.env.OPENAI_API_KEY) return;
   try {
-    const lists = r.players.map(p => `${p.name}: ${p.won.map(i => r.lots[i].name).join(', ') || 'nothing'} (spent £${r.budget - p.budget})`).join('\n');
-    const out = await openaiJSON('You are the witty host of Draft Night, a party auction game. Players each built their own version of the theme. Crown the best creation on taste, combination and value. Reply with one or two warm, funny sentences (max 45 words) that name the winner. Never insult anyone.', `Theme: ${r.theme.title} (${r.theme.noun})\n${lists}`, S({ verdict: str }), 200, 20000);
+    const lists = r.players.map(p => `${p.name}: ${p.won.map(i => r.lots[i].name + (r.lots[i].rev ? ' (dud)' : '')).join(', ') || 'nothing'} (spent £${r.budget - p.budget})`).join('\n');
+    const out = await openaiJSON('You are the witty host of Draft Night, a party auction game. Players each built their own version of the theme. Items marked (dud) were forced on them in reverse auctions. Crown the best creation on taste, combination and value. Reply with one or two warm, funny sentences (max 45 words) that name the winner. Never insult anyone.', `Theme: ${r.theme.title} (${r.theme.noun})\n${lists}`, S({ verdict: str }), 200, 20000);
     r.verdict = String(out.verdict || '').slice(0, 320) || null; bump(r);
   } catch (e) { console.error('Judge failed', String(e)); }
 }
@@ -709,13 +824,14 @@ function prep(r: Room) {
 function view(r: Room, me = -1) {
   const a = r.auction;
   return {
-    me, listed: r.listed, notice: r.notice, code: r.code, rev: r.rev, now: clock(), status: r.status, budget: r.budget, capacity: r.capacity, auctionCount: r.auctionCount, maxWins: maxWins(r), cpu: r.cpu,
+    me, listed: r.listed, notice: r.notice, code: r.code, rev: r.rev, now: clock(), status: r.status, budget: r.budget, capacity: r.capacity, auctionCount: r.auctionCount, maxWins: quota(r).hi, minWins: quota(r).lo, cpu: r.cpu,
     theme: { ...themeSummary(r.theme), examples: undefined, starts: undefined },
     players: r.players.map((p, i) => ({ name: p.name, color: p.color, budget: p.budget, won: p.won, base: p.base, cpu: p.cpu, away: !p.cpu && (r.status === 'playing' ? away(r, i) : clock() - p.seen > AWAY_MS) })),
     // Only lots that have already come up are sent, so nobody can peek at what is next.
-    lots: r.lots.slice(0, r.lot + 1).map((l, i) => ({ name: l.name, blurb: l.blurb, kind: l.kind, img: r.lotImg[lotImageKey(r, i)] || 'none', key: lotImageKey(r, i) })),
+    lots: r.lots.slice(0, r.lot + 1).map((l, i) => ({ name: l.name, blurb: l.blurb, kind: l.kind, rev: !!l.rev, img: r.lotImg[lotImageKey(r, i)] || 'none', key: lotImageKey(r, i) })),
     lot: r.lot, total: r.status === 'lobby' ? r.auctionCount : r.lots.length,
-    auction: { bid: a.bid, leader: a.leader, turn: a.turn, passed: a.passed, phase: a.phase, deadline: a.deadline, log: a.log.slice(-6), result: a.result },
+    // Secret bids: everyone sees who has locked one in, but only their own amount until the reveal.
+    auction: { bid: a.bid, leader: a.leader, turn: a.turn, passed: a.passed, phase: a.phase, deadline: a.deadline, log: a.log.slice(-6), result: a.result, rev: a.rev, elig: a.elig, sealed: a.sealed.map(x => x !== null), mine: a.sealed[me] ?? null },
     worlds: r.worlds.map((w, p) => ({ v: w.v, state: w.state, key: worldKey(r, p, w.v) })),
     base: { state: r.baseImg }, prep: prep(r),
     history: r.history, verdict: r.verdict,
@@ -796,8 +912,8 @@ async function handle(req: Request): Promise<Response> {
     const r: Room = {
       code: newCode(), rev: 1, created: clock(), status: 'lobby', theme, budget: clamp(Math.round(Number(body.budget) || 100), 5, 1000),
       capacity: cpu ? 2 : clamp(Math.round(Number(body.capacity) || 2), 2, maxP), auctionCount: 0, cpu, players: [], tokens: [], listed: !cpu && body.listed !== false, notice: '',
-      deckBases: shuffle(theme.bases), deckAdds: shuffle(theme.items), lots: [], lot: 0,
-      auction: { bid: 0, leader: null, turn: null, passed: [], phase: 'bidding', deadline: 0, log: [], result: null },
+      deckBases: shuffle(theme.bases), deckAdds: shuffle(theme.items), deckBad: shuffle(theme.bad), lots: [], lot: 0,
+      auction: { bid: 0, leader: null, turn: null, passed: [], phase: 'bidding', deadline: 0, log: [], result: null, rev: false, elig: [], sealed: [] },
       history: [], lotImg: {}, baseImg: 'none', imageError: '', worlds: [], verdict: null,
     };
     r.auctionCount = clamp(Math.round(Number(body.auctionCount) || r.capacity * LOTS_PER_PLAYER), r.capacity, Math.min(30, (hasBases(theme) ? r.capacity : 0) + theme.items.length));
@@ -853,11 +969,11 @@ async function handle(req: Request): Promise<Response> {
         if (ready.enabled && ready.ready + ready.failed < ready.total) return fail(`Still preparing pictures (${ready.ready}/${ready.total})`);
         if (ready.enabled && ready.failed && !body.force) return fail(r.imageError || 'Some pictures could not be made. Start anyway?');
         start(r);
-      } else if (body.type === 'bid' || body.type === 'pass') {
+      } else if (body.type === 'bid' || body.type === 'pass' || body.type === 'seal') {
         if (r.status !== 'playing') return fail('The auction is not running');
-        // Optimistic check: the action must be based on the lot and price the player saw.
-        if (Number(body.lot) !== r.lot || Number(body.seen) !== r.auction.bid) return reply({ error: 'The bidding moved on. Check the new price.', room: view(r, p) }, 409);
-        if (body.type === 'bid') bid(r, p, Number(body.amount)); else pass(r, p);
+        // Optimistic check: the action must be based on the lot and price the player saw (a secret bid only needs the lot).
+        if (Number(body.lot) !== r.lot || (body.type !== 'seal' && Number(body.seen) !== r.auction.bid)) return reply({ error: 'The bidding moved on. Check the new price.', room: view(r, p) }, 409);
+        if (body.type === 'seal') seal(r, p, Number(body.amount)); else if (body.type === 'bid') bid(r, p, Number(body.amount)); else pass(r, p);
       } else return fail('Unknown action');
     } catch (e) { return reply({ error: e instanceof Error ? e.message : 'Action failed', room: view(r, p) }, 400); }
     bump(r); tick(r);

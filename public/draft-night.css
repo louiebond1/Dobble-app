@@ -9,6 +9,7 @@
   --muted: #a3a1a9;
   --faint: #6c6a73;
   --good: #3fd4a2;
+  --bad: #ff6b5b;
   --r-sm: 8px;
   --r-md: 12px;
   --r-lg: 16px;
@@ -184,6 +185,26 @@ h1 { font: 650 32px/1.08 var(--display); letter-spacing: -0.025em; margin: 12px 
 .trail { font-size: 12.5px; color: var(--faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; height: 17px; }
 .verdict-bar { border-radius: var(--r-md); padding: 10px 12px; background: var(--c, var(--raised)); color: #0c0c0e; font-weight: 650; display: flex; justify-content: space-between; gap: 10px; animation: rise .3s ease; }
 .verdict-bar.unsold { background: var(--raised); color: var(--muted); }
+/* Reverse auctions: a red accent on the lot, secret-bid chips, and a staggered reveal. */
+.lot.rev .lot-kind { color: var(--bad); }
+.lot.rev .lot-img { box-shadow: 0 0 0 2px var(--bad); }
+.verdict-bar.dud { background: var(--bad); }
+.chips { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; height: 26px; flex: none; }
+.chips::-webkit-scrollbar { display: none; }
+.chip { flex: none; display: flex; align-items: center; gap: 4px; height: 26px; padding: 0 10px; border-radius: 13px; font-size: 12.5px; color: var(--muted); box-shadow: inset 0 0 0 1px var(--line-strong); white-space: nowrap; }
+.chip.in { color: var(--text); box-shadow: inset 0 0 0 1.5px var(--c); }
+.chip b { font-weight: 650; }
+.verdict-bar.dud + .chips .chip { animation: rise .35s ease both; animation-delay: calc(var(--k) * .35s); }
+.chip.stuck { background: var(--bad); color: #0c0c0e; box-shadow: none; }
+.canvas .gain.dud { background: var(--bad); }
+.canvas .stack { position: absolute; left: 6px; right: 6px; bottom: 6px; display: flex; flex-direction: column; gap: 4px; pointer-events: none; }
+.canvas .stack .status { position: static; }
+.pends { display: flex; flex-wrap: wrap; gap: 4px; }
+.pend { display: inline-flex; align-items: center; gap: 5px; max-width: 100%; height: 26px; padding: 0 8px 0 3px; border-radius: 7px; background: rgba(12,12,14,.78); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); color: #fff; font-size: 11px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; animation: rise .3s ease; }
+.canvas .pend img { position: static; opacity: 1; width: 20px; height: 20px; border-radius: 4px; object-fit: cover; flex: none; }
+.pend.dud { box-shadow: inset 0 0 0 1.5px var(--bad); }
+.entry li.dudi span:last-child { color: var(--bad); }
+.entry li.dodge span { color: var(--faint); }
 .homes { display: flex; gap: 8px; overflow-x: auto; scrollbar-width: none; }
 .homes::-webkit-scrollbar { display: none; }
 .home { flex: none; width: 64px; font-size: 10.5px; color: var(--faint); line-height: 1.2; }
