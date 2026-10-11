@@ -382,7 +382,14 @@
       patch(el.querySelector('.ph'), hasImg ? '' : noImages ? '' : placeholder(i));
       var status = worldStatus(i);
       var gain = a.phase === 'sold' && a.result && a.result.winner === i && room.lots[room.lot] && room.lots[room.lot].kind === 'add' ? '<div class="gain">+ ' + esc(room.lots[room.lot].name) + '</div>' : '';
-      patch(el.querySelector('.slot'), (noImages ? inventory(i) : '') + gain + (status && hasImg ? '<div class="status">' + esc(status) + '</div>' : ''));
+      // Show newly purchased items instantly over the saved scene while AI batches a polished update.
+      var pendingItems = p.won.slice(Math.max(0, w.v)).filter(function (n) { return n !== p.base; });
+      var previews = pendingItems.map(function (n) {
+        var l = room.lots[n];
+        return l ? '<span style="display:inline-flex;align-items:center;gap:5px;padding:4px 7px;border-radius:9px;background:rgba(15,20,25,.82);color:white;font-size:10px;max-width:135px"><img alt="" src="' + esc(imgUrl(l.key)) + '" style="width:27px;height:27px;object-fit:cover;border-radius:5px" onerror="this.style.display=\'none\'"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + esc(l.name) + '</span></span>' : '';
+      }).join('');
+      var additions = previews ? '<div style="position:absolute;bottom:8px;left:6px;right:6px;display:flex;flex-wrap:wrap;gap:4px;justify-content:center;pointer-events:none;z-index:2">' + previews + '</div>' : '';
+      patch(el.querySelector('.slot'), (noImages ? inventory(i) : '') + gain + additions + (status && hasImg ? '<div class="status">' + esc(status) + '</div>' : ''));
       patch(el.querySelector('b'), esc(p.name) + (i === me() ? ' <span class="muted" style="font-weight:500">(you)</span>' : ''));
       patch(el.querySelector('.money'), money(p.budget));
       var sub = '', hot = false;
