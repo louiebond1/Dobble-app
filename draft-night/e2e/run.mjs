@@ -146,8 +146,13 @@ await scenario('L-curated-bedroom', async () => {
   const a=await phone('Louie'),b=await phone('Ariel');
   await a.click('[data-library]');
   await a.fill('#librarySearch','bedroom');
-  assert.equal(await a.locator('[data-library-theme]').count(),8);
+  assert.ok(await a.locator('[data-library-theme]').count()>=8);
+  assert.match(await a.textContent('[data-library-theme="bedroom"]'),/80 possible additions/);
+  assert.match(await a.textContent('[data-library-theme="bedroom"]'),/Basic clothes storage/);
+  assert.match(await a.textContent('[data-library-theme="bedroom"]'),/Possible upgrades: Four-poster Bed/);
   await a.waitForTimeout(300);
+  assert.ok(await a.locator('#librarySearch').isVisible());
+  assert.ok(await a.locator('#librarySearch').evaluate(el=>el.getBoundingClientRect().top)>=0);
   await shot(a,'L1-library.png');
   await a.click('[data-library-theme="bedroom"]');
   assert.match(await a.textContent('[data-theme="bedroom"]'),/Essentials included: Basic bed/);
@@ -156,7 +161,7 @@ await scenario('L-curated-bedroom', async () => {
   await a.waitForSelector('[data-start]:not([disabled])');await a.click('[data-start]');
   await a.waitForSelector('.game');await b.waitForSelector('.game');
   const state=await (await fetch('http://127.0.0.1:3999/api/room?code='+code)).json();
-  assert.equal(state.theme.hasBases,false);assert.deepEqual(state.theme.essentials,['Basic bed']);
+  assert.equal(state.theme.hasBases,false);assert.deepEqual(state.theme.essentials,['Basic bed','Basic clothes storage']);
   assert.equal(state.lots[0].kind,'add');assert.equal(state.players[0].budget,100);
   await shot(a,'L2-first-addition.png');await layoutCheck(a,'bedroom first addition');
   await play([a,b],(seat,lot)=>seat===lot%2?0:'pass');

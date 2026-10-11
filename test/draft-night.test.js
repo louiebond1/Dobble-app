@@ -109,7 +109,30 @@ test('all 250 curated ideas have 75–100 distinct compatible choices and valid 
   }
   const result=await env.call('/api/theme',{topic:'Dream bedroom'});
   assert.equal(result.body.theme.id,'bedroom');assert.equal(result.body.theme.hasBases,false);
-  same(result.body.theme.essentials,['Basic bed']);assert.equal(env.calls.length,0,'library lookup needs no AI');
+  same(result.body.theme.essentials,['Basic bed','Basic clothes storage']);assert.equal(env.calls.length,0,'library lookup needs no AI');
+});
+
+test('functional starters are complete across every venue family and upgrades replace their baseline',async()=>{
+ const env=sandbox({key:''});await env.qa.ready;
+ const required={
+  bedroom:['bed','storage'],'living-room':['seating'],kitchen:['cooker','sink','fridge','worktop','storage','tools'],bathroom:['toilet','sink','shower'],city:['homes','roads','services'],
+  'theme-park':['entrance','ride','facilities'],'water-park':['entrance','pool','facilities'],zoo:['entrance','habitat','care'],resort:['reception','rooms','dining'],restaurant:['kitchen','tables'],
+  cafe:['counter','seating','brewer','sink'],bakery:['oven','counter','prep','bread'],bar:['bar','seating','drinks','sink'],office:['desk','chair','computer'],gym:['floor','equipment'],studio:['bench','tools'],
+  'space-base':['habitat','airlock','life-support','power'],campsite:['camp','facilities'],'sports-complex':['reception','court','changing'],festival:['entrance','stage','facilities'],arcade:['entrance','machine'],
+  museum:['entrance','collection'],airport:['runway','terminal','taxiway','tower'],yacht:['hull','helm','cabin','galley','bathroom'],supercar:['body','wheels','engine','seats','steering','brakes'],
+  aquarium:['entrance','tank'],hotel:['rooms','reception','bathrooms'],cinema:['screen','seating','projector','sound'],'golf-course':['clubhouse','holes'],bookshop:['counter','shelves'],
+ };
+ for(const t of env.qa.PRESETS){
+  const expected=required[t.pool||t.id];if(!expected)continue;
+  for(const id of expected)assert.ok(t.essentials.some(e=>e.id===id),t.id+' needs '+id);
+ }
+ for(const id of ['garden','island'])assert.equal(env.qa.PRESETS.find(t=>t.id===id).essentials.length,0,'undeveloped land does not include free attractions');
+ for(const [id,name,replaces] of [['kitchen','American Fridge','fridge'],['office','Standing Desk','desk'],['bar','Marble Bar','bar'],['cinema','IMAX Screen','screen'],['cinema','Laser Projector','projector'],['supercar','Bucket Seats','seats'],['gaming','Gaming PC','gaming-unit']]){
+  const t=env.qa.PRESETS.find(t=>t.id===id),it=t.items.find(x=>x.name===name);assert.equal(it.replaces,replaces);
+  const r={theme:t,players:[{won:[0]}],lots:[it]};assert.match(env.qa.essentialRules(r,0,1),new RegExp(name+' REPLACES'));
+ }
+ const car=env.qa.PRESETS.find(t=>t.id==='supercar');
+ assert.match(env.qa.essentialRules({theme:car,players:[{won:[]}],lots:[]},0,0),/Engine MUST remain part of the working creation; it need not be externally visible/);
 });
 
 test('related ideas share art jobs and cache planning never generates images',async()=>{
@@ -150,7 +173,7 @@ test('bedroom starts with a free bed and a four-poster replaces it without a bas
   assert.match(prompt,/Four-poster Bed REPLACES the included Basic bed/);
   assert.match(prompt,/do not also draw the basic version/);
   r.players[1].won=[];assert.match(env.qa.essentialRules(r,1,0),/Basic bed MUST remain/);
-  const state=await g.state();same(state.theme.essentials,['Basic bed']);
+  const state=await g.state();same(state.theme.essentials,['Basic bed','Basic clothes storage']);
 });
 
 test('weights favour common items, rare choices still occur and alternatives never repeat',async()=>{

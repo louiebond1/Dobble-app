@@ -42,10 +42,19 @@ async function verifyReplay(theme: string) {
 
 try {
   await health();
-  const planRes = await fetch(api + '/api/cache-plan?key=' + encodeURIComponent(key));
-  if (!planRes.ok) throw Error('Cache plan HTTP ' + planRes.status);
-  const plan = await planRes.json() as { themes: number; uniqueAssets: number };
-  if (plan.themes !== 250) throw Error('Deploy the 250-theme client catalogue before starting prefill');
+  let plan: { themes: number; uniqueAssets: number } | null = null;
+  // Backend and worker are staged together. Wait for the new API while it restarts.
+  for (let attempt = 0; attempt < 60; attempt++) {
+    try {
+      const res = await fetch(api + '/api/cache-plan?key=' + encodeURIComponent(key));
+      if (res.ok) {
+        const current = await res.json() as { themes: number; uniqueAssets: number };
+        if (current.themes === 250) { plan = current; break; }
+      }
+    } catch { /* restart in progress */ }
+    await Bun.sleep(5000);
+  }
+  if (!plan) throw Error('The 250-theme catalogue/API was not ready after five minutes; deploy client then backend');
   log('plan', plan);
   // One final pass proves all distinct prompts exist; related themes share their item thumbnails.
   const passes = Math.ceil(plan.uniqueAssets / 300) + 1;

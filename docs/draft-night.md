@@ -12,6 +12,8 @@ A party auction game: everyone gets the same budget, bids on one item at a time,
 | Tests | `test/draft-night.test.js` (runs in `npm test`, the Railway pre-deploy step) | |
 | Browser end-to-end run | `draft-night/e2e/run.mjs` with `draft-night/e2e/mock-openai.mjs` | Local only |
 
+Dobble Party’s Draft link opens `/draft-night.html`. The standalone Draft Night domain redirects to this same page, which uses the same API and stored image keys. There is no separate frontend catalogue to keep in sync. Versioned CSS/JavaScript links are bumped with this revision so refreshed clients load the new library.
+
 The function source is passed to its container as one base64 argument, so `server.ts` must stay under 96KB (a test enforces this). To deploy it, replace the function's source with the contents of `draft-night/server.ts` (Railway dashboard, or the Railway MCP `update-function-source-code` tool). Redeploying ends any game in progress, because rooms live in memory.
 
 Pictures use Cloudflare FLUX 2 Klein 4B when configured. Item thumbnails are 512px; starting scenes and creations are 1024px. A flagged output gets one neutral-wording retry. With `DRAFT_ALLOW_PAID_FALLBACK=1` (default on), a failed or semantically incomplete picture can use the stronger Klein 9B model. Credit, daily allowance and cost-limit errors never trigger fallback. Runtime games block variable-price OpenAI images to keep the cost ceiling enforceable. `OPENAI_API_KEY` powers custom-theme planning (`DRAFT_PLANNER_MODEL`, default `gpt-4.1`), a second review with `DRAFT_TEXT_MODEL` (default `gpt-4.1-mini`), final composition planning, inventory vision checks (`gpt-4.1`) and the closing verdict.
@@ -28,6 +30,49 @@ Other live image settings: `DRAFT_WORLD_BATCH` (default 2) wins per creation edi
 The version-2 catalogue contains **250 selectable ideas**, with **75–80 additions per idea** (19,971 per-theme choices). Thirty broad families have eight related location/style variants, four additional standalone ideas and the six original presets. Shared pools keep this to 2,720 reusable pool item records plus the original six pools. `scripts/build-draft-catalogue.py` builds the checked-in JSON deterministically; the backend hydrates references, validates prerequisites and replacements, and refuses invalid definitions.
 
 Bedroom, island and the other 244 new ideas start with a ready setting and any functional essentials included. They auction additions immediately. A bedroom includes a basic bed; a four-poster or other bed upgrade explicitly replaces it. Weighted sampling without replacement makes everyday additions more common and statement pieces rarer. Mutually exclusive bed, floor, paint and other variants are capped within the deck. Every idea has at least 30 compatible additions, enough for six players. The original house, food, gaming and garage presets retain meaningful starting auctions; garage starts include two distinct full-size vehicle entrances.
+
+The functional audit covers every family and applies the same rules to all its location/style variants. Included items are plain working starters, rather than luxury upgrades:
+
+| Idea | Functional starter |
+| --- | --- |
+| Bedroom | Bed and clothes storage |
+| Living room | Sofa |
+| Kitchen | Cooker, sink, fridge, preparation counter, cupboards and basic cookware |
+| Bathroom | Toilet, washbasin and shower |
+| City | Homes, connecting local streets and basic utilities |
+| Theme park | Entrance, simple starter ride and visitor toilets |
+| Water park | Entrance, starter pool and changing/toilet facilities |
+| Zoo | Entrance, enclosed starter animal habitat with live goats and animal care building |
+| Resort | Reception, guest accommodation and dining room |
+| Restaurant | Working kitchen with cooker, counter, sink and fridge plus tables/chairs |
+| Cafe | Counter, seating, coffee brewer and sink |
+| Bakery | Oven, counter, preparation tools and a modest bread display |
+| Bar | Counter, stools, drinks/glasses and sink |
+| Office | Desk, chair and work computer |
+| Gym | Exercise floor, basic weights and mat |
+| Creative studio | Work table and basic art tools |
+| Space base | Sealed habitat, airlock, life support and power |
+| Campsite | Tent, fire ring, drinking water and toilets |
+| Sports complex | Reception, usable multi-use court and changing/toilet facilities |
+| Festival | Entrance, simple stage with sound, toilets and water |
+| Arcade | Entrance and working starter cabinet |
+| Museum | Entrance and real starter exhibits |
+| Airport | Runway, terminal, connecting taxiway/apron and control tower |
+| Yacht | Hull, helm, sleeping cabin, galley and bathroom |
+| Supercar | Complete body, wheels, engine, seats, steering and brakes |
+| Aquarium | Entrance and filled starter tank with live fish |
+| Hotel | Reception, working guest bedrooms and bathrooms |
+| Cinema | Screen, seats, projector and sound |
+| Bookshop | Counter and shelves with books |
+| Golf course | Clubhouse and three playable starter holes |
+| Garden / undeveloped island | Usable natural land; no free attractions or buildings |
+| Breakfast plate / dessert buffet | Empty serving surface; food comes from the draft |
+| House | Awarded house with usable entrance and habitable rooms |
+| Gaming setup | Awarded setup with working gaming unit connected to its screen/controller |
+| Garage | Awarded garage with two vehicle entrances |
+| Pancakes / burger / pizza | Awarded edible base; extra toppings come from the draft |
+
+Baseline fridge, desk, chair, bar, screen, projector, gaming computer and other supported upgrades explicitly replace their basic counterpart. Additional facilities remain additions. Internal components stay required without forcing cutaways or visible engines in an exterior photograph. The catalogue picker shows each game's starting policy, exact choice count, included essentials and example upgrades before selection; search matches names, categories, essentials and sample choices.
 
 The client offers a searchable 250-idea picker. Typed topics matching catalogue IDs, titles or aliases reuse the authored definitions without a model request. Other custom topics use the planner to choose included essentials or a meaningful starting auction; image prompts and checks follow that policy.
 
@@ -80,4 +125,4 @@ In a normal two-player auction, if only the opener has money and both can still 
 
 ## Validation of this revision
 
-`npm test`: 69 tests pass, including catalogue validation, 500 complete games across all 250 ideas with two and six players, weighted frequencies, exclusive upgrade groups, included beds, replacement semantics and deduplicated cache planning, alongside including random complete games for 2–6 players, £0 buy/give/timeout decisions, strict image-budget rejection before sending requests, persistent provider spending limits, missing/invented food rejection and clean-base collection references. Browser tests pass for the searchable catalogue and a bedroom game starting directly with additions, plus a complete two-player property game and pancake game with the real API and mocked providers. Real provider theme checks covered desert island, city, zoo, garden, bedroom and football squad. Real image experiments covered breakfast, four- and six-car garages and an island over multiple prompt/checker revisions. Breakfast and island examples produced complete scenes; crowded garages can still omit or substitute specific models, so semantic rejection and visible inventory fallback are necessary. Vision checks are fallible; a manual review caught duplicate vehicles accepted by the initial mini checker, prompting the stronger checker and explicit extras rule. Do not claim every image is guaranteed accurate.
+`npm test`: 70 tests pass, including a functional-minimum audit across all family variants, replacement/visibility rules, catalogue validation, 500 complete games across all 250 ideas with two and six players, weighted frequencies, exclusive upgrade groups, included beds, replacement semantics and deduplicated cache planning, alongside including random complete games for 2–6 players, £0 buy/give/timeout decisions, strict image-budget rejection before sending requests, persistent provider spending limits, missing/invented food rejection and clean-base collection references. Browser tests pass for the searchable catalogue and a bedroom game starting directly with additions, plus a complete two-player property game and pancake game with the real API and mocked providers. Real provider theme checks covered desert island, city, zoo, garden, bedroom and football squad. Real image experiments covered breakfast, four- and six-car garages and an island over multiple prompt/checker revisions. Breakfast and island examples produced complete scenes; crowded garages can still omit or substitute specific models, so semantic rejection and visible inventory fallback are necessary. Vision checks are fallible; a manual review caught duplicate vehicles accepted by the initial mini checker, prompting the stronger checker and explicit extras rule. Do not claim every image is guaranteed accurate.

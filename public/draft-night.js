@@ -91,10 +91,16 @@
     var input = sheet.querySelector('#librarySearch');
     function draw() {
       var q = input.value.toLowerCase().trim();
-      var matches = ui.presets.filter(function(p) { return (p.title + ' ' + (p.category || '') + ' ' + (p.essentials || []).join(' ')).toLowerCase().includes(q); });
-      sheet.querySelector('#libraryResults').innerHTML = '<p class="muted">'+matches.length+' ideas · 75–100 choices each</p><div class="library-list">' + matches.map(function(p) { return '<button class="theme" data-library-theme="'+esc(p.id)+'"><span class="em">'+esc(p.emoji)+'</span><b>'+esc(p.title)+'</b><small>'+startCopy(p)+'</small></button>'; }).join('') + '</div>';
+      var matches = ui.presets.filter(function(p) { return (p.title + ' ' + (p.category || '') + ' ' + (p.essentials || []).join(' ') + ' ' + (p.examples || []).join(' ') + ' ' + (p.starts || []).join(' ')).toLowerCase().includes(q); });
+      if (q) matches.sort(function(a,b) { return Number(!a.title.toLowerCase().includes(q)) - Number(!b.title.toLowerCase().includes(q)); });
+      sheet.querySelector('#libraryResults').innerHTML = '<p class="muted">'+matches.length+' ideas</p><div class="library-list">' + matches.map(function(p) {
+        var essentials = p.essentials || [], examples = p.examples || [];
+        var included = hasStarts(p) ? (essentials.length ? 'Every starter includes: ' + esc(essentials.join(', ')) : '') : startCopy(p);
+        return '<button class="theme" data-library-theme="'+esc(p.id)+'"><span class="library-title"><span class="em">'+esc(p.emoji)+'</span><b>'+esc(p.title)+'</b></span><small>'+esc(p.itemCount || 75)+' possible additions · '+(hasStarts(p) ? 'Starting auction' : 'Essentials free')+'</small>' + (included ? '<small class="library-included">'+included+'</small>' : '') + (hasStarts(p) ? '<small>Starting choices: '+esc((p.starts || []).slice(0,3).join(', '))+'</small>' : '') + '<small class="library-examples">Possible upgrades: '+esc(examples.slice(0,4).join(', '))+'</small><span class="library-choose">Choose this game</span></button>';
+      }).join('') + '</div>' + (matches.length ? '' : '<p>No matching games. Try a place, room or food such as island, kitchen or pizza.</p>');
+      sheet.querySelector('.sheet-body').scrollTop = 0;
     }
-    input.addEventListener('input',draw); draw(); input.focus();
+    input.addEventListener('input',draw); draw(); input.focus({ preventScroll: true });
   }
   function renderHome() {
     var t = theme(), n = seats(), total = auctionTotal(), max = t.maxPlayers || 6;

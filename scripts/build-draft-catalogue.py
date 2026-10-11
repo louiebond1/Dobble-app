@@ -250,6 +250,43 @@ specials = [
 'Dry Water Hazard|Overgrown Fairway|Cracked Putting Green|Broken Buggy Garage|Collapsed Footbridge|Rusty Practice Nets|Leaking Clubhouse|Abandoned Bunker', 'as a full-size distinct golf hole, terrain feature or clubhouse facility within the course',True),
 ]
 
+# Functional minimums are authored per family, not inferred from a single example.
+# Only include modest starters. Luxury attractions and ingredients stay in the draft.
+FUNDAMENTALS = {
+ 'bedroom': [('storage','Basic clothes storage','one small plain clothes cupboard')],
+ 'kitchen': [('fridge','Basic fridge','one small plain refrigerator'), ('worktop','Prep worktop','one plain food-preparation worktop'), ('storage','Kitchen storage','one set of simple lower cupboards'), ('tools','Basic cookware','a small set of plain pans, plates and utensils on the worktop')],
+ 'city': [('homes','Starter homes','one small residential block with modest homes'), ('roads','Local street network','one short connected network of basic local streets serving the homes'), ('services','Basic city services','one compact working utility building supplying water and power to the starter neighbourhood')],
+ 'theme-park': [('ride','Starter ride','one small simple roundabout ride beside the entrance'), ('facilities','Visitor facilities','one modest visitor toilet pavilion connected by a safe path')],
+ 'water-park': [('pool','Starter swimming pool','one small plain shallow swimming pool'), ('facilities','Changing and toilets','one modest changing-room and toilet pavilion')],
+ 'zoo': [('habitat','Starter animal habitat','one modest safely enclosed grassy goat habitat with two live goats and a small animal shelter'), ('care','Animal care building','one small animal-care and feed-storage building')],
+ 'resort': [('rooms','Starter accommodation','one modest guest-lodge wing with working bedrooms and bathrooms'), ('dining','Basic dining room','one modest dining lodge serving the guest accommodation')],
+ 'cafe': [('brewer','Basic coffee brewer','one plain filter-coffee brewer with mugs on the serving counter'), ('sink','Cafe sink','one simple wash-up sink behind the counter')],
+ 'bakery': [('prep','Baking workbench','one plain baking workbench with mixing bowls, utensils and dough trays'), ('bread','Starter bread display','one small rack with a few plain baked loaves')],
+ 'bar': [('drinks','Starter drinks stock','one modest shelf of plain drinks bottles and drinking glasses behind the bar'), ('sink','Bar sink','one simple wash-up sink behind the bar')],
+ 'office': [('computer','Basic work computer','one plain laptop on the existing work desk')],
+ 'gym': [('equipment','Starter exercise equipment','one modest rack holding a basic set of dumbbells and one exercise mat')],
+ 'studio': [('tools','Basic art tools','one small set of drawing paper, pencils, brushes and paint pots on the work table')],
+ 'space-base': [('life-support','Life support','one compact life-support unit attached to the sealed habitat'), ('power','Starter power supply','one small solar panel array connected to the habitat')],
+ 'campsite': [('facilities','Campsite water and toilets','one modest washroom hut with toilets and a drinking-water tap')],
+ 'sports-complex': [('court','Starter sports court','one plain full-size multi-use sports court with basic line markings'), ('changing','Basic changing rooms','one modest changing-room and toilet block')],
+ 'festival': [('stage','Starter performance stage','one modest raised performance platform with two small speakers'), ('facilities','Festival toilets and water','one modest toilet block with drinking-water taps')],
+ 'arcade': [('machine','Starter arcade machine','one plain working generic arcade cabinet with its game screen and controls')],
+ 'museum': [('collection','Starter museum exhibits','one modest display of local historical objects in two glass cases with plain interpretation panels')],
+ 'airport': [('taxiway','Taxiway and apron','one basic taxiway connecting the runway to a small aircraft parking apron at the terminal'), ('tower','Basic control tower','one modest airport control tower')],
+ 'yacht': [('galley','Basic galley','one modest galley kitchenette built into the yacht'), ('bathroom','Yacht bathroom','one small enclosed bathroom within the hull')],
+ 'supercar': [('seats','Basic car seats','two plain sports-car seats visible through the windscreen'), ('steering','Working steering wheel','one plain steering wheel visible through the windscreen'), ('brakes','Working brakes','one complete set of plain brakes behind the four wheels')],
+ 'aquarium': [('tank','Starter fish tank','one modest filled freshwater tank with several live goldfish and simple aquatic plants')],
+ 'hotel': [('bathrooms','Guest bathrooms','simple working bathrooms within the guest-room wing')],
+ 'cinema': [('projector','Basic projector','one plain digital projector aimed at the cinema screen'), ('sound','Basic sound system','one plain pair of cinema loudspeakers beside the screen')],
+}
+for f in families:
+    f['essentials'] += FUNDAMENTALS.get(f['key'], [])
+    if f['key']=='restaurant':
+        f['essentials']=[(a,b,'one modest open kitchen with a working cooker, preparation counter, sink and plain fridge along the rear wall' if a=='kitchen' else c) for a,b,c in f['essentials']]
+# A golf course needs playable golf, rather than just a clubhouse on empty grass.
+specials = [(k,title,emoji,foundation,essentials + ([('holes','Starter golf holes','three simple playable golf holes with fairways, putting greens, tee markers and flags')] if k=='golf-course' else []),names,bad,placement,spatial)
+            for k,title,emoji,foundation,essentials,names,bad,placement,spatial in specials]
+
 # A shared, explicit alternative group prevents repetitive auctions and conflicting replacements.
 BED_NAMES = set(families[0]['names'][:12])
 GROUPS = {
@@ -267,6 +304,21 @@ car = next(f for f in families if f['key']=='supercar')
 GROUPS['supercar']['wheels'] = (set(car['names'][8:16]),1,'wheels')
 GROUPS['supercar']['paint'] = ({n for n in car['names'] if n.endswith('Paint') or n in {'Racing Stripes','Two-tone Paint','Painted Roof','Racing Livery'}},1,None)
 
+# Functional upgrades replace a baseline instead of creating redundant copies.
+GROUPS['bedroom']['basic-storage'] = (GROUPS['bedroom']['wardrobe'][0],1,'storage')
+del GROUPS['bedroom']['wardrobe']
+GROUPS['kitchen'].update({'worktops': (GROUPS['kitchen']['worktops'][0],1,'worktop'), 'cabinets': (GROUPS['kitchen']['cabinets'][0],1,'storage'), 'fridge': ({'American Fridge','Integrated Fridge'},1,'fridge'), 'sink': ({'Double Sink','Copper Sink'},1,'sink')})
+GROUPS['office'] = {'desk': ({'Standing Desk','Oak Desk','Glass Desk','Corner Desk','Executive Desk'},1,'desk'), 'chair': ({'Ergonomic Chair','Mesh Chair','Leather Chair','Kneeling Chair'},1,'chair')}
+GROUPS['bar'] = {'bar-counter': ({'Copper Bar','Marble Bar','Oak Bar','Circular Bar'},1,'bar')}
+GROUPS['cafe'] = {'brewer': ({'Espresso Machine','Pour-over Station'},1,'brewer')}
+GROUPS['bakery'] = {'oven': ({'Stone Oven'},1,'oven')}
+GROUPS['festival'] = {'main-stage': ({'Main Stage'},1,'stage')}
+GROUPS['airport'] = {'control-tower': ({'Control Tower'},1,'tower')}
+GROUPS['cinema'] = {'main-screen': ({'IMAX Screen','Dolby Cinema Screen','Panoramic Screen','Wraparound Screen','LED Cinema Wall','Giant Screen','Curved Screen','Retractable Screen'},1,'screen'), 'projector': ({'Laser Projector','Digital Projector','35mm Projector','70mm Projector'},1,'projector'), 'main-seating': ({'Reclining Seats','Leather Seats','Velvet Seats','Sofa Seating','Beanbag Seating','Bed Seating','Couple Pods','Heated Seats','Motion Seats','Massage Seats'},1,'seating'), 'sound': ({'Surround Sound'},1,'sound')}
+GROUPS['supercar']['seats'] = (GROUPS['supercar']['seats'][0],1,'seats')
+GROUPS['supercar']['steering'] = ({'Sports Steering Wheel','Carbon Steering Wheel'},1,'steering')
+GROUPS['supercar']['brakes'] = ({'Carbon-ceramic Brakes','Big Brake Kit'},1,'brakes')
+
 def slug(s): return re.sub(r'[^a-z0-9]+','-',s.lower()).strip('-')
 def item(name, placement, index, family_key, bad=False):
     # The same physical item has the same isolated-art prompt across compatible ideas.
@@ -277,7 +329,9 @@ def item(name, placement, index, family_key, bad=False):
     for group,(members,limit,replaces) in GROUPS.get(family_key,{}).items():
         if name in members:
             x.update(group=group,groupLimit=limit)
-            if replaces: x['replaces']=replaces
+            if replaces:
+                x['replaces']=replaces
+                x['visual']=prefix+' '+placement+'; this replaces the matching basic essential in its original functional position, leaving only the upgraded version'
     if family_key=='bedroom':
         x['requires']=['bed']
         if name in BED_NAMES:
@@ -294,6 +348,13 @@ for t in legacy:
     t['category']='Food' if t['id'] in {'pancakes','burger','pizza'} else 'Homes & hobbies'
     t['startMode']='auction'
     t['aliases']=[t['id'],t['title'].lower()]
+    if t['id']=='house':
+        t['essentials']=[dict(id='access',name='Working house entrance',visual='a usable front door with a short access path'),dict(id='habitable',name='Habitable rooms',visual='the house has basic working bedrooms, a kitchen and a bathroom inside; preserve them without exposing the interior',visible=False)]
+    if t['id']=='gaming':
+        t['essentials']=[dict(id='gaming-unit',name='Working gaming unit',visual='one plain starter gaming unit connected to the existing monitor or television, with one simple controller')]
+        t['items']=[dict(zip(('name','blurb','visual'),x.split('|'))) if isinstance(x,str) else x for x in t['items']]
+        for x in t['items']:
+            if x['name']=='Gaming PC': x.update(replaces='gaming-unit',group='gaming-unit',groupLimit=1)
     if t['id']=='garage':
         t['essentials']=[dict(id='entrances',name='Two garage entrances',visual='two separate full-size vehicle doorways into the garage, both clearly visible')]
     themes.append(t)
@@ -316,7 +377,7 @@ for f in families:
         if title=='Sailing Superyacht': foundation+='; the complete yacht already has its working mast and sails'
         if title=='Roadster Supercar': foundation='one complete plain open-top road-going sports car viewed from a raised three-quarter angle, with the whole vehicle visible'
         base['visual']=foundation+'. '+title+' setting, plain and unfinished beyond the included essentials'
-        t=dict(id=k if i==0 else slug(title),title=title,emoji=f['emoji'],mode='build',noun=f['noun'],label='Addition',startLabel='Start',startMode='included',base=base,scene='Wide oblique aerial photograph of the entire full-size site in natural daylight' if f['spatial'] else 'Wide elevated interior photograph showing the whole room in natural daylight' if k not in {'yacht','supercar'} else 'Wide raised three-quarter photograph showing the complete full-size vehicle in natural daylight',spatial=f['spatial'],bases=[],pool=k,category=category,essentials=[dict(id=a,name=b,visual=c) for a,b,c in f['essentials']],aliases=[title.lower()])
+        t=dict(id=k if i==0 else slug(title),title=title,emoji=f['emoji'],mode='build',noun=f['noun'],label='Addition',startLabel='Start',startMode='included',base=base,scene='Wide oblique aerial photograph of the entire full-size site in natural daylight' if f['spatial'] else 'Wide elevated interior photograph showing the whole room in natural daylight' if k not in {'yacht','supercar'} else 'Wide raised three-quarter photograph showing the complete full-size vehicle in natural daylight',spatial=f['spatial'],bases=[],pool=k,category=category,essentials=[dict(id=a,name=b,visual=c,**({'visible':False} if (k in {'supercar','yacht'} and a in {'engine','brakes','galley','bathroom','cabin'}) or (k=='hotel' and a=='bathrooms') else {})) for a,b,c in f['essentials']],aliases=[title.lower()])
         if i==0: t['aliases'] += [k.replace('-',' '),'dream '+k.replace('-',' ')]
         if k=='island' and i==0:t['aliases']+=['dream island','tropical island']
         themes.append(t)
