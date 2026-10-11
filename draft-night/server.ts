@@ -2,7 +2,8 @@
 // The client lives in Dobble-app/public/draft-night.html and calls this API cross-origin.
 // Keep this file well under 96KB: Railway passes it to the container as one base64 argument.
 
-type Item = { name: string; blurb: string; visual: string };
+// pic: the description its picture is made from, when that differs from visual (a typed theme reusing a preset item's picture).
+type Item = { name: string; blurb: string; visual: string; pic?: string };
 type Mode = 'property' | 'build' | 'collection';
 // bases: the starting options auctioned first (one per player). base: what everyone holds before winning one.
 type Theme = { id: string; title: string; emoji: string; mode: Mode; noun: string; label: string; startLabel: string; base: Item | null; scene: string; bases: Item[]; items: Item[]; bad: Item[]; created: number };
@@ -38,327 +39,28 @@ let clock = () => Date.now();
 // Each line: Name|short blurb shown to players|visual description used for image generation (what it looks like and where it goes).
 const parse = (s: string): Item[] => s.trim().split('\n').map(l => { const [name, blurb, visual] = l.split('|').map(x => x.trim()); return { name, blurb, visual: visual || blurb }; });
 
-const HOUSES = parse(`
-Victorian Terrace|Two-up two-down with a tiny front yard|a modest two-storey red-brick Victorian mid-terrace house, one of a continuous row of near-identical terraced houses on a narrow residential street, with a low brick front wall and a tiny paved front yard
-Semi-detached Home|A 1930s family semi with a driveway|an ordinary 1930s two-storey semi-detached house with a bay window, cream render, a short driveway and a small front lawn, joined to its neighbour on one side
-Modern Townhouse|Three slim storeys of brick and glass|a narrow three-storey modern townhouse in grey brick with tall black-framed windows and a small front courtyard, between similar townhouses on a city street
-Country Cottage|Stone walls, roses and a garden gate|a small detached stone cottage with a slate roof, a wooden front door, climbing roses and a modest cottage garden behind a low stone wall on a quiet village lane
-Lakefront Cabin|A timber cabin on a quiet shore|a small single-storey timber cabin with a covered porch on a gently sloping grassy clearing at the edge of a calm lake, pine trees behind
-Contemporary Villa|Clean white lines and big glass doors|a modern two-storey white-rendered villa with flat roofs, large glass sliding doors, a small paved terrace and a neat lawn in a sunny Mediterranean setting
-Large Detached House|Five bedrooms on a leafy avenue|a large but realistic red-brick detached family house with a double garage, a gravel driveway and a mature front garden on a leafy suburban avenue
-Seaside Bungalow|Single storey, sea breeze|a white-painted single-storey bungalow with a blue front door and a small gravel front garden, beside a coastal road with the sea behind
-Converted Barn|Oak beams and a farmyard view|a converted timber-clad barn with a pitched roof, a tall glazed entrance and a gravel courtyard, set among green fields
-Country Manor|Ivy, chimneys and a sweeping drive|a grand Georgian country manor house in honey-coloured stone with tall sash windows, several chimneys and a sweeping gravel drive across a lawn
-Mansion on a Hill|Sweeping views from the top|a large modern white mansion with glass walls and terraces perched on top of a green hill, a winding drive leading up to it
-Beachside House|Steps from the sand|a modern two-storey timber-and-glass beach house right on a sandy beach with dune grass in front and the sea behind
-City Penthouse Building|The top floor is yours|a sleek glass apartment tower photographed from the street, with a penthouse on the top floor and a wide roof edge
-Alpine Chalet|Snowy peaks and a wood burner|a traditional wooden alpine chalet with a steep roof and balconies on a snowy mountain slope with pine trees`);
-
-const PRESETS: Theme[] = [
-  { id: 'house', title: 'Dream House', emoji: '🏡', mode: 'property', noun: 'home', label: 'Upgrade', startLabel: 'Home', base: { name: 'Empty plot', blurb: 'Bid for your home first', visual: 'an empty grassy building plot with a low fence around it on a quiet residential street, neighbouring houses at the edges' }, scene: 'Elevated drone photograph from above and in front at about 45 degrees, showing the whole house, its roof and its entire plot including the back garden, with a little space around the boundaries', bases: HOUSES, created: 0, bad: parse(`
-Mouldy Shed|Damp, green and sagging|a sagging rotten wooden garden shed streaked with green mould in the garden
-Leaking Roof|Buckets in every room|a torn blue tarpaulin weighed down with bricks over a hole in the roof
-Rusty Caravan|Abandoned by a cousin|a rusty abandoned caravan with flat tyres parked in the front garden
-Pigeon Colony|Every ledge taken|dozens of grey pigeons crowding the roof ridge and gutters, white droppings below
-Electricity Pylon|Buzzing all night|a tall grey steel electricity pylon with sagging cables right beside the plot
-Overflowing Bins|The foxes love them|three overflowing wheelie bins with split rubbish bags spilling across the front path
-Burnt-out Car|Not going anywhere|a burnt-out rusty car shell on bricks on the driveway
-Weed Jungle|Brambles everywhere|overgrown brambles, nettles and waist-high weeds swallowing the whole garden`), items: parse(`
-Swimming Pool|A sparkling outdoor pool|a small rectangular swimming pool with stone edging, shorter than the house is wide, in the back garden behind the house
-Hot Tub|Bubbles under the stars|a round cedar hot tub with steam rising, on a patio beside the house
-Supercar|Red, loud and Italian|a glossy red Italian supercar parked on the driveway or kerb directly outside the house
-Paddleboard|For calm-water mornings|a turquoise stand-up paddleboard and paddle leaning against the front wall of the house
-Outdoor Kitchen|Grill, pizza oven and bar stools|a small stone outdoor kitchen counter with a grill and a dome pizza oven on a paved patio right against the back wall of the house, clearly visible
-Landscaped Garden|Lush planting and stone paths|lush landscaped flower beds, clipped box hedges and a stone path, replacing the plain planting within the existing plot
-Treehouse|Every kid's dream (and yours)|a wooden treehouse with a rope ladder in a tree beside the house
-Home Cinema|Huge screen, reclining seats|a home cinema with a huge glowing screen and red reclining seats, clearly visible through a large ground-floor window
-Games Room|Pool table and arcade machines|a games room with a green pool table and retro arcade cabinets, clearly visible through a large ground-floor window
-Rooftop Terrace|Loungers with a view|a rooftop terrace with a glass balustrade, two sun loungers and potted olive trees on the roof
-Luxury Garage|Sleek glass-fronted garage|a modern single garage with a sleek glass door attached to the side of the house
-Classic Mini|A 1960s British icon|a classic 1960s Mini Cooper in British racing green with a white roof parked outside the house
-Campervan|Weekends, sorted|a two-tone orange and white vintage VW campervan parked outside the house
-Trampoline|Bounce off the stress|a small round garden trampoline with a black safety net on the back lawn
-Fire Pit|Marshmallow nights|a stone fire pit with low flames surrounded by four wooden Adirondack chairs beside the house
-Greenhouse|Grow your own tomatoes|a small Victorian-style glass greenhouse beside the house
-Garden Office|The shortest commute|a small modern timber garden office pod with a glass front beside the house
-Solar Panels|Free sunshine|a neat array of black solar panels fitted on the roof
-Golden Retriever|Best friend included|a happy golden retriever sitting on the front step
-Basketball Hoop|Shoot hoops on the drive|a basketball hoop on a black pole beside the driveway or front path
-Pergola & Lights|Golden-hour dinners|a small freestanding wooden pergola, smaller than a car, strung with festoon lights over a dining table on the back lawn, a few metres away from the house and not touching it
-Koi Pond|Calm, colourful fish|a small round koi pond, about the size of a car, with orange fish and lily pads in one corner of the front garden
-Putting Green|Practise your short game|a small artificial-grass putting green with one red flag, about the size of a car, on the back lawn
-Sauna Cabin|Scandinavian steam|a small barrel-shaped cedar sauna beside the house
-Hammock|Do absolutely nothing|a striped rope hammock strung between two posts beside the house
-Beehives|Your own honey|two white wooden beehives at the far end of the back garden
-Climbing Frame|Swings and a slide|a small wooden climbing frame with two swings and a slide on the back lawn
-Chicken Coop|Fresh eggs every morning|a wooden chicken coop with three brown hens pecking around it beside the house
-Water Slide|Pure summer chaos|a small bright blue inflatable water slide, smaller than a car, on the back lawn
-Speedboat|Ready for the water|a white speedboat on a trailer parked beside the house
-E-bikes|Two bikes, zero sweat|two electric bikes in a bike rack by the front door
-Yellow Front Door|First impressions count|a glossy bright yellow front door with a brass knocker, replacing the existing front door
-Electric Gates|Very private|a pair of black metal gates across the driveway entrance only, with no new walls or fences added
-Rose Arch|Romance at the gate|an arched trellis covered in pink climbing roses over the front path`) },
-  { id: 'pancakes', title: 'Pancakes', emoji: '🥞', mode: 'build', noun: 'breakfast plate', label: 'Topping', startLabel: 'Base', created: 0,
-    base: { name: 'Empty plate', blurb: 'Bid for what goes on it first', visual: 'an empty round white ceramic plate' },
-    bases: parse(`
-Buttermilk Pancakes|A fluffy stack of three|a plain stack of three golden buttermilk pancakes on a round white plate, nothing on top
-Belgian Waffle|Deep pockets for toppings|a plain thick golden Belgian waffle on a round white plate, nothing on top
-French Crêpes|Thin, folded and delicate|two plain thin golden crêpes folded into triangles on a round white plate, nothing on top
-Brioche French Toast|Eggy, golden slices|three plain thick slices of golden brioche French toast stacked on a round white plate, nothing on top
-Japanese Soufflé Pancakes|Tall and wobbly|two tall jiggly Japanese soufflé pancakes on a round white plate, nothing on top
-Dutch Baby|A puffy oven pancake|a plain puffed golden Dutch baby pancake in a small black cast-iron pan on the plate, nothing on top
-Scotch Pancakes|Little thick drop scones|a neat pile of five small plain Scotch pancakes on a round white plate, nothing on top
-Churro Waffle|Cinnamon-sugar crunch|a plain churro waffle dusted with cinnamon sugar on a round white plate, nothing else on top`),
-    scene: 'Food photograph on a pale oak table, three-quarter view from slightly above, soft window daylight, the whole plate in frame with space around it', bad: parse(`
-Ketchup|Wrong breakfast entirely|a squiggle of tomato ketchup across the top of the stack
-Sardines|Straight from the tin|three oily tinned sardines laid across the top
-Raw Onion|Eye-watering crunch|chunks of raw white onion scattered over the top
-Cold Baked Beans|Congealed and orange|a spoonful of cold baked beans on top of the stack
-Brussels Sprouts|Boiled grey-green|boiled Brussels sprouts piled on top
-Burnt Pancake|Charcoal on top|a blackened burnt pancake added on top of the stack
-Pickled Gherkins|Sour surprise|sliced pickled gherkins on top of the stack
-English Mustard|A fiery squirt|a zigzag of bright yellow mustard over the stack`), items: parse(`
-Fresh Strawberries|Sweet, sliced, scattered|sliced fresh strawberries scattered over the top of the stack
-Nutella|The chocolate-hazelnut classic|a thick glossy swirl of Nutella chocolate-hazelnut spread across the top pancake
-Maple Syrup|Poured until it drips|amber maple syrup poured over the stack and dripping down the sides
-Whipped Cream|A cloud on top|a tall swirl of whipped cream on top of the stack
-Crushed Oreos|Cookies-and-cream crunch|crushed Oreo cookie pieces sprinkled over the top
-Vanilla Ice Cream|A melting scoop|a scoop of vanilla ice cream melting on top of the stack
-Caramelised Bananas|Golden and sticky|glossy caramelised banana slices on top of the stack
-Crispy Bacon|Sweet meets salty|three rashers of crispy streaky bacon laid across the top
-Chocolate Chips|Little pockets of joy|dark chocolate chips scattered over the stack
-Lotus Biscoff|Spiced caramel spread|a drizzle of Lotus Biscoff spread with a crumbled Biscoff biscuit on top
-Blueberries|Bursting and fresh|fresh blueberries scattered over the stack and plate
-Lemon & Sugar|The pancake-day classic|a lemon wedge on the plate and a dusting of sugar on top
-Golden Syrup|Sticky and sweet|glossy golden syrup drizzled over the stack
-Raspberries|Tart and bright|fresh raspberries on top of the stack
-Salted Caramel|Rich and glossy|salted caramel sauce drizzled over the stack
-Peanut Butter|Thick and creamy|a thick layer of peanut butter melting on the top pancake
-Toasted Marshmallows|Gooey and golden|toasted mini marshmallows on top of the stack
-Rainbow Sprinkles|Party mode on|colourful rainbow sprinkles scattered over the top
-Fried Egg|Brunch, sorted|a sunny-side-up fried egg on top of the stack
-Honey|Straight from the comb|honey drizzled over the stack with a wooden honey dipper on the plate
-Greek Yoghurt|Tangy and thick|a dollop of thick Greek yoghurt on top
-Pistachio Cream|Green and luxurious|a pistachio cream drizzle with chopped pistachios on top
-White Chocolate Sauce|Creamy drizzle|white chocolate sauce drizzled in lines over the stack
-Cinnamon Apples|Warm apple-pie vibes|warm cinnamon-spiced apple slices on top
-Clotted Cream|A proper Cornish dollop|a dollop of clotted cream on top
-Fresh Mango|Tropical sunshine|fresh mango cubes on top of the stack
-Toasted Coconut|Crunchy golden flakes|toasted coconut flakes sprinkled over the top
-Extra Pancake|A taller stack|one extra pancake added to the stack, making it four pancakes tall
-Butter|Simple perfection|a melting square pat of butter on the top pancake
-Hot Fudge|Thick and molten|hot fudge sauce poured over the top
-Pomegranate Seeds|Jewel-like crunch|ruby pomegranate seeds scattered on top
-Kinder Bueno|Wafer and hazelnut|broken Kinder Bueno bar pieces on top`) },
-  { id: 'burger', title: 'Burgers', emoji: '🍔', mode: 'build', noun: 'burger', label: 'Topping', startLabel: 'Burger', created: 0,
-    base: { name: 'Empty bun', blurb: 'Bid for what goes inside it first', visual: 'an empty sesame-seed bun' },
-    bases: parse(`
-Beef Burger|A thick grilled beef patty|a burger with one thick grilled beef patty in a plain sesame-seed bun, nothing else inside
-Cheeseburger|Beef with melted cheese|a burger with a grilled beef patty and one slice of melted cheese in a plain sesame-seed bun, nothing else inside
-Chicken Burger|Crispy buttermilk fillet|a burger with one crispy golden fried chicken fillet in a plain sesame-seed bun, nothing else inside
-Veggie Plant Burger|A juicy plant-based patty|a burger with one plant-based veggie patty in a plain sesame-seed bun, nothing else inside
-Double Smash Burger|Two thin crispy patties|a burger with two thin smashed crispy-edged beef patties in a plain sesame-seed bun, nothing else inside
-Lamb Burger|Spiced and juicy|a burger with one spiced lamb patty in a plain sesame-seed bun, nothing else inside
-Fish Burger|Golden battered fillet|a burger with one golden battered fish fillet in a plain sesame-seed bun, nothing else inside
-Halloumi Burger|Two grilled slabs|a burger with two thick slabs of grilled halloumi in a plain sesame-seed bun, nothing else inside`),
-
-    scene: 'Food photograph on a dark slate board, eye-level side view so every layer of the burger is visible, warm restaurant lighting, the whole burger in frame', bad: parse(`
-Soggy Lettuce|Limp, brown and wet|limp wilted brown soggy lettuce hanging out of the burger
-Tinned Sardines|A fishy disaster|oily tinned sardines layered on the patty
-Gummy Bears|Wrong aisle|colourful gummy bears scattered on the patty
-Custard|A sweet yellow puddle|yellow custard dripping from the patty
-Brussels Sprouts|Boiled and sad|halved boiled Brussels sprouts on the patty
-Tinned Spaghetti|Floppy and orange|tinned spaghetti in tomato sauce spilling out of the burger
-Stale Bun|Hard as a rock|a dry cracked stale bun replacing the sesame bun
-Burnt Onions|Bitter and black|a heap of blackened burnt onions on the patty`), items: parse(`
-Crispy Bacon|Smoky streaky rashers|crispy streaky bacon rashers layered on the patty
-Mature Cheddar|Melted right over the edge|a slice of melted orange cheddar draped over the patty
-American Cheese|The classic melt|a melted slice of yellow American cheese on the patty
-Blue Cheese|Bold and tangy|crumbled blue cheese melting on the patty
-Extra Patty|Double trouble|a second grilled beef patty stacked in the burger
-Pickles|Sharp and crunchy|sliced dill pickles layered in the burger
-Caramelised Onions|Sweet and jammy|a layer of soft brown caramelised onions
-Onion Rings|Crunchy battered rings|two golden battered onion rings stacked in the burger
-Jalapeños|Bring the heat|sliced green jalapeños layered on the patty
-Fried Egg|Runny yolk guaranteed|a fried egg with a runny yolk on top of the patty
-Avocado|Creamy green slices|sliced avocado layered in the burger
-Lettuce|Fresh crunch|crisp iceberg lettuce leaves in the burger
-Beef Tomato|Thick juicy slices|thick slices of red beef tomato in the burger
-Burger Sauce|Secret pink sauce|creamy pink burger sauce dripping from the burger
-BBQ Sauce|Sticky and smoky|sticky dark BBQ sauce dripping from the patty
-Truffle Mayo|Fancy and garlicky|a smear of truffle mayonnaise on the bun
-Brioche Bun|Glossy and soft|a glossy golden brioche bun replacing the sesame bun
-Pretzel Bun|Dark and salty|a dark pretzel bun with salt flakes replacing the sesame bun
-Garlic Mushrooms|Earthy and buttery|sautéed garlic mushrooms piled on the patty
-Hash Brown|Crispy potato layer|a crispy golden hash brown inside the burger
-Pineapple Ring|Controversial sweetness|a grilled pineapple ring on the patty
-Mac & Cheese|Gloriously messy|a slab of fried mac and cheese inside the burger
-Pulled Pork|Slow-cooked and saucy|a pile of saucy pulled pork on the patty
-Grilled Halloumi|Squeaky extra cheese|a thick slice of grilled halloumi in the burger
-Ketchup|The essential|ketchup oozing from the burger
-American Mustard|Bright yellow tang|a zigzag of yellow mustard on the patty
-Red Onion|Sharp raw rings|thin rings of raw red onion in the burger
-Fries on the Side|Golden and salted|a pile of golden fries on the board beside the burger
-Milkshake on the Side|Thick vanilla shake|a tall glass of vanilla milkshake on the board beside the burger
-Chilli Con Carne|Spicy beef topping|a spoonful of chilli con carne spilling over the patty
-Coleslaw|Creamy and crunchy|creamy coleslaw piled on the patty
-Smoked Gouda|Rich and smoky|a melted slice of smoked gouda in the burger`) },
-  { id: 'pizza', title: 'Pizza', emoji: '🍕', mode: 'build', noun: 'pizza', label: 'Topping', startLabel: 'Pizza', created: 0,
-    base: { name: 'Empty peel', blurb: 'Bid for your pizza style first', visual: 'an empty wooden pizza peel' },
-    bases: parse(`
-Neapolitan Margherita|Puffy, charred crust|a round Neapolitan pizza with a puffy charred crust, tomato sauce and a few mozzarella patches only
-Detroit Square|Crispy cheesy edges|a rectangular Detroit-style pizza with crispy caramelised cheese edges, tomato sauce and cheese only
-Chicago Deep Dish|Tall and saucy|a whole Chicago deep-dish pizza in its pan with a tall crust, tomato sauce and cheese only
-New York Pie|Big, thin and foldable|a large thin New York-style pizza with tomato sauce and mozzarella only
-Roman Pinsa|Light and crunchy oval|an oval Roman pinsa with tomato sauce and mozzarella only
-Sicilian Sfincione|Thick and spongy|a thick square Sicilian pizza with tomato sauce and a sprinkle of breadcrumbs only
-White Pizza|No tomato, all cheese|a round white pizza with mozzarella, ricotta and olive oil only, no tomato
-Sourdough Flatbread|Long and blistered|a long blistered sourdough flatbread pizza with tomato sauce and mozzarella only`),
-
-    scene: 'Overhead flat-lay food photograph of the whole pizza on a large wooden pizza peel on a light stone counter, soft daylight', bad: parse(`
-Gummy Worms|Sweet and squidgy|colourful gummy worms across the pizza
-Brussels Sprouts|Boiled and bitter|halved boiled Brussels sprouts across the pizza
-Banana Slices|Fruit gone wrong|banana slices across the pizza
-Cold Baked Beans|A breakfast mistake|baked beans spooned across the pizza
-Custard|A sweet yellow puddle|yellow custard poured over the middle of the pizza
-Whole Sardines|Staring back at you|whole sardines laid across the pizza
-Cornflakes|Breakfast on a pizza|cornflakes sprinkled over the pizza
-Burnt Crust|Charcoal edges|a burnt blackened crust all around the edge of the pizza`), items: parse(`
-Pepperoni|Crispy-edged cups|crispy pepperoni slices spread across the pizza
-Mushrooms|Sliced chestnut mushrooms|sliced chestnut mushrooms scattered across the pizza
-Fresh Basil|Bright green leaves|fresh basil leaves scattered on top
-Burrata|A creamy centrepiece|a whole torn burrata in the centre of the pizza
-Nduja|Spicy spreadable salami|dollops of red spicy nduja across the pizza
-Pineapple|The great debate|chunks of pineapple across the pizza
-Ham|Thin pink slices|pieces of cooked ham across the pizza
-Black Olives|Salty little rings|sliced black olives scattered across the pizza
-Green Peppers|Fresh and crunchy|strips of green pepper across the pizza
-Red Onion|Sweet and sharp|thin red onion slices across the pizza
-Jalapeños|Proper heat|sliced green jalapeños across the pizza
-Hot Honey|Sweet heat drizzle|a glossy drizzle of chilli hot honey over the pizza
-Rocket|Peppery leaves|a pile of fresh rocket leaves on the centre of the pizza
-Parma Ham|Silky cured slices|draped slices of Parma ham across the pizza
-Anchovies|Salty and bold|anchovy fillets laid across the pizza
-Sweetcorn|Little golden pops|sweetcorn kernels scattered across the pizza
-Extra Mozzarella|Maximum stretch|extra melted mozzarella covering more of the pizza
-Goat's Cheese|Tangy white rounds|rounds of goat's cheese across the pizza
-Sun-dried Tomatoes|Rich and chewy|sun-dried tomatoes scattered across the pizza
-Artichokes|Tender hearts|quartered artichoke hearts across the pizza
-Truffle Oil|A fancy drizzle|a glossy drizzle of truffle oil with a few truffle shavings
-Garlic Dip|For the crusts|a small pot of garlic and herb dip on the peel beside the pizza
-Meatballs|Little Italian meatballs|halved beef meatballs across the pizza
-King Prawns|Juicy and pink|pink king prawns across the pizza
-Chilli Flakes|A fiery dusting|red chilli flakes sprinkled over the pizza
-Parmesan Shavings|Nutty and salty|thin parmesan shavings across the pizza
-Cherry Tomatoes|Sweet and blistered|halved roasted cherry tomatoes across the pizza
-Pesto Drizzle|Basil and pine nut|swirls of green pesto across the pizza
-Spicy Chicken|Tandoori-style pieces|pieces of spicy red chicken across the pizza
-Cracked Egg|A runny centre|a baked egg with a runny yolk in the centre of the pizza
-Stuffed Crust|Cheese in the crust|a fatter stuffed crust with cheese oozing from a cut in the crust edge
-Caramelised Figs|Sweet and jammy|halved caramelised figs across the pizza`) },
-  { id: 'gaming', title: 'Gaming Setup', emoji: '🎮', mode: 'build', noun: 'gaming setup', label: 'Upgrade', startLabel: 'Setup', created: 0,
-    base: { name: 'Empty room', blurb: 'Bid for your starting setup first', visual: 'an empty small room' },
-    bases: parse(`
-Basic Desk Setup|One screen, an office chair|a basic gaming setup: a plain white desk with one ordinary 24-inch monitor, a basic keyboard and mouse and a plain grey office chair against a bare white wall
-Corner L-Desk|Room to spread out|a black L-shaped corner desk with one monitor, keyboard, mouse and a plain office chair in the corner of a plain room
-Cosy Bedroom Nook|Gaming by the bed|a small wooden desk with one monitor beside a single bed in a cosy plain bedroom, with a simple chair
-Loft Battle Station|Under the eaves|a simple desk with one monitor under a sloping attic ceiling with a skylight, with a plain chair
-Living Room Console Corner|Sofa and a big TV|a plain grey sofa facing a TV on a low white TV unit in a simple living room corner
-Minimalist Studio Desk|Clean wood and white walls|a slim light-oak desk with one monitor and a white chair against a clean white wall with a large window`),
-
-    scene: 'Wide interior photograph from behind and slightly to the side of the seating, showing the whole setup, the wall above it and the floor around it, evenly lit', bad: parse(`
-Tangled Cables|A rat's nest|a huge tangle of cables spilling over and under the desk
-Cracked Monitor|Spider-web screen|a spider-web crack across the monitor screen
-Wobbly Stool|Back pain guaranteed|a cheap wobbly wooden stool replacing the chair
-Beige CRT Monitor|1998 called|a bulky beige CRT monitor squeezed onto the desk
-Dirty Laundry|A growing pile|a pile of dirty laundry heaped on the floor beside the desk
-Mouldy Pizza Boxes|Science experiment|a stack of greasy mouldy pizza boxes on the desk
-Leaking Ceiling|Drip, drip, drip|a brown water stain on the ceiling and a bucket on the floor catching drips
-Broken Desk Fan|Rattles and wheezes|a dusty broken desk fan with a missing blade on the desk`), items: parse(`
-Ultrawide Monitor|A huge curved screen|a huge curved ultrawide monitor replacing the ordinary monitor
-Second Monitor|Double the screens|a second monitor beside the first on the desk
-RGB Light Strips|Glowing everything|glowing purple and blue LED strips along the back of the desk and wall
-Racing Gaming Chair|Bucket seat comfort|a black and red racing-style gaming chair replacing the office chair
-Mechanical Keyboard|Clicky RGB keys|a mechanical keyboard with glowing RGB keys on the desk
-Wireless Headset|Pro-level sound|a black wireless gaming headset resting on a stand on the desk
-PlayStation 5|Sony's console|a white PlayStation 5 console standing on the desk
-Xbox Series X|Microsoft's console|a black Xbox Series X standing on the desk
-Nintendo Switch|Handheld and docked|a Nintendo Switch in its dock on the desk with red and blue controllers
-Racing Wheel|Sim-racing kit|a racing wheel and pedals clamped to the desk
-Streaming Mic|Podcast-quality voice|a studio microphone on a boom arm over the desk
-Ring Light & Webcam|Ready to stream|a ring light and webcam mounted above the monitor
-Mini Fridge|Cold drinks on tap|a small glass-door mini fridge full of cans under the desk
-Gaming PC|Glass tower, glowing fans|a glass-sided gaming PC tower with glowing fans on the desk
-Bean Bag|For couch co-op|a large grey bean bag on the floor beside the desk
-Hexagon Light Panels|Wall art that glows|colourful glowing hexagon light panels on the wall above the desk
-Acoustic Panels|Studio-grade quiet|dark grey acoustic foam panels on the wall
-Desk Plants|A little greenery|a few potted green plants on the desk and shelf
-VR Headset|Step inside the game|a white VR headset and controllers on the desk
-Arcade Cabinet|Retro classics|a retro arcade cabinet standing in the corner beside the desk
-Projector Screen|Cinema-size gaming|a projector on a shelf and a large pull-down screen on the side wall
-Bookshelf Speakers|Room-filling sound|two bookshelf speakers either side of the monitor
-Standing Desk|Up and down|a larger dark wooden standing desk replacing the white desk
-Figure Shelf|Collectible figures|a wall shelf lined with collectible game figures above the desk
-Cat|Supervisor on duty|a ginger cat sitting on the desk beside the keyboard
-Snack Station|Crisps and sweets|a small shelf of crisps, sweets and energy drinks beside the desk
-Big Desk Mat|Edge to edge|a large black desk mat covering the desk under the keyboard and mouse
-Flight Stick|Take to the skies|a flight stick and throttle on the desk
-Gaming Laptop|A second rig|an open gaming laptop with glowing keys on the side of the desk
-Lava Lamp|Groovy glow|an orange lava lamp glowing on the desk
-Neon Lightning Bolt|Pure vibes|a neon lightning-bolt light glowing on the wall
-Controller Charging Dock|Always topped up|a charging dock with two controllers on the desk`) },
-  { id: 'garage', title: 'Dream Garage', emoji: '🏎️', mode: 'collection', noun: 'garage', label: 'Car', startLabel: 'Garage', created: 0,
-    base: { name: 'No garage yet', blurb: 'Bid for your garage first', visual: 'an empty plot' },
-    bases: parse(`
-Modern Double Garage|Polished concrete, bright lights|an empty spotless modern private garage with a polished grey concrete floor, white walls and overhead strip lighting, room for several cars
-Underground Car Vault|Hidden beneath the house|an empty underground concrete car vault with dramatic downlights and a ramp, room for several cars
-Glass Showroom|Cars on display|an empty glass-walled showroom with a glossy white floor and spotlights, room for several cars
-Converted Barn Garage|Oak beams and brick|an empty converted barn with exposed oak beams, brick walls and a flagstone floor, room for several cars
-Racing Pit Garage|Race-day ready|an empty racing pit garage with a grey epoxy floor, tool chests along the walls and bright lights, room for several cars
-Mews Garage|A cobbled London classic|an empty old mews garage with whitewashed brick walls, a cobbled floor and big timber doors open, room for several cars`),
-
-    scene: 'Wide interior photograph from the open entrance, the whole floor visible, even soft lighting', bad: parse(`
-Rusty Shopping Trolley|Who brought this?|a rusty abandoned shopping trolley in the garage
-Wheel-clamped Banger|Going nowhere|a battered old brown hatchback with a yellow wheel clamp parked in the garage
-Oil Leak|A spreading black puddle|a huge black oil puddle spreading across the floor
-Reliant Robin|Three wheels, no dignity|a battered yellow three-wheeled Reliant Robin parked in the garage
-Rusty Caravan|Flat tyres included|a rusty old caravan with a flat tyre parked in the garage
-Pile of Tyres|Bald and smelly|a heap of old bald tyres in the corner of the garage
-Pigeons|Nesting in the rafters|a flock of pigeons perched up high with droppings on the floor below
-Leaking Roof|Buckets everywhere|buckets on the floor catching drips under a water-stained ceiling`), items: parse(`
-Porsche 911|The timeless sports car|a silver Porsche 911 sports car parked in the garage
-Lamborghini Huracán|Wild, bright and loud|a lime-green Lamborghini Huracán parked in the garage
-Ferrari F8|Italian red perfection|a red Ferrari F8 parked in the garage
-McLaren 720S|Dihedral doors up|an orange McLaren 720S with its doors raised, parked in the garage
-Land Rover Defender|Go anywhere|a classic green Land Rover Defender parked in the garage
-1967 Ford Mustang|American muscle|a blue 1967 Ford Mustang fastback with white stripes parked in the garage
-Classic Mini|Small but mighty|a red classic Mini Cooper with a white roof parked in the garage
-Tesla Model S|Silent speed|a white Tesla Model S parked in the garage
-Aston Martin DB5|Very secret agent|a silver birch Aston Martin DB5 parked in the garage
-Bugatti Chiron|The hypercar|a two-tone blue Bugatti Chiron parked in the garage
-Mercedes G-Wagon|The boxy icon|a black Mercedes G-Class parked in the garage
-Nissan GT-R|Godzilla|a grey Nissan GT-R parked in the garage
-Toyota Supra|Tuner legend|an orange 1990s Toyota Supra parked in the garage
-Audi R8|Everyday supercar|a white Audi R8 parked in the garage
-VW Beetle|Cheerful classic|a pale blue classic VW Beetle parked in the garage
-Rolls-Royce Phantom|Pure luxury|a black Rolls-Royce Phantom parked in the garage
-Ford GT40|Le Mans legend|a blue and orange Ford GT40 race car parked in the garage
-Lotus Elise|Light and nimble|a yellow Lotus Elise parked in the garage
-Fiat 500 Classic|Tiny Italian charm|a cream classic Fiat 500 parked in the garage
-Jeep Wrangler|Roof off, ready|a red Jeep Wrangler parked in the garage
-Range Rover|Country-house cool|a dark green Range Rover parked in the garage
-Ducati Panigale|Superbike on two wheels|a red Ducati Panigale motorbike parked in the garage
-Vespa|La dolce vita|a mint-green Vespa scooter parked in the garage
-Racing Go-Kart|Small car, big grin|a racing go-kart parked in the garage
-Car Lift|Show-off storage|a hydraulic two-post car lift installed in the garage
-Tool Wall|Every spanner in place|a pegboard wall of neatly organised tools above a workbench
-Chequered Floor|Race-day style|a black and white chequered floor replacing the grey concrete floor
-Delorean|Time-travel optional|a stainless steel DeLorean with gull-wing doors open, parked in the garage
-Mini Moke|Beach buggy fun|a white Mini Moke beach car parked in the garage
-Bentley Continental|Grand tourer|a dark blue Bentley Continental GT parked in the garage
-Golf Buggy|For the estate|a white electric golf buggy parked in the garage
-Vintage Petrol Pump|Retro decoration|a red vintage petrol pump standing in the corner of the garage`) },
-];
+// Preset themes live in the client site's draft-night-themes.json: 75 or so items each is far beyond this file's 96KB limit.
+// Each list line there is Name|blurb|visual, as above. Loaded at start-up; requests wait for it.
+const THEMES_URL = env('DRAFT_THEMES_URL', new URL('/draft-night-themes.json', CLIENT_URL).href);
+const PRESETS: Theme[] = [];
+let presetsReady: Promise<void> | null = null;
+function loadPresets(): Promise<void> {
+  return presetsReady ??= (async () => {
+    for (let i = 0; ; i++) {
+      try {
+        const r = await fetch(THEMES_URL, { signal: AbortSignal.timeout(15000) });
+        if (!r.ok) throw Error('Themes ' + r.status);
+        const d = await r.json() as any, lines = (x: string[]) => parse(x.join('\n'));
+        PRESETS.splice(0, PRESETS.length, ...d.themes.map((t: any) => ({ ...t, bases: lines(t.bases), items: lines(t.items), bad: lines(t.bad), created: 0 })));
+        return;
+      } catch (e) {
+        console.error('Loading themes failed', String(e));
+        if (i >= 2) { presetsReady = null; throw e; }
+        await new Promise(r => setTimeout(r, 1000 * (i + 1)));
+      }
+    }
+  })();
+}
 const ALIASES: Record<string, string> = { house: 'house', home: 'house', 'dream house': 'house', 'dream home': 'house', property: 'house', mansion: 'house', pancake: 'pancakes', pancakes: 'pancakes', 'pancake stack': 'pancakes', burger: 'burger', burgers: 'burger', hamburger: 'burger', cheeseburger: 'burger', pizza: 'pizza', pizzas: 'pizza', 'gaming setup': 'gaming', 'gaming set up': 'gaming', 'gaming station': 'gaming', 'gaming room': 'gaming', 'gaming desk': 'gaming', garage: 'garage', 'dream garage': 'garage', 'car collection': 'garage', 'supercar collection': 'garage' };
 function presetFor(topic: string) {
   const t = topic.toLowerCase().replace(/[^a-z ]/g, ' ').replace(/\b(the|my|a|an|our|best|ultimate|perfect|dream|build|your|of)\b/g, ' ').replace(/\s+/g, ' ').trim();
@@ -687,7 +389,7 @@ function lotPrompt(r: Room, it: Item, kind: string) {
   const t = r.theme;
   if (kind === 'base' && t.mode === 'property') return `${t.scene}. The property is ${it.visual}. Show it exactly as described at its true real-world size, with nothing that is not described: no swimming pool, no hot tub, no cars, no extra buildings or grounds unless described. Square framing with the whole property visible. ${STYLE}`;
   if (kind === 'base') return `${t.scene}. Subject: ${it.visual}. Show it exactly as described, plain, with nothing added on or around it, leaving space for additions later. Square framing. ${STYLE}`;
-  return `Clear photograph of ${it.visual.replace(/ (on|in|beside|across|over|into|outside|by|at|under|above|scattered|draped|layered|piled|replacing|parked|leaning|sitting|standing|strung|fitted|attached|added|clamped|mounted|squeezed|clearly)\b.*$/i, '') || it.name} as a single isolated subject, centred and filling most of the frame, on a plain softly lit warm-grey background. Square framing. ${STYLE}`;
+  return `Clear photograph of ${(it.pic || it.visual).replace(/ (on|in|beside|across|over|into|outside|by|at|under|above|scattered|draped|layered|piled|replacing|parked|leaning|sitting|standing|strung|fitted|attached|added|clamped|mounted|squeezed|clearly)\b.*$/i, '') || it.name} as a single isolated subject, centred and filling most of the frame, on a plain softly lit warm-grey background. Square framing. ${STYLE}`;
 }
 function basePrompt(r: Room) {
   const t = r.theme;
@@ -933,6 +635,9 @@ async function interpret(topic: string, n: number, confirmed: boolean): Promise<
   const bases = (Array.isArray(out.bases) ? out.bases : []).map(clean).filter((x: Item) => x.name && x.visual && !seen.has(x.name.toLowerCase()) && seen.add(x.name.toLowerCase()));
   const bad = (Array.isArray(out.bad_items) ? out.bad_items : []).map(clean).filter((x: Item) => x.name && x.visual && !seen.has(x.name.toLowerCase()) && seen.add(x.name.toLowerCase())).slice(0, 10);
   if (items.length < LOTS_PER_PLAYER * 2 || bases.length < 2) throw Error('Could not build that theme. Try describing it a little more.');
+  // An item with the same name as a preset item borrows that item's picture description, so its picture comes from the library.
+  const known = new Map(PRESETS.flatMap(p => [...p.items, ...p.bad]).map(x => [x.name.toLowerCase(), x.visual] as const));
+  for (const x of [...items, ...bad]) { const v = known.get(x.name.toLowerCase()); if (v) x.pic = v; }
   const t: Theme = {
     id: crypto.randomUUID().slice(0, 8), title: String(out.title || topic).slice(0, 28), emoji: String(out.emoji || '✨').slice(0, 4),
     mode: out.kind === 'collection' ? 'collection' : 'build', noun: String(out.noun || topic).slice(0, 24).toLowerCase(), label: String(out.label || 'Lot').slice(0, 14),
@@ -1025,6 +730,7 @@ function openRooms() {
 }
 async function handle(req: Request): Promise<Response> {
   const u = new URL(req.url);
+  if (!PRESETS.length) await loadPresets().catch(() => {});
   if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers: CORS });
   if (u.pathname === '/' || u.pathname === '/index.html') return Response.redirect(CLIENT_URL, 302);
   if (u.pathname === '/health') return reply({ ok: true, images: imagesOn(), provider: CF_ACCOUNT && CF_TOKEN ? 'cloudflare' : 'openai', sharedArtCount: sharedArt.size, worldBatch: WORLD_BATCH, library: Boolean(ART), variants: VARIANTS, pictures: { day: usage.day, made: usage.n, cap: DAILY } });
@@ -1133,4 +839,5 @@ async function handle(req: Request): Promise<Response> {
   }
   return fail('Not found', 404);
 }
+void loadPresets().catch(() => {});
 Bun.serve({ hostname: '0.0.0.0', port: Number(Bun.env.PORT || 3000), async fetch(req) { try { return await handle(req); } catch (e) { console.error('Request failed', String(e)); return fail('Request failed', 500); } } });

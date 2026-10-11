@@ -11,6 +11,7 @@ const { stripTypeScriptTypes } = require('node:module');
 
 const file = path.join(__dirname, '../draft-night/server.ts');
 const source = fs.readFileSync(file, 'utf8');
+const THEMES = JSON.parse(fs.readFileSync(path.join(__dirname, '../public/draft-night-themes.json'), 'utf8'));
 
 // rev: share of reverse auctions (duds). Older scenarios script every lot as a normal auction, so it defaults to none.
 // batch: wins per picture edit (live default 2; older scenarios check one edit per win). fallback: allow paid OpenAI fallback.
@@ -19,6 +20,8 @@ function sandbox({ key = 'test-key', ai, image, cf, rev = '0', batch = '1', fall
   let handler, t = 1_000_000;
   const calls = [];
   const fakeFetch = async (url, opts) => {
+    // The preset themes come from the client site's themes file.
+    if (url.endsWith('/draft-night-themes.json')) return Response.json(THEMES);
     calls.push({ url, opts });
     if (url.includes('/ai/run/')) {
       if (cf.fail) return new Response('{"errors":[{"code":4006,"message":"daily free allocation used up"}]}', { status: 429 });
@@ -35,9 +38,10 @@ function sandbox({ key = 'test-key', ai, image, cf, rev = '0', batch = '1', fall
   const vars = { DRAFT_REVERSE_SHARE: rev, DRAFT_WORLD_BATCH: batch, ...(bucket ? { ART_BUCKET: 'art', ART_KEY_ID: 'id', ART_SECRET: 's', ART_ENDPOINT: 'https://store.test' } : {}), ...(admin ? { DRAFT_ADMIN_KEY: admin } : {}), ...(cap ? { DRAFT_DAILY_PICTURES: String(cap) } : {}), ...(fallback ? { DRAFT_ALLOW_PAID_FALLBACK: '1' } : {}), ...(key ? { OPENAI_API_KEY: key } : {}), ...(cf ? { CF_ACCOUNT_ID: 'acc123', CF_API_TOKEN: 'cf-token' } : {}) };
   const S3Client = class { file(k) { return { exists: async () => { if (broken) throw Error('down'); return bucket.has(k); }, arrayBuffer: async () => bucket.get(k).buffer, text: async () => { if (!bucket.has(k)) throw Error('NoSuchKey'); return new TextDecoder().decode(bucket.get(k)); }, write: async (b) => { if (broken) throw Error('down'); bucket.set(k, typeof b === 'string' ? new TextEncoder().encode(b) : new Uint8Array(b)); }, presign: () => 'https://store.test/' + k + '?sig=1' }; } };
   const ctx = { TextEncoder, Bun: { env: vars, S3Client, serve(o) { handler = o.fetch; } }, Response, Request, URL, FormData, Blob, Buffer, crypto, AbortSignal, fetch: fakeFetch, console: { error() {} }, setTimeout: (f, ms) => { const h = setTimeout(f, Math.min(ms, 5)); h.unref(); return h; }, clearTimeout };
-  vm.runInNewContext(stripTypeScriptTypes(source) + '\nglobalThis.qa={rooms,images,setClock(f){clock=f},worldPrompt,lotPrompt,presetFor,tick,fill};', ctx);
+  vm.runInNewContext(stripTypeScriptTypes(source) + '\nglobalThis.qa={rooms,images,setClock(f){clock=f},worldPrompt,lotPrompt,presetFor,tick,fill,ready:loadPresets(),PRESETS,themes};', ctx);
   ctx.qa.setClock(() => t);
   const call = async (p, data) => {
+    await ctx.qa.ready;
     const res = await handler(new Request('http://localhost' + p, { method: data ? 'POST' : 'GET', body: data ? JSON.stringify(data) : undefined, headers: { 'Content-Type': 'application/json' } }));
     const type = res.headers.get('Content-Type') || '';
     return { status: res.status, body: type.includes('json') ? await res.json() : await res.arrayBuffer() };
@@ -232,26 +236,24 @@ test('Scenario E: an ambiguous theme asks a question instead of guessing', async
   assert.match(seen[1], /already confirmed/);
 });
 
-test('Scenario F: a modest terrace keeps its identity; only purchased items are requested', async () => {
+test('Scenario F: a cottage keeps its identity; only purchased items are requested', async () => {
   const env = sandbox();
   const g = await setup(env, { names: ['Louie', 'Ariel'] });
   const r = g.room();
-  // Force the deck: Victorian Terrace first; upgrades include a paddleboard and a supercar.
-  const terrace = r.lots.findIndex(l => l.name === 'Victorian Terrace');
-  assert.ok(env.qa.lotPrompt(r, r.theme.bases.find(b => b.name === 'Victorian Terrace'), 'base').match(/no swimming pool/i));
+  // Force the deck: Country Cottage first; upgrades include a camper van and a supercar.
+  assert.ok(env.qa.lotPrompt(r, r.theme.bases.find(b => b.name === 'Country Cottage'), 'base').match(/no swimming pool/i));
   const pesto = { name: 'Pesto Drizzle', blurb: '', visual: 'swirls of green pesto across the pizza' };
   assert.ok(!env.qa.lotPrompt(r, pesto, 'add').includes('Pesto Drizzle'), 'item pictures never name the item, or the model writes it on the picture');
-  const pb = r.theme.items.find(i => i.name === 'Paddleboard'), car = r.theme.items.find(i => i.name === 'Supercar');
-  r.lots[0] = { ...r.theme.bases.find(b => b.name === 'Victorian Terrace'), kind: 'base' };
+  const pb = r.theme.items.find(i => i.name === 'Camper Van'), car = r.theme.items.find(i => i.name === 'Supercar');
+  r.lots[0] = { ...r.theme.bases.find(b => b.name === 'Country Cottage'), kind: 'base', key: 'lot0' };
   r.lots[2] = { ...pb, kind: 'add' }; r.lots[3] = { ...car, kind: 'add' };
-  void terrace;
   await g.act(0, 'bid', { amount: 3 }); await g.act(1, 'pass'); await g.settle(); await g.settle();
   for (const lot of [2, 3]) { while (r.lot < lot) await g.settle(); while (r.auction.phase === 'bidding') await g.act(r.auction.turn, r.auction.turn === 0 || r.auction.leader === null ? 'bid' : 'pass', { amount: r.auction.bid + 1 }); }
   await flush(); await flush();
   same(r.players[0].won, [0, 2, 3]);
   const prompt = env.qa.worldPrompt(r, 0, 1, 3);
-  assert.match(prompt, /victorian terrace/i);
-  assert.match(prompt, /Paddleboard/); assert.match(prompt, /Supercar/);
+  assert.match(prompt, /country cottage/i);
+  assert.match(prompt, /Camper Van/); assert.match(prompt, /Supercar/);
   assert.match(prompt, /Do not enlarge the house or its plot/);
   assert.match(prompt, /swimming pool/); // listed under "Do not add"
   assert.ok(prompt.indexOf('swimming pool') > prompt.indexOf('Do not add'));
