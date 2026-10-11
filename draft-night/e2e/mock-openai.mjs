@@ -38,13 +38,17 @@ http.createServer(async (req, res) => {
     if (req.url.endsWith('/chat/completions')) {
       const body = JSON.parse(raw);
       const user = body.messages[1].content;
-      const out = body.response_format.json_schema.schema.properties.verdict ? { verdict: 'Mock judge: everyone built something lovely, but the tidiest creation takes the crown.' } : themeReply(user);
+      const props = body.response_format.json_schema.schema.properties;
+      const out = props.complete ? {complete:true,missing:[],extras:[],reason:''} : props.layout ? {layout:'Show all listed purchases separately, with no extras.'} : props.verdict ? { verdict: 'Mock judge: everyone built something lovely, but the tidiest creation takes the crown.' } : themeReply(user);
       res.setHeader('Content-Type', 'application/json');
-      return res.end(JSON.stringify({ choices: [{ message: { content: JSON.stringify(out) } }] }));
+      return res.end(JSON.stringify({usage:{prompt_tokens:100,completion_tokens:100}, choices: [{ message: { content: JSON.stringify(out) } }] }));
     }
     let prompt, title, lines;
-    if (req.url.endsWith('/images/edits')) {
-      const form = await new Request('http://x', { method: 'POST', headers: { 'content-type': req.headers['content-type'] }, body: raw }).formData();
+    const cf=req.url.includes('/ai/run/');
+    let cfForm;
+    if(cf) cfForm=await new Request('http://x',{method:'POST',headers:{'content-type':req.headers['content-type']},body:raw}).formData();
+    if (req.url.endsWith('/images/edits') || cfForm?.get('input_image_0')) {
+      const form = cfForm || await new Request('http://x', { method: 'POST', headers: { 'content-type': req.headers['content-type'] }, body: raw }).formData();
       prompt = form.get('prompt');
       const base = /Edit this photograph of a (.*?) \(/.exec(prompt)?.[1] || 'world';
       const had = /already contains these purchased items, which must stay exactly as they are: (.*?)\./.exec(prompt)?.[1] || '';
@@ -52,7 +56,7 @@ http.createServer(async (req, res) => {
       title = base;
       lines = [...had.split(', ').filter(Boolean).map(x => '• ' + x), ...added.map(x => '+ ' + x)];
     } else {
-      prompt = JSON.parse(raw).prompt;
+      prompt = cfForm ? cfForm.get('prompt') : JSON.parse(raw).prompt;
       const subject = /The property is (.*?)\. Show/.exec(prompt)?.[1] || /Subject: (.*?)\. Show/.exec(prompt)?.[1] || /photograph of (.*?) as a single/.exec(prompt)?.[1] || prompt.slice(0, 80);
       title = subject.split(/,| with /)[0].slice(0, 60);
       lines = [];
@@ -60,7 +64,7 @@ http.createServer(async (req, res) => {
     const img = await render(title, lines, hue(title));
     await new Promise(r => setTimeout(r, delay));
     res.setHeader('Content-Type', 'application/json');
-    res.end(JSON.stringify({ data: [{ b64_json: img.toString('base64') }] }));
+    res.end(JSON.stringify(cf ? {success:true,result:{image:img.toString('base64')}} : { data: [{ b64_json: img.toString('base64') }] }));
   } catch (e) {
     res.statusCode = 500; res.end(String(e));
   }
