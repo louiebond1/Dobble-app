@@ -16,7 +16,7 @@ type World = { v: number; state: string; busy: boolean; tries: number };
 type Room = {
   code: string; rev: number; created: number; auctionCount: number; listed: boolean; notice: string; sig?: string; status: 'lobby' | 'playing' | 'finished'; theme: Theme; budget: number; capacity: number; cpu: boolean;
   players: Player[]; tokens: string[]; deckBases: Item[]; deckAdds: Item[]; deckBad: Item[]; lots: Lot[]; lot: number; auction: Auction;
-  history: Array<{ lot: number; winner: number | null; price: number; paid?: number[] }>; lotImg: Record<string, string>; baseImg: string; imageError: string; worlds: World[]; verdict: string | null;
+  history: Array<{ lot: number; winner: number | null; price: number; paid?: number[] }>; lotImg: Record<string, string>; art: Record<string, string>; baseImg: string; imageError: string; worlds: World[]; verdict: string | null;
 };
 
 const env = (k: string, d: string) => String(Bun.env[k] || d);
@@ -385,6 +385,79 @@ async function reusableArt(prompt: string, quality: string): Promise<Uint8Array>
 }
 const WORLD_BATCH = Math.max(1, Number(env('DRAFT_WORLD_BATCH','2')) || 2);
 
+// ---------- Picture library ----------
+// Starting-scene and item pictures depend only on their prompt, so they are kept permanently in a storage bucket and
+// reused by every later game; only players' own creations are made per game. Phones load stored pictures straight from
+// the bucket through signed links. Up to DRAFT_ART_VARIANTS versions of each picture are kept for variety: a game uses
+// any version already stored and never pays for a second one (only the prefill run makes extra versions).
+const ART = env('ART_BUCKET', '') && env('ART_KEY_ID', '') ? new Bun.S3Client({ bucket: env('ART_BUCKET', ''), endpoint: env('ART_ENDPOINT', ''), region: env('ART_REGION', 'auto'), accessKeyId: env('ART_KEY_ID', ''), secretAccessKey: env('ART_SECRET', ''), virtualHostedStyle: env('ART_PATH_STYLE', '') !== '1' }) : null;
+const VARIANTS = clampN(Number(env('DRAFT_ART_VARIANTS', '2')), 1, 4);
+function clampN(n: number, lo: number, hi: number) { return Math.max(lo, Math.min(hi, Math.round(n) || lo)); }
+const stored = new Set<string>(), signed = new Map<string, { url: string; until: number }>();
+const artName = async (prompt: string, quality: string) => {
+  const model = CF_ACCOUNT && CF_TOKEN ? CF_MODEL : env('DRAFT_IMAGE_MODEL', 'gpt-image-2.5-flare');
+  const h = new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(model + '|' + quality + '|' + prompt)));
+  return 'art/' + Array.from(h.slice(0, 16), b => b.toString(16).padStart(2, '0')).join('');
+};
+async function isStored(k: string) {
+  if (stored.has(k)) return true;
+  try { if (await ART!.file(k).exists()) { stored.add(k); return true; } } catch (e) { console.error('Library check failed', String(e)); }
+  return false;
+}
+async function store(k: string, bytes: Uint8Array) {
+  try { await ART!.file(k).write(bytes, { type: 'image/jpeg' }); stored.add(k); return true; } catch (e) { console.error('Library save failed', String(e)); return false; }
+}
+// The picture for a prompt, as { key } in the library and, when needed for picture edits, its bytes.
+async function libraryArt(prompt: string, quality: string, want: number, needBytes: boolean): Promise<{ key?: string; bytes?: Uint8Array }> {
+  if (!ART) return { bytes: await reusableArt(prompt, quality) };
+  const name = await artName(prompt, quality);
+  for (const v of [want, ...Array.from({ length: VARIANTS }, (_, i) => i).filter(i => i !== want)]) {
+    const k = name + '-' + v + '.jpg';
+    if (await isStored(k)) {
+      if (!needBytes) return { key: k };
+      try { return { key: k, bytes: new Uint8Array(await ART.file(k).arrayBuffer()) }; } catch (e) { console.error('Library read failed', String(e)); }
+    }
+  }
+  const bytes = await reusableArt(prompt, quality), k = name + '-' + want + '.jpg';
+  return (await store(k, bytes)) ? { key: k, bytes } : { bytes };
+}
+// Signed links last a day; a fresh one is made after 12 hours.
+function artUrl(k: string) {
+  const s = signed.get(k);
+  if (s && s.until > clock()) return s.url;
+  const url = ART!.file(k).presign({ expiresIn: 86400 });
+  signed.set(k, { url, until: clock() + 12 * 3600e3 });
+  return url;
+}
+// Prefill: makes every preset theme's library pictures ahead of time, one at a time behind live games, and stops at the
+// first failure (such as Cloudflare's daily allowance running out) so it can simply be run again later.
+const fill = { running: false, made: 0, had: 0, failed: 0, left: 0, error: '' };
+async function prefill(ids: string[], variants: number, max: number) {
+  const jobs: Array<{ prompt: string; quality: string }> = [];
+  for (const t of PRESETS.filter(x => !ids.length || ids.includes(x.id))) {
+    const fake = { theme: t } as Room;
+    if (t.base?.visual) jobs.push({ prompt: basePrompt(fake), quality: WORLD_Q });
+    for (const it of t.bases) jobs.push({ prompt: lotPrompt(fake, it, 'base'), quality: WORLD_Q });
+    for (const it of [...t.items, ...t.bad]) jobs.push({ prompt: lotPrompt(fake, it, 'add'), quality: ITEM_Q });
+  }
+  Object.assign(fill, { running: true, made: 0, had: 0, failed: 0, left: jobs.length * variants, error: '' });
+  try {
+    // Round v makes sure each picture has at least v + 1 stored versions, whichever slots games already filled.
+    for (let v = 0; v < variants; v++) for (const j of jobs) {
+      fill.left--;
+      const name = await artName(j.prompt, j.quality), have: number[] = [];
+      for (let i = 0; i < VARIANTS; i++) if (await isStored(name + '-' + i + '.jpg')) have.push(i);
+      if (have.length > v) { fill.had++; continue; }
+      if (fill.made >= max) continue;
+      const k = name + '-' + Array.from({ length: VARIANTS }, (_, i) => i).find(i => !have.includes(i)) + '.jpg';
+      try {
+        const bytes = await new Promise<Uint8Array>((ok, no) => enqueue(5, () => makeImage(j.prompt, [], j.quality).then(ok, no)));
+        if (await store(k, bytes)) fill.made++; else throw Error('Could not save to the library');
+      } catch (e) { fill.failed++; fill.error = String(e).slice(0, 300); return; }
+    }
+  } finally { fill.running = false; }
+}
+
 // ---------- State ----------
 const rooms = new Map<string, Room>();
 const themes = new Map<string, Theme>();
@@ -699,7 +772,13 @@ function genLot(r: Room, k: string, it: Item, kind: string, pri: number) {
   r.lotImg[k] = imagesOn() ? 'pending' : 'none';
   if (!imagesOn()) return;
   enqueue(pri, async () => {
-    try { images.set(imgKey(r, k), await reusableArt(lotPrompt(r, it, kind), kind === 'base' ? WORLD_Q : ITEM_Q)); r.lotImg[k] = 'ready'; }
+    try {
+      // Starting options are the first picture of a player's creation, so their bytes are kept for editing.
+      const got = await libraryArt(lotPrompt(r, it, kind), kind === 'base' ? WORLD_Q : ITEM_Q, Math.floor(Math.random() * VARIANTS), kind === 'base');
+      if (got.bytes) images.set(imgKey(r, k), got.bytes);
+      if (got.key) r.art[k] = got.key;
+      r.lotImg[k] = 'ready';
+    }
     catch (e) {
       console.error('Lot image failed', String(e));
       if (outOfCredit(r, e)) { r.lotImg[k] = 'error'; bump(r); return; }
@@ -716,7 +795,12 @@ function genBase(r: Room) {
   if (!imagesOn()) { r.baseImg = 'none'; return; }
   r.baseImg = 'pending';
   enqueue(0, async () => {
-    try { images.set(imgKey(r, 'base'), await reusableArt(basePrompt(r), WORLD_Q)); r.baseImg = 'ready'; }
+    try {
+      const got = await libraryArt(basePrompt(r), WORLD_Q, Math.floor(Math.random() * VARIANTS), true);
+      if (got.bytes) images.set(imgKey(r, 'base'), got.bytes);
+      if (got.key) r.art.base = got.key;
+      r.baseImg = 'ready';
+    }
     catch (e) {
       console.error('Base image failed', String(e));
       const n = (retries.get(imgKey(r, 'base')) || 0) + 1; retries.set(imgKey(r, 'base'), n);
@@ -914,14 +998,24 @@ async function handle(req: Request): Promise<Response> {
   const u = new URL(req.url);
   if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers: CORS });
   if (u.pathname === '/' || u.pathname === '/index.html') return Response.redirect(CLIENT_URL, 302);
-  if (u.pathname === '/health') return reply({ ok: true, images: imagesOn(), provider: CF_ACCOUNT && CF_TOKEN ? 'cloudflare' : 'openai', sharedArtCount: sharedArt.size, worldBatch: WORLD_BATCH });
+  if (u.pathname === '/health') return reply({ ok: true, images: imagesOn(), provider: CF_ACCOUNT && CF_TOKEN ? 'cloudflare' : 'openai', sharedArtCount: sharedArt.size, worldBatch: WORLD_BATCH, library: Boolean(ART), variants: VARIANTS });
   const body = req.method === 'POST' ? await req.json().catch(() => ({})) as any : {};
   const room = () => rooms.get(String(u.searchParams.get('code') || body.code || '').toUpperCase());
 
   if (u.pathname === '/api/img') {
     const r = rooms.get(String(u.searchParams.get('code') || '').toUpperCase());
-    const data = r && images.get(imgKey(r, String(u.searchParams.get('k') || '')));
+    const k = String(u.searchParams.get('k') || ''), lib = r && r.art[k];
+    if (lib) try { return new Response(null, { status: 302, headers: { ...CORS, Location: artUrl(lib), 'Cache-Control': 'private, max-age=3600' } }); } catch (e) { console.error('Library link failed', String(e)); }
+    const data = r && images.get(imgKey(r, k));
     return data ? new Response(data as BodyInit, { headers: { ...CORS, 'Content-Type': 'image/jpeg', 'Cache-Control': 'private, max-age=21600, immutable' } }) : new Response('Not ready', { status: 404, headers: CORS });
+  }
+  // Prefill the picture library (admin only): POST { key, themes?: ['house'], variants?: 1, max?: 40 }; GET ?key= for progress.
+  if (u.pathname === '/api/prefill') {
+    const admin = env('DRAFT_ADMIN_KEY', '');
+    if (!admin || (body.key || u.searchParams.get('key')) !== admin) return fail('Not found', 404);
+    if (!ART) return fail('No picture library is configured');
+    if (req.method === 'POST' && !fill.running) void prefill(Array.isArray(body.themes) ? body.themes.map(String) : [], clampN(Number(body.variants) || 1, 1, VARIANTS), clampN(Number(body.max) || 40, 1, 1000));
+    return reply(fill);
   }
   if (u.pathname === '/api/presets') return reply({ presets: PRESETS.map(themeSummary), images: imagesOn() });
   if (u.pathname === '/api/theme' && req.method === 'POST') {
@@ -943,7 +1037,7 @@ async function handle(req: Request): Promise<Response> {
       capacity: cpu ? 2 : clamp(Math.round(Number(body.capacity) || 2), 2, maxP), auctionCount: 0, cpu, players: [], tokens: [], listed: !cpu && body.listed !== false, notice: '',
       deckBases: shuffle(theme.bases), deckAdds: shuffle(theme.items), deckBad: shuffle(theme.bad), lots: [], lot: 0,
       auction: { bid: 0, leader: null, turn: null, passed: [], phase: 'bidding', deadline: 0, log: [], result: null, rev: false, elig: [], sealed: [] },
-      history: [], lotImg: {}, baseImg: 'none', imageError: '', worlds: [], verdict: null,
+      history: [], lotImg: {}, art: {}, baseImg: 'none', imageError: '', worlds: [], verdict: null,
     };
     r.auctionCount = clamp(Math.round(Number(body.auctionCount) || r.capacity * LOTS_PER_PLAYER), r.capacity, Math.min(30, (hasBases(theme) ? r.capacity : 0) + theme.items.length));
     rooms.set(r.code, r);
