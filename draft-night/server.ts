@@ -664,7 +664,10 @@ async function ensureWorld(r: Room, p: number) {
   if (w.v < (property ? 1 : 0) || w.v >= target) { if (w.v >= target) w.state = 'ready'; return; }
   // Batch consecutive wins into one edit; the owned-item list is still updated immediately.
   const completed = r.status === 'finished' || target >= quota(r).hi;
-  if (target > w.v && !completed && target - w.v < WORLD_BATCH) { w.state = 'ready'; return; }
+  // Only commission two showcase renders: after the third acquisition, and at the final reveal.
+  // Early base and auction images remain available for gameplay, but no intermediate world edits are billed.
+  if (!completed && target < 3) { w.state = 'ready'; return; }
+  if (!completed && w.v >= 3) { w.state = 'ready'; return; }
   w.busy = true; w.state = 'updating'; bump(r);
   const from = w.v;
   enqueue(-1, async () => {
@@ -678,7 +681,15 @@ async function ensureWorld(r: Room, p: number) {
       if (ITEM_REFERENCE && lotRef && target - from === 1) refs.push(lotRef);
       let prompt = worldPrompt(r, p, from, target, refs.length > 1);
       if (completed) prompt = await compose(r, prompt);
-      let out = await makeImage(prompt, refs, WORLD_Q, r.cost);
+      // Showcase renders use Cloudflare's higher-quality 9B model under the existing spend ceiling.
+      // If Cloudflare isn't configured, retain the guarded standard image provider.
+      const premium = Boolean(CF_ACCOUNT && CF_TOKEN);
+      let out: Uint8Array;
+      if (premium) {
+        await spend();
+        try { out = await paidFallback(prompt, refs, WORLD_Q, r.cost); }
+        catch (e) { await refund(); throw e; }
+      } else out = await makeImage(prompt, refs, WORLD_Q, r.cost);
       // Final collections are checked against the actual inventory, not trusted just because generation succeeded.
       if (completed && Bun.env.OPENAI_API_KEY) {
         const checked = await checkCollection(r, p, target, out);
@@ -837,7 +848,7 @@ function view(r: Room, me = -1) {
     lot: r.lot, total: r.status === 'lobby' ? r.auctionCount : r.lots.length,
     // Secret bids: everyone sees who has locked one in, but only their own amount until the reveal.
     auction: { giveTo: a.turn === null ? null : giftTarget(r, a.turn), bid: a.bid, leader: a.leader, turn: a.turn, passed: a.passed, phase: a.phase, deadline: a.deadline, log: a.log.slice(-6), result: a.result, rev: a.rev, elig: a.elig, sealed: a.sealed.map(x => x !== null), mine: a.sealed[me] ?? null },
-    worlds: r.worlds.map((w, p) => ({ v: w.v, state: w.state, key: worldKey(r, p, w.v) })),
+    worlds: r.worlds.map((w, p) => ({ v: w.v, state: w.state, error: w.error, key: worldKey(r, p, w.v) })),
     base: { state: r.baseImg }, prep: prep(r),
     history: r.history, verdict: r.verdict,
   };
