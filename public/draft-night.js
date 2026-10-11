@@ -67,6 +67,12 @@
   function hasStarts(t) { return !!(t && (t.hasBases || t.mode === 'property')); }
 
   // Swap an <img> only once the next picture has fully loaded, so the last good image stays visible.
+  function clearImage(img) {
+    if (!img) return;
+    img.dataset.want = '';
+    img.removeAttribute('src');
+    img.classList.remove('on');
+  }
   function showImage(img, url) {
     if (!img || img.dataset.want === url) return;
     img.dataset.want = url;
@@ -497,7 +503,9 @@
       lotEl.__built = true; lotEl.__lot = room.lot;
     }
     var img = lotEl.querySelector('.lot-img img');
+    // Never carry a previous auction item's photograph into a different lot.
     if (lot.img === 'ready') showImage(img, imgUrl(lot.key));
+    else clearImage(img);
     patch(lotEl.querySelector('.lot-img .ph'), img.classList.contains('on') ? '' : lot.img === 'pending' || lot.img === '' ? '<span>' + esc(t.emoji) + '</span>' : '<span class="ph-name">' + esc(lot.name) + '</span>');
     lotEl.querySelector('.lot-img .ph').classList.toggle('loading', lot.img === 'pending' && !img.classList.contains('on'));
     patch(lotEl.querySelector('.lot-kind'), esc(kind));
@@ -625,7 +633,7 @@
     var showImg = !!w.key && w.state !== 'none' && w.v >= 0;
     var incomplete = showImg && w.v < p.won.length;
     var pending = w.state === 'updating' || w.state === 'retrying';
-    var status = incomplete ? 'Photo preview · ' + (pending ? 'making your final photo' : 'final photo unavailable') + '. All your purchases are listed below.' : pending ? worldStatus(i) : '';
+    var status = incomplete ? 'Photo preview · ' + (pending ? 'making your final photo' : (w.error || 'final photo unavailable')) + '. All your purchases are listed below.' : pending ? worldStatus(i) : '';
     var alt = (incomplete ? 'Latest saved photo of ' : '') + p.name + '’s ' + t.noun;
     return '<div class="entry" style="--c:' + p.color + '" data-entry="' + i + '"><div class="canvas">' + (showImg ? '<img alt="' + esc(alt) + '" data-src="' + esc(imgUrl(w.key)) + '">' : inventory(i)) +
       '</div>' + (status ? '<div class="picture-note">' + esc(status) + '</div>' : '') +
