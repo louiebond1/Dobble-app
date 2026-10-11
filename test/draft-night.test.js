@@ -226,6 +226,32 @@ test('Scenario D: four-player custom theme has 20 lots and separate budgets, inv
   }
 });
 
+test('custom outdoor creation retains environment scale through base auctions and purchase edits', async () => {
+  const ai = body => {
+    const n = Number(/N = (\d+)/.exec(body.messages[1].content)[1]);
+    return { status: 'ok', title: 'Dream Island', emoji: '🏝️', scope: 'environment', kind: 'collection', noun: 'tropical island', label: 'Development', start_label: 'Island', base_name: 'Bare Island', base_visual: 'an undeveloped tropical island surrounded by ocean', scene: 'Wide oblique aerial view of a whole island in daylight', bases: Array.from({ length: 8 }, (_, i) => ({ name: 'Lagoon Island ' + i, visual: 'whole undeveloped island with a lagoon and open land', blurb: 'Room for your dream developments' })), items: Array.from({ length: n }, (_, i) => ({ name: ['Motorway', 'Beach Resort', 'Theme Park', 'Lazy River'][i % 4] + ' ' + i, visual: 'full-size development occupying inland terrain beside the lagoon', blurb: 'Transforms your island' })), bad_items: [] };
+  };
+  const env = sandbox({ ai });
+  const t = await env.call('/api/theme', { topic: 'desert island', players: 2 });
+  assert.equal(t.status, 200);
+  const g = await setup(env, { theme: t.body.theme.id });
+  const r = g.room();
+  assert.equal(r.theme.mode, 'build', 'outdoor designs cannot become accessory collections');
+  const base = env.qa.lotPrompt(r, r.lots[0], 'base');
+  assert.match(base, /whole undeveloped starting landscape/);
+  assert.match(base, /never a printed photograph, tabletop/);
+  assert.match(env.qa.lotPrompt(r, r.lots[2], 'add'), /full-size development in its natural outdoor setting/);
+  r.players[0].won = [0, 2, 4];
+  r.players[1].won = [1, 3];
+  const edit = env.qa.worldPrompt(r, 0, 2, 3);
+  assert.ok(edit.includes(r.lots[4].name + ':'), 'new development is added');
+  assert.ok(edit.includes(r.lots[2].name), 'previous development is preserved');
+  assert.ok(!edit.includes(r.lots[3].name), 'opponent development is excluded');
+  assert.match(edit, /footprint clearly visible/);
+  assert.match(edit, /Keep the coastline, terrain, land area/);
+  assert.ok(!edit.includes('toppings'), 'landscapes do not use food editing instructions');
+});
+
 test('Scenario E: an ambiguous theme asks a question instead of guessing', async () => {
   let seen = [];
   const ai = (body) => {
