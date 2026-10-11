@@ -113,7 +113,7 @@ Typed themes distinguish whole outdoor environments from objects. Island, city, 
 Each picture is rebuilt from the original starting scene and the complete owned inventory:
 
 - The initial scene is the included setting and essentials, or the exact photo of the starting option they won (their house, burger, waffle…). Each later version uses that original base and explicitly lists every purchase, including duds. The prompt names what must stay and lists luxury features they don't own as forbidden.
-- Jobs run one at a time per player, versions only move forward, and several wins are combined into one update. Final scenes receive a composition plan and a vision check against the original base plus inventory. Missing, substituted or invented objects cause one bounded stronger repair and another check. Rejected pictures are not published; an incomplete final scene is replaced by an inventory view with a clear note and cached purchase thumbnails. Budget and semantic failures stop retries.
+- Jobs run one at a time per player, versions only move forward, and several wins are combined into one update. Final scenes receive a composition plan and a vision check against the original base plus inventory. Missing, substituted or invented objects cause one bounded stronger repair and another check. Rejected pictures are not published; the final reveal keeps the latest accepted photo with a clear preview label when a later render fails or is still running. The full purchase list and cached thumbnails remain underneath; if no photo was ever saved, an inventory view is shown. Budget and semantic failures stop retries.
 - The client swaps in a new picture only once it has fully loaded.
 - Item pictures for each lot are generated ahead of time, nearest lot first.
 

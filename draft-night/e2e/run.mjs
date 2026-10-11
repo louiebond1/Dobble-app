@@ -188,6 +188,23 @@ await scenario('L-curated-bedroom', async () => {
   await a.waitForTimeout(3500);await a.screenshot({path:path.join(shots,'L3-final-full.png'),fullPage:true});
   const final=await (await fetch('http://127.0.0.1:3999/api/room?code='+code)).json();
   assert.ok(final.players.every(p=>p.won.length===5));
+  // A failed final render must keep the saved starter photo and the full inventory.
+  await a.route('**/api/room?**', async route => {
+    const url=new globalThis.URL(route.request().url());url.searchParams.delete('rev');
+    const response=await route.fetch({url:url.href});const data=await response.json();
+    data.worlds=data.worlds.map(w=>({...w,v:0,key:'base',state:'error'}));
+    await route.fulfill({response,json:data});
+  });
+  await a.waitForSelector('[data-entry="0"] .picture-note');
+  for (let i=0;i<2;i++) {
+    const entry=a.locator('[data-entry="'+i+'"]');
+    await entry.locator('.canvas img.on').waitFor();
+    assert.match(await entry.locator('.picture-note').textContent(),/Photo preview.*final photo unavailable/);
+    assert.equal(await entry.locator('li:not(.basei):not(.dodge)').count(),5);
+    assert.ok(await entry.locator('.canvas img').evaluate(img=>img.naturalWidth>0));
+  }
+  await a.screenshot({path:path.join(shots,'L4-failed-final-preview.png'),fullPage:true});
+
 });
 
 await scenario('A-property-2p', async () => {
