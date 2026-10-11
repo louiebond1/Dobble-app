@@ -370,6 +370,25 @@ function presetFor(topic: string) {
 const rooms = new Map<string, Room>();
 const themes = new Map<string, Theme>();
 const images = new Map<string, Uint8Array>();
+// Cache identical starting scenes and item art between games, with in-flight deduplication.
+// Cache is instance-local; persistent object storage can be attached later.
+const sharedArt = new Map<string, Uint8Array>();
+const sharedPending = new Map<string, Promise<Uint8Array>>();
+async function reusableArt(prompt: string, quality: string): Promise<Uint8Array> {
+  const key = env('DRAFT_CF_MODEL', '@cf/black-forest-labs/flux-2-klein-4b') + ':' + quality + ':' + prompt;
+  const cached = sharedArt.get(key);
+  if (cached) { sharedArt.delete(key); sharedArt.set(key,cached); return cached; }
+  if (sharedPending.has(key)) return sharedPending.get(key)!;
+  const promise = makeImage(prompt, [], quality).then(bytes => {
+    sharedArt.set(key, bytes);
+    while (sharedArt.size > 250) sharedArt.delete(sharedArt.keys().next().value!);
+    return bytes;
+  });
+  sharedPending.set(key, promise);
+  try { return await promise; } finally { sharedPending.delete(key); }
+}
+const WORLD_BATCH = Math.max(1, Number(env('DRAFT_WORLD_BATCH','2')) || 2);
+
 const timers = new Map<string, any>();
 const retries = new Map<string, number>();
 
@@ -454,7 +473,8 @@ function award(r: Room, p: number, price: number, note: string, paid?: number[],
 }
 function nextLot(r: Room) {
   r.lot++;
-  if (r.lot >= r.lots.length) { r.status = 'finished'; r.auction.turn = null; void judge(r); return; }
+  // Finishing flushes any wins still waiting for a batched picture edit, so every final picture shows everything.
+  if (r.lot >= r.lots.length) { r.status = 'finished'; r.auction.turn = null; r.players.forEach((_, p) => void ensureWorld(r, p)); void judge(r); return; }
   beginLot(r);
 }
 function bid(r: Room, p: number, amount: number, why?: string) {
@@ -657,7 +677,13 @@ async function cloudflareImage(prompt: string, refs: Uint8Array[]): Promise<Uint
 async function makeImage(prompt: string, refs: Uint8Array[], quality: string): Promise<Uint8Array> {
   if (CF_ACCOUNT && CF_TOKEN) {
     try { return await cloudflareImage(prompt, refs); }
-    catch (e) { if (!Bun.env.OPENAI_API_KEY) throw e; console.error('Cloudflare image failed, using OpenAI:', String(e)); }
+    catch (e) {
+      // Cloudflare may reject a prompt for content-filter reasons. Don't silently spend
+      // much more on OpenAI after a rejected thumbnail; make that an explicit opt-in.
+      const fallback = env('DRAFT_ALLOW_PAID_FALLBACK', '0') === '1';
+      if (!fallback || !Bun.env.OPENAI_API_KEY) throw e;
+      console.error('Cloudflare image failed, using OpenAI:', String(e));
+    }
   }
   return openaiImage(prompt, refs, quality);
 }
@@ -673,7 +699,7 @@ function genLot(r: Room, k: string, it: Item, kind: string, pri: number) {
   r.lotImg[k] = imagesOn() ? 'pending' : 'none';
   if (!imagesOn()) return;
   enqueue(pri, async () => {
-    try { images.set(imgKey(r, k), await makeImage(lotPrompt(r, it, kind), [], kind === 'base' ? WORLD_Q : ITEM_Q)); r.lotImg[k] = 'ready'; }
+    try { images.set(imgKey(r, k), await reusableArt(lotPrompt(r, it, kind), kind === 'base' ? WORLD_Q : ITEM_Q)); r.lotImg[k] = 'ready'; }
     catch (e) {
       console.error('Lot image failed', String(e));
       if (outOfCredit(r, e)) { r.lotImg[k] = 'error'; bump(r); return; }
@@ -690,7 +716,7 @@ function genBase(r: Room) {
   if (!imagesOn()) { r.baseImg = 'none'; return; }
   r.baseImg = 'pending';
   enqueue(0, async () => {
-    try { images.set(imgKey(r, 'base'), await makeImage(basePrompt(r), [], WORLD_Q)); r.baseImg = 'ready'; }
+    try { images.set(imgKey(r, 'base'), await reusableArt(basePrompt(r), WORLD_Q)); r.baseImg = 'ready'; }
     catch (e) {
       console.error('Base image failed', String(e));
       const n = (retries.get(imgKey(r, 'base')) || 0) + 1; retries.set(imgKey(r, 'base'), n);
@@ -708,6 +734,9 @@ async function ensureWorld(r: Room, p: number) {
   if (w.v < 0 && r.baseImg === 'ready') { w.v = 0; bump(r); }
   if (property && pl.base !== null && w.v < 1 && r.lotImg['lot' + pl.base] === 'ready') { w.v = 1; bump(r); }
   const target = pl.won.length;
+  // Batch consecutive wins into one edit; the owned-item list is still updated immediately.
+  const completed = r.status === 'finished' || target >= quota(r).hi;
+  if (target > w.v && !completed && target - w.v < WORLD_BATCH) { w.state = 'ready'; return; }
   if (w.v < (property ? 1 : 0) || w.v >= target) { if (w.v >= target) w.state = 'ready'; return; }
   w.busy = true; w.state = 'updating'; bump(r);
   const from = w.v;
@@ -885,7 +914,7 @@ async function handle(req: Request): Promise<Response> {
   const u = new URL(req.url);
   if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers: CORS });
   if (u.pathname === '/' || u.pathname === '/index.html') return Response.redirect(CLIENT_URL, 302);
-  if (u.pathname === '/health') return reply({ ok: true, images: imagesOn(), provider: CF_ACCOUNT && CF_TOKEN ? 'cloudflare' : 'openai' });
+  if (u.pathname === '/health') return reply({ ok: true, images: imagesOn(), provider: CF_ACCOUNT && CF_TOKEN ? 'cloudflare' : 'openai', sharedArtCount: sharedArt.size, worldBatch: WORLD_BATCH });
   const body = req.method === 'POST' ? await req.json().catch(() => ({})) as any : {};
   const room = () => rooms.get(String(u.searchParams.get('code') || body.code || '').toUpperCase());
 

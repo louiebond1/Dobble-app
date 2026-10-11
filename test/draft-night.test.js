@@ -13,7 +13,8 @@ const file = path.join(__dirname, '../draft-night/server.ts');
 const source = fs.readFileSync(file, 'utf8');
 
 // rev: share of reverse auctions (duds). Older scenarios script every lot as a normal auction, so it defaults to none.
-function sandbox({ key = 'test-key', ai, image, cf, rev = '0' } = {}) {
+// batch: wins per picture edit (live default 2; older scenarios check one edit per win). fallback: allow paid OpenAI fallback.
+function sandbox({ key = 'test-key', ai, image, cf, rev = '0', batch = '1', fallback } = {}) {
   let handler, t = 1_000_000;
   const calls = [];
   const fakeFetch = async (url, opts) => {
@@ -30,7 +31,7 @@ function sandbox({ key = 'test-key', ai, image, cf, rev = '0' } = {}) {
     if (image) await image(url, opts);
     return Response.json({ data: [{ b64_json: Buffer.from('img' + calls.length).toString('base64') }] });
   };
-  const vars = { DRAFT_REVERSE_SHARE: rev, ...(key ? { OPENAI_API_KEY: key } : {}), ...(cf ? { CF_ACCOUNT_ID: 'acc123', CF_API_TOKEN: 'cf-token' } : {}) };
+  const vars = { DRAFT_REVERSE_SHARE: rev, DRAFT_WORLD_BATCH: batch, ...(fallback ? { DRAFT_ALLOW_PAID_FALLBACK: '1' } : {}), ...(key ? { OPENAI_API_KEY: key } : {}), ...(cf ? { CF_ACCOUNT_ID: 'acc123', CF_API_TOKEN: 'cf-token' } : {}) };
   const ctx = { Bun: { env: vars, serve(o) { handler = o.fetch; } }, Response, Request, URL, FormData, Blob, Buffer, crypto, AbortSignal, fetch: fakeFetch, console: { error() {} }, setTimeout: (f, ms) => { const h = setTimeout(f, Math.min(ms, 5)); h.unref(); return h; }, clearTimeout };
   vm.runInNewContext(stripTypeScriptTypes(source) + '\nglobalThis.qa={rooms,images,setClock(f){clock=f},worldPrompt,lotPrompt,presetFor,tick};', ctx);
   ctx.qa.setClock(() => t);
@@ -44,8 +45,8 @@ function sandbox({ key = 'test-key', ai, image, cf, rev = '0' } = {}) {
 const flush = () => new Promise(r => setTimeout(r, 15));
 
 // Creates a room, joins everyone and starts it. Returns helpers bound to that room.
-async function setup(env, { theme = 'house', names = ['Ariel', 'Louie'], budget = 100, cpu = false } = {}) {
-  const made = await env.call('/api/create', { theme, name: names[0], capacity: names.length, budget, cpu });
+async function setup(env, { theme = 'house', names = ['Ariel', 'Louie'], budget = 100, cpu = false, auctionCount } = {}) {
+  const made = await env.call('/api/create', { theme, name: names[0], capacity: names.length, budget, cpu, auctionCount });
   assert.equal(made.status, 200, JSON.stringify(made.body));
   const seats = [made.body];
   for (const n of names.slice(1)) { if (cpu) break; const j = await env.call('/api/join', { code: made.body.code, name: n }); assert.equal(j.status, 200); seats.push(j.body); }
@@ -509,8 +510,14 @@ test('pictures come from Cloudflare when it is set up: lot pictures, then edits 
   assert.equal(img.status, 200);
 });
 
-test('if Cloudflare fails a picture, OpenAI makes it instead', async () => {
-  const env = sandbox({ cf: { fail: true } });
+test('if Cloudflare fails a picture, OpenAI makes it only when the paid fallback is switched on', async () => {
+  const off = sandbox({ cf: { fail: true } });
+  const m0 = (await off.call('/api/create', { theme: 'pizza', name: 'A', capacity: 2 })).body;
+  await flush(); await flush();
+  assert.ok(off.calls.some(c => c.url.includes('/ai/run/')));
+  assert.equal(off.calls.filter(c => c.url.includes('/images/')).length, 0, 'no OpenAI spend by default');
+  assert.ok((await off.call('/api/room?code=' + m0.code)).body.prep.failed > 0);
+  const env = sandbox({ cf: { fail: true }, fallback: true });
   const made = (await env.call('/api/create', { theme: 'pizza', name: 'A', capacity: 2 })).body;
   await flush(); await flush();
   const v = (await env.call('/api/room?code=' + made.code)).body;
@@ -846,6 +853,24 @@ test('duds: typed themes get them from the AI, pictures are prepared in the lobb
     if (room.auction.phase === 'bidding') await env.call('/api/action', { code: made.code, token: [made, j][room.auction.turn].token, type: room.auction.leader === null ? 'bid' : 'pass', lot: room.lot, seen: room.auction.bid, amount: 1 });
     else if (room.auction.phase === 'sealed') for (const s of [made, j]) await env.call('/api/action', { code: made.code, token: s.token, type: 'seal', lot: room.lot, amount: 0 });
     env.advance(6000); for (const p of room.players) p.seen = env.now(); await env.call('/api/room?code=' + made.code);
+  }
+});
+
+test('pictures are edited two wins at a time by default, and every win is in the final picture', async () => {
+  for (const [auctionCount, names] of [[10, ['A', 'B']], [15, ['A', 'B']], [14, ['A', 'B', 'C']]]) {
+  const env = sandbox({ key: '', cf: {}, batch: '2' });
+  const g = await setup(env, { theme: 'burger', names, auctionCount });
+  const r = g.room();
+  await flush();
+  const edits = () => env.calls.filter(c => c.url.includes('/ai/run/') && c.opts.body.get('input_image_0')).length;
+  while (r.status === 'playing') {
+    if (r.auction.phase === 'bidding') await g.act(r.auction.turn, r.auction.leader === null ? 'bid' : 'pass', { amount: 1 });
+    else await g.settle();
+    await flush();
+  }
+  await flush(); await flush();
+  for (const [p, pl] of r.players.entries()) assert.equal(r.worlds[p].v, pl.won.length, `${pl.name}'s final picture includes every win`);
+  if (auctionCount === 10) assert.ok(edits() <= 6, `burger, 5 each: 2 edits per player, not 4 (made ${edits()})`);
   }
 });
 
