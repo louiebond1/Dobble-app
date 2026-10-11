@@ -1,0 +1,26 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash",
+      "Read",
+      "Edit",
+      "Write",
+      "Glob",
+      "Grep",
+      "WebSearch",
+      "WebFetch",
+      "mcp__Railway",
+      "mcp__github"
+    ],
+    "ask": [
+      "mcp__Railway__delete-service",
+      "mcp__Railway__delete-volume",
+      "mcp__Railway__delete-bucket",
+      "mcp__Railway__delete-domain",
+      "mcp__Railway__delete-tcp-proxy",
+      "mcp__Railway__delete-webhook",
+      "mcp__Railway__delete-feature-flag",
+      "mcp__github__delete_file"
+    ]
+  }
+}
