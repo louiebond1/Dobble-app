@@ -443,9 +443,11 @@
       var el = document.querySelector('[data-world="' + i + '"]'); if (!el) return;
       var w = room.worlds[i] || { v: -1 }, img = el.querySelector('img');
       var noImages = w.state === 'none' || w.state === 'error' || (room.base && (room.base.state === 'none' || room.base.state === 'error') && w.v < 0);
-      if (w.key && !noImages) showImage(img, imgUrl(w.key));
+      // Show only the third-acquisition showcase and final image, not a misleading starter preview.
+      if (w.key && w.v >= 3 && !noImages) showImage(img, imgUrl(w.key));
+      else clearImage(img);
       var hasImg = img.classList.contains('on');
-      patch(el.querySelector('.ph'), hasImg ? '' : noImages ? '' : placeholder(i));
+      patch(el.querySelector('.ph'), hasImg ? '' : noImages ? '' : w.v < 3 ? inventory(i) : placeholder(i));
       var gain = a.phase === 'sold' && a.result && a.result.winner === i && room.lots[room.lot] && room.lots[room.lot].kind === 'add' ? '<div class="gain' + (a.rev ? ' dud' : '') + '">+ ' + esc(room.lots[room.lot].name) + '</div>' : '';
       // Items won since the last picture show straight away as chips; the server folds them into the picture in batches.
       var chipsHtml = hasImg && !noImages ? p.won.slice(Math.max(0, w.v)).filter(function (n) { return n !== p.base && room.lots[n]; }).map(function (n) {
