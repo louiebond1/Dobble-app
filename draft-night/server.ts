@@ -19,7 +19,7 @@ type Player = { name: string; color: string; budget: number; won: number[]; base
 type Entry = { p: number; a: number | null; why?: string };
 // elig: who may receive this lot. sealed: secret reverse-auction bids, never sent to other players before the reveal.
 type Auction = { bid: number; leader: number | null; turn: number | null; passed: boolean[]; phase: 'bidding' | 'sealed' | 'sold' | 'unsold'; deadline: number; log: Entry[]; result: { winner: number | null; price: number; note: string; bids?: Entry[] } | null; rev: boolean; elig: boolean[]; sealed: Array<number | null> };
-type World = { v: number; state: string; busy: boolean; tries: number };
+type World = { v: number; state: string; busy: boolean; tries: number; error?: string };
 type Room = {
   cost: Cost; code: string; rev: number; created: number; auctionCount: number; listed: boolean; notice: string; sig?: string; status: 'lobby' | 'playing' | 'finished'; theme: Theme; budget: number; capacity: number; cpu: boolean;
   players: Player[]; tokens: string[]; deckBases: Item[]; deckAdds: Item[]; deckBad: Item[]; lots: Lot[]; lot: number; auction: Auction;
@@ -693,10 +693,16 @@ async function ensureWorld(r: Room, p: number) {
       }
       images.set(imgKey(r, worldKey(r, p, target)), out);
       if (target > w.v) w.v = target;
-      w.state = 'ready'; w.tries = 0;
+      w.state = 'ready'; w.tries = 0; w.error = undefined;
     } catch (e) {
-      w.tries++; w.state = w.tries > 2 || outOfCredit(r, e) || /Creation picture incomplete|Game AI budget reached|Unpriced/.test(String(e)) ? 'error' : 'retrying';
-      console.error('World image failed', String(e));
+      w.tries++;
+      const reason = String(e);
+      const blocked = outOfCredit(r, e) || /Game AI budget reached|Unpriced/.test(reason);
+      // A failed visual inventory check can be transient. Allow two bounded retries
+      // instead of permanently accepting a photograph with missing purchases.
+      w.state = blocked || w.tries >= 3 ? 'error' : 'retrying';
+      w.error = blocked ? (r.imageError || 'Image budget or provider unavailable') : /Creation picture incomplete/.test(reason) ? 'The image missed one or more purchases' : 'Image generation failed';
+      console.error('World image failed', reason);
     } finally {
       w.busy = false; bump(r);
       if (w.state === 'retrying') setTimeout(() => void ensureWorld(r, p), 4000);
