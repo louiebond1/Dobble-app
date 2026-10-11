@@ -761,10 +761,16 @@ async function spend() {
   const u = usage; await u.ready;
   if (u.n >= DAILY) throw Error('Daily picture limit reached');
   u.n++;
-  if (ART) await ART.file(f).write(JSON.stringify({ n: u.n })).catch(() => {});
+  await saveUsage(u);
 }
+// A picture that fails (refused, or out of allowance) gives its place back.
+async function refund() { const u = usage; u.n = Math.max(0, u.n - 1); await saveUsage(u); }
+const saveUsage = (u: { day: string; n: number }) => ART ? ART.file('meta/usage-' + u.day + '.json').write(JSON.stringify({ n: u.n })).then(() => {}, () => {}) : Promise.resolve();
 async function makeImage(prompt: string, refs: Uint8Array[], quality: string): Promise<Uint8Array> {
   await spend();
+  try { return await makePicture(prompt, refs, quality); } catch (e) { await refund(); throw e; }
+}
+async function makePicture(prompt: string, refs: Uint8Array[], quality: string): Promise<Uint8Array> {
   if (CF_ACCOUNT && CF_TOKEN) {
     try { return await cloudflareImage(prompt, refs); }
     catch (e) {

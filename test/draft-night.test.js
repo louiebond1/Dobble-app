@@ -985,6 +985,7 @@ test("Cloudflare's free allowance running out is explained once instead of retri
   const v = (await env.call('/api/room?code=' + made.code)).body;
   assert.match(v.prep.error, /picture allowance is used up/);
   assert.equal(env.calls.filter(c => c.url.includes('/ai/run/')).length, 11, 'one try per picture, no retries');
+  assert.equal((await env.call('/health')).body.pictures.made, 0, 'failed pictures do not count against the daily cap');
 });
 
 test('function source also parses as TSX (Railway saves it as index.tsx)', () => {
