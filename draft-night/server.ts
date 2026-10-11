@@ -6,7 +6,7 @@
 type Item = { name: string; blurb: string; visual: string; pic?: string };
 type Mode = 'property' | 'build' | 'collection';
 // bases: the starting options auctioned first (one per player). base: what everyone holds before winning one.
-type Theme = { id: string; title: string; emoji: string; mode: Mode; noun: string; label: string; startLabel: string; base: Item | null; scene: string; bases: Item[]; items: Item[]; bad: Item[]; created: number };
+type Theme = { id: string; title: string; emoji: string; mode: Mode; noun: string; label: string; startLabel: string; base: Item | null; scene: string; spatial?: boolean; bases: Item[]; items: Item[]; bad: Item[]; created: number };
 // rev: a reverse auction for a dud (players bid in secret to avoid it). key: its picture.
 type Lot = Item & { kind: 'base' | 'add'; rev?: boolean; key: string };
 type Player = { name: string; color: string; budget: number; won: number[]; base: number | null; cpu: boolean; seen: number; device: string };
@@ -387,12 +387,14 @@ function worldKey(r: Room, p: number, v: number) {
 // Item pictures describe the thing without naming it: with the name in the prompt, FLUX sometimes wrote it across the picture.
 function lotPrompt(r: Room, it: Item, kind: string) {
   const t = r.theme;
+  if (t.spatial) return `${t.scene}. ${kind === 'base' ? 'Show the whole undeveloped starting landscape' : 'Show this full-size development in its natural outdoor setting'}: ${it.visual}. Real aerial drone photography, with all land and structures at realistic scale. Depict the actual place itself, never a printed photograph, tabletop, tray, miniature, model or collage. ${kind === 'base' ? 'No resorts, roads or attractions unless explicitly described; leave ample usable land for later purchases.' : 'Only the described development, no other attractions.'} Square framing. ${STYLE}`;
   if (kind === 'base' && t.mode === 'property') return `${t.scene}. The property is ${it.visual}. Show it exactly as described at its true real-world size, with nothing that is not described: no swimming pool, no hot tub, no cars, no extra buildings or grounds unless described. Square framing with the whole property visible. ${STYLE}`;
   if (kind === 'base') return `${t.scene}. Subject: ${it.visual}. Show it exactly as described, plain, with nothing added on or around it, leaving space for additions later. Square framing. ${STYLE}`;
   return `Clear photograph of ${(it.pic || it.visual).replace(/ (on|in|beside|across|over|into|outside|by|at|under|above|scattered|draped|layered|piled|replacing|parked|leaning|sitting|standing|strung|fitted|attached|added|clamped|mounted|squeezed|clearly)\b.*$/i, '') || it.name} as a single isolated subject, centred and filling most of the frame, on a plain softly lit warm-grey background. Square framing. ${STYLE}`;
 }
 function basePrompt(r: Room) {
   const t = r.theme;
+  if (t.spatial) return lotPrompt(r, t.base!, 'base');
   return `${t.scene}. Subject: ${t.base!.visual}. Show it plain and unembellished, exactly as described, with clear space around and on it so additions can be placed later. Square framing. ${STYLE}`;
 }
 const LUXURIES = ['swimming pool', 'hot tub', 'supercar', 'tennis court', 'helicopter', 'extra storeys', 'larger garden or extra land', 'outbuildings'];
@@ -406,7 +408,9 @@ function worldPrompt(r: Room, p: number, from: number, to: number, withRef = fal
   const lines = fresh.map(x => `- ${x.name}: ${x.visual}.`).join('\n');
   const keep = already.length ? `It already contains these purchased items, which must stay exactly as they are: ${already.map(x => x.name).join(', ')}.` : 'Nothing has been added to it yet.';
   let forbid = 'Do not add anything else that is not listed.';
-  if (t.mode === 'property') {
+  if (t.spatial) {
+    forbid = `This is the actual full-size ${t.noun}, viewed from the air, never a tabletop, tray, miniature, printed photograph or collage. Build each purchase into the landscape at realistic scale with its footprint clearly visible. Keep the coastline, terrain, land area and previous purchases intact. Add only purchased developments; do not introduce extra buildings or attractions.`;
+  } else if (t.mode === 'property') {
     const owned = adds.map(x => (x.name + ' ' + x.visual).toLowerCase()).join(' ');
     // A shed, office or caravan they own is an outbuilding, so outbuildings are not forbidden then.
     const missing = LUXURIES.filter(l => !owned.includes(l.split(' ')[0]) && !(l === 'outbuildings' && /shed|office|sauna|greenhouse|coop|caravan/.test(owned)));
@@ -613,7 +617,7 @@ const str = { type: 'string' };
 const THEME_SCHEMA = S({
   status: { type: 'string', enum: ['ok', 'ambiguous'] }, question: str,
   options: { type: 'array', items: S({ label: str, topic: str }) },
-  title: str, emoji: str, kind: { type: 'string', enum: ['build', 'collection'] }, noun: str, label: str,
+  title: str, emoji: str, kind: { type: 'string', enum: ['build', 'collection'] }, scope: { type: 'string', enum: ['object', 'environment'] }, noun: str, label: str,
   base_name: str, base_blurb: str, base_visual: str, scene: str, start_label: str,
   bases: { type: 'array', items: S({ name: str, blurb: str, visual: str }) },
   items: { type: 'array', items: S({ name: str, blurb: str, visual: str }) },
@@ -626,6 +630,11 @@ Decide what the subject means:
 - If it is a person's name, a nickname or in-joke, a single vague word, or could mean several quite different things to build, return status "ambiguous" with one short question and 3 or 4 concrete options (label: what players see, e.g. "Pam's dream birthday cake"; topic: a precise subject to build). Never invent a meaning for a name. When ambiguous, leave the other text fields empty and items empty.
 
 When ok:
+- First identify what the player wants to DESIGN, not just objects associated with the keyword. This is a dream-building auction: each win should be an exciting choice that visibly transforms the creation and makes the final comparison fun.
+- scope "environment": a whole outdoor place, island, city, country, resort, zoo or theme park. scope "object": food, a vehicle, room, setup or collection. Match EVERY purchase to that scale. Never turn designing a place into packing for a trip, a survival kit, souvenirs or a tray of themed accessories unless explicitly requested.
+- For "desert island" or "dream island", players design an entire tropical island. Starting options are distinct undeveloped whole islands (lagoon island, volcanic island, jungle island), not a beach close-up. Additions include Motorway, Beach Resort, Theme Park, Lazy River, Water Park, Marina, Airport, Overwater Villas, Beach Club and Waterfall. These are examples, not a fixed list: generate varied substantial developments, landscapes, attractions and infrastructure. No single surfboard, snorkel, shell, towel or sunglasses. Duds also operate at island scale, e.g. an abandoned resort or traffic-clogged road.
+- Apply the same reasoning to every subject: a city gets districts, stadiums and transport; a zoo gets animal habitats and attractions; a bedroom gets furnishings; pancakes get toppings. Choose purchases for impact on THIS creation, not loose keyword relevance. Buildings and infrastructure belonging to the subject are allowed and encouraged.
+- For scope "environment", kind is "build" and scene is a consistent wide oblique aerial drone photograph of the actual whole place, with space for several large developments. Never a tabletop, tray, diorama, model, printed photograph, mood board or collage. Each visual states footprint and placement on the land; starting options contain no unpurchased developments.
 - kind "build": each player improves ONE object (a pancake stack, a burger, a car, a bedroom, a garden). kind "collection": each player assembles separate things inside one shared container scene (a garage of cars, a football squad on a pitch, a holiday suitcase).
 - base_name/base_blurb/base_visual: what everyone holds before the first round, e.g. "Empty bun" for burgers or "Empty plate" for pancakes.
 - bases: exactly 8 distinct STARTING OPTIONS that players bid on first (each player wins exactly one), e.g. burgers: Beef Burger, Cheeseburger, Chicken Burger, Veggie Plant Burger; pancakes: Buttermilk Pancakes, Belgian Waffle, French Crêpes; supercars: a garage style. Each visual describes the whole plain starting thing in the scene with nothing added (max 25 words). start_label: one word for these lots (e.g. "Burger", "Base", "Garage"). Never a house unless the subject is about houses.
@@ -651,7 +660,7 @@ async function interpret(topic: string, n: number, confirmed: boolean): Promise<
   for (const x of [...items, ...bad]) { const v = known.get(x.name.toLowerCase()); if (v) x.pic = v; }
   const t: Theme = {
     id: crypto.randomUUID().slice(0, 8), title: String(out.title || topic).slice(0, 28), emoji: String(out.emoji || '✨').slice(0, 4),
-    mode: out.kind === 'collection' ? 'collection' : 'build', noun: String(out.noun || topic).slice(0, 24).toLowerCase(), label: String(out.label || 'Lot').slice(0, 14),
+    mode: out.scope === 'environment' ? 'build' : out.kind === 'collection' ? 'collection' : 'build', spatial: out.scope === 'environment', noun: String(out.noun || topic).slice(0, 24).toLowerCase(), label: String(out.label || 'Lot').slice(0, 14),
     base: { name: String(out.base_name || 'Nothing yet').slice(0, 32), blurb: String(out.base_blurb || '').slice(0, 60), visual: String(out.base_visual || '').slice(0, 240) },
     startLabel: String(out.start_label || 'Base').slice(0, 14), scene: String(out.scene || 'Clear, evenly lit photograph showing the whole subject').slice(0, 240), bases, items, bad, created: clock(),
   };
