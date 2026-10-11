@@ -1,0 +1,394 @@
+"""Build the reviewed Draft Night library. Shared pools are deliberate: related ideas reuse relevant art.
+Run from the repository root. This writes data only; it does not contact an AI or generate paid images.
+"""
+import json, re
+from pathlib import Path
+TARGET = Path('public/draft-night-themes.json')
+old = json.loads(TARGET.read_text())
+legacy = [t for t in old['themes'] if t['id'] in {'house','pancakes','burger','pizza','gaming','garage'}]
+families = []
+def family(key, emoji, titles, foundation, essentials, names, bad, spatial=False, placement='', noun=None):
+    titles = titles.split('|'); names = names.split('|'); bad = bad.split('|')
+    assert len(titles)==8, (key, len(titles))
+    assert 75 <= len(names) <= 100, (key,len(names))
+    assert len(names)==len(set(names)), key
+    families.append(dict(key=key, emoji=emoji, titles=titles, foundation=foundation, essentials=essentials, names=names, bad=bad, spatial=spatial, placement=placement, noun=noun or key.replace('-',' ')))
+
+family('bedroom','🛏️',
+'Dream Bedroom|Loft Bedroom|Penthouse Bedroom|Beach Bedroom|Cabin Bedroom|Garden Bedroom|City Bedroom|Attic Bedroom',
+'a plain bedroom with neutral walls, a window, an open floor and space around the bed',
+[('bed','Basic bed','one plain double bed with a simple mattress and white bedding')],
+'Four-poster Bed|King-size Bed|Waterbed|Floating Bed|Canopy Bed|Round Bed|Storage Bed|Upholstered Bed|Sleigh Bed|Platform Bed|Adjustable Bed|Hanging Bed|Memory-foam Mattress|Silk Bedding|Linen Bedding|Weighted Blanket|Heated Blanket|Down Duvet|Velvet Throw|Wool Throw|Reading Nook|Walk-in Wardrobe|Mirrored Wardrobe|Built-in Wardrobe|Oak Wardrobe|Dressing Table|Vanity Mirror|Full-length Mirror|Chest of Drawers|Bedside Tables|Window Seat|Chaise Longue|Armchair|Hanging Chair|Ottoman|Storage Bench|Desk|Bookcase|Floating Shelves|Record-player Corner|Projector|Television|Gaming Corner|Sound System|Electric Fireplace|Aquarium|Mini Fridge|Coffee Station|Skylight|Balcony|French Doors|Panoramic Window|Blackout Curtains|Linen Curtains|Roman Blinds|Wooden Shutters|Pendant Light|Chandelier|Wall Sconces|Reading Lights|Floor Lamp|LED Cove Lighting|Sunrise Alarm Clock|Star Ceiling|Persian Rug|Shaggy Rug|Wool Rug|Oak Flooring|Cork Flooring|Wall Panelling|Exposed Brick|Floral Wallpaper|Landscape Mural|Art Gallery Wall|Indoor Plants|Bonsai Tree|Flower Arrangement|Scent Diffuser|Jewellery Cabinet|Acoustic Panels',
+'Leaking Ceiling|Broken Blinds|Lumpy Mattress|Squeaky Fan|Tangled Cables|Cracked Mirror|Wobbly Desk|Peeling Wallpaper',
+placement='inside the bedroom, naturally placed beside the bed, on a wall or in a separate room area as appropriate')
+family('living-room','🛋️',
+'Dream Living Room|Loft Lounge|Seaside Lounge|Penthouse Lounge|Cabin Lounge|Garden Lounge|Family Lounge|Cinema Lounge',
+'a plain spacious living room with neutral walls and a window',
+[('seating','Basic sofa','one simple two-seat sofa')],
+'Corner Sofa|Chesterfield Sofa|Reclining Sofa|Modular Sofa|Velvet Sofa|Leather Sofa|Curved Sofa|Daybed|Wingback Chair|Rocking Chair|Egg Chair|Lounge Chair|Beanbag|Hanging Chair|Chaise Longue|Storage Ottoman|Oak Coffee Table|Glass Coffee Table|Marble Coffee Table|Nesting Tables|Sideboard|Display Cabinet|Bookcase|Floating Shelves|Media Console|Record Cabinet|Window Seat|Reading Nook|Conversation Pit|Breakfast Bar|Electric Fireplace|Wood-burning Stove|Stone Fireplace|Television|Projector|Cinema Screen|Surround Sound|Record Player|Grand Piano|Upright Piano|Acoustic Guitar|Aquarium|Terrarium|Bonsai Tree|Indoor Palm|Living Wall|Flower Display|Chandelier|Pendant Lights|Wall Sconces|Floor Lamp|Table Lamps|LED Cove Lighting|Skylight|French Doors|Bay Window|Sliding Doors|Panoramic Window|Window Shutters|Velvet Curtains|Linen Curtains|Roman Blinds|Wool Rug|Persian Rug|Cowhide Rug|Oak Flooring|Marble Flooring|Wall Panelling|Exposed Brick|Gallery Wall|Landscape Painting|Sculpture|Pool Table|Chess Table|Darts Cabinet|Mini Bar|Coffee Station|Wine Fridge|Blanket Basket|Acoustic Panels',
+'Cracked Television|Broken Sofa Leg|Leaking Roof|Tangled Cables|Wobbly Coffee Table|Peeling Wallpaper|Dead Houseplant|Crooked Curtain Rail',
+placement='in a clearly visible separate area of the living room')
+family('kitchen','🍳',
+'Dream Kitchen|Country Kitchen|Loft Kitchen|Seaside Kitchen|Penthouse Kitchen|Chef Kitchen|Garden Kitchen|Family Kitchen',
+'a plain spacious kitchen with empty floor space and neutral walls',
+[('cooker','Basic cooker','one basic freestanding cooker'),('sink','Kitchen sink','one working sink in a simple countertop')],
+'Kitchen Island|Breakfast Bar|Marble Worktops|Granite Worktops|Quartz Worktops|Butcher-block Worktops|Oak Cabinets|Glass Cabinets|Handleless Cabinets|Pantry|Walk-in Pantry|Pull-out Pantry|Wine Rack|Spice Drawers|Pot Rack|Open Shelving|Range Cooker|Induction Hob|Double Oven|Steam Oven|Pizza Oven|Warming Drawer|Extractor Hood|American Fridge|Integrated Fridge|Wine Fridge|Drinks Fridge|Ice Maker|Dishwasher|Double Sink|Copper Sink|Boiling-water Tap|Water Filter|Coffee Machine|Coffee Grinder|Stand Mixer|Bread Maker|Air Fryer|Rice Cooker|Slow Cooker|Food Processor|Blender|Juicer|Waffle Maker|Toaster|Kettle|Pasta Machine|Dehydrator|Sous-vide Station|Chef Knives|Copper Pans|Cast-iron Pans|Ceramic Dishes|Serving Boards|Kitchen Library|Herb Garden|Hanging Herbs|Indoor Citrus Tree|Breakfast Nook|Dining Table|Bar Stools|Bench Seating|Window Seat|Skylight|Roof Lantern|French Doors|Pendant Lights|Under-cabinet Lights|Wall Sconces|Tiled Splashback|Stone Splashback|Wood Flooring|Terrazzo Floor|Tile Floor|Kitchen Rug|Magnetic Knife Rail|Baking Station|Cocktail Station|Hot-chocolate Station|Tea Station',
+'Broken Fridge|Leaking Tap|Cracked Worktop|Wobbly Stool|Rusty Toaster|Peeling Cabinet Door|Blocked Sink|Burnt Baking Tray',
+placement='at its natural full-size location in the kitchen')
+family('bathroom','🛁',
+'Dream Bathroom|Spa Bathroom|Loft Bathroom|Seaside Bathroom|Penthouse Bathroom|Garden Bathroom|Cabin Bathroom|Family Bathroom',
+'a plain spacious bathroom with empty central floor space',
+[('toilet','Toilet','one plain white toilet'),('sink','Washbasin','one plain white washbasin'),('shower','Basic shower','one simple enclosed shower')],
+'Freestanding Bath|Clawfoot Bath|Sunken Bath|Stone Bath|Japanese Soaking Tub|Whirlpool Bath|Copper Bath|Corner Bath|Rainfall Shower|Waterfall Shower|Steam Shower|Walk-in Shower|Body Jets|Outdoor Shower|Glass Shower Wall|Double Vanity|Floating Vanity|Oak Vanity|Marble Vanity|Double Washbasin|Stone Washbasin|Copper Washbasin|Smart Toilet|Wall-hung Toilet|Bidet|Heated Toilet Seat|Underfloor Heating|Heated Towel Rail|Towel Warmer|Sauna|Steam Room|Cold-plunge Pool|Massage Bench|Relaxation Chair|Cedar Bench|Bamboo Stool|Window Seat|Dressing Area|Laundry Cabinet|Linen Cupboard|Medicine Cabinet|Mirrored Cabinet|Full-length Mirror|Round Mirror|Backlit Mirror|Anti-fog Mirror|Marble Walls|Stone Walls|Mosaic Tiles|Zellige Tiles|Wood Panelling|Exposed Brick|Terrazzo Floor|Pebble Floor|Oak Flooring|Slate Floor|Skylight|Roof Lantern|Panoramic Window|Frosted Window|French Doors|Chandelier|Pendant Lights|Wall Sconces|Recessed Lights|Cove Lighting|Waterproof Speakers|Waterproof Television|Bonsai Tree|Indoor Palm|Living Wall|Orchid Display|Bath Tray|Bath Caddy|Soap Shelf|Shower Niche|Towel Shelves|Bath Rug|Privacy Screen|Waterfall Feature',
+'Leaking Pipe|Cracked Bath|Loose Toilet Seat|Broken Mirror|Dripping Shower|Peeling Wallpaper|Wobbly Cabinet|Rusty Towel Rail',
+placement='in a separate clearly visible area of the bathroom')
+family('garden','🌿',
+'Dream Garden|Courtyard Garden|Roof Garden|Seaside Garden|Cabin Garden|City Garden|Walled Garden|Country Garden',
+'a whole generous empty garden plot with natural grass and a simple boundary, no buildings or attractions',
+[],
+'Swimming Pool|Natural Swimming Pond|Hot Tub|Sauna Cabin|Outdoor Kitchen|Pizza Oven|Barbecue Pavilion|Dining Pergola|Greenhouse|Summer House|Guest Cabin|Garden Office|Treehouse|Fire Pit|Sunken Lounge|Hammock Grove|Waterfall|Koi Pond|Reflecting Pool|Fountain|Stream|Rock Garden|Rose Garden|Wildflower Meadow|Lavender Field|Herb Garden|Vegetable Beds|Fruit Orchard|Citrus Grove|Olive Grove|Bamboo Grove|Palm Grove|Japanese Garden|Zen Garden|Fern Garden|Tropical Garden|Hedge Maze|Sculpture Garden|Garden Bridge|Stone Steps|Boardwalk|Gravel Paths|Trellis Tunnel|Arched Gateway|Stone Wall|Wrought-iron Fence|Living Fence|Timber Deck|Stone Patio|Sun Terrace|Gazebo|Garden Swing|Hanging Chairs|Daybeds|Outdoor Sofa|Picnic Lawn|Tennis Court|Basketball Court|Putting Green|Mini-golf Course|Croquet Lawn|Boules Court|Skate Ramp|Climbing Wall|Trampoline|Zipline|Outdoor Cinema|Garden Stage|Music Pavilion|Bird Aviary|Butterfly House|Bee Garden|Pond Observatory|Stargazing Platform|Observatory Dome|Garden Lighting|Water Rill|Rain Garden|Garden Railway|Potting Shed',
+'Broken Greenhouse|Abandoned Shed|Overgrown Paths|Collapsed Fence|Rusty Caravan|Dry Pond|Dead Orchard|Rubble Pile',
+True,'within its own visible section of the garden plot')
+family('island','🏝️',
+'Desert Island|Lagoon Island|Volcanic Island|Jungle Island|Coral Island|Mountain Island|Twin-bay Island|Crescent Island',
+'a whole undeveloped tropical island surrounded by ocean with beaches and open land, no purchased developments',
+[],
+'Beach Resort|Theme Park|Lazy River|Water Park|Motorway|Airport|Marina|Overwater Villas|Beach Club|Waterfall|Cable Car|Luxury Hotel|Clifftop Hotel|Jungle Lodge|Private Villas|Ocean Spa|Infinity Pool|Natural Lagoon|Coral Reef|Surf Lagoon|Wave Pool|Diving Centre|Yacht Club|Cruise Terminal|Ferry Port|Seaplane Dock|Helipad|Light Railway|Monorail|Coastal Road|Island Bridge|Tunnel|Mountain Railway|Funicular|Scenic Tram|Zipline Park|Adventure Park|Safari Park|Aquarium|Botanical Garden|Butterfly Dome|Bird Sanctuary|Golf Course|Mini-golf Course|Tennis Centre|Football Stadium|Race Circuit|Karting Track|Skate Park|Climbing Park|Amphitheatre|Concert Arena|Outdoor Cinema|Night Market|Food Market|Shopping Village|Beach Restaurants|Rooftop Bar|Sunset Restaurant|Floating Restaurant|Underwater Restaurant|Observatory|Lighthouse|Mountain Lookout|Coastal Boardwalk|Jungle Canopy Walk|Suspension Bridge|Hidden Cove|Sea Caves|Natural Hot Springs|Mangrove Forest|Palm Grove|Fruit Orchard|Bamboo Forest|Rainforest Trail|River Canyon|Rock Arch|Solar Farm|Wind Farm|Desalination Plant',
+'Abandoned Resort|Collapsed Pier|Traffic-clogged Road|Dry Lagoon|Broken Cable Car|Stranded Cargo Ship|Rubble Quarry|Rusty Oil Platform',
+True,'as a full-size development in its own clearly visible area of island land or coastline')
+family('city','🏙️',
+'Dream City|Coastal City|River City|Mountain City|Island City|Garden City|Canal City|Desert City',
+'a whole empty city site with open land and a natural boundary, no purchased buildings',
+[],
+'Football Stadium|Airport|Metro Network|Tram Network|High-speed Station|Motorway|Suspension Bridge|River Harbour|Theme Park|Water Park|University|Hospital|Central Park|Shopping District|Business District|Old Town|Arts District|Waterfront District|Food Market|Night Market|Luxury Hotel|Opera House|Concert Arena|Cinema Complex|Theatre District|Museum|Science Museum|Art Gallery|Aquarium|Zoo|Botanical Gardens|Observatory|Planetarium|Public Library|Sports Arena|Tennis Centre|Aquatic Centre|Velodrome|Race Circuit|Karting Track|Skate Park|Adventure Park|Golf Course|Convention Centre|Exhibition Hall|Film Studios|Television Studios|Recording Studios|Technology Campus|Research Campus|Financial Tower|Residential Towers|Townhouse Quarter|Canal Quarter|Floating District|Rooftop Gardens|Skywalk|Cable Car|Funicular|Cycle Network|Pedestrian Boulevard|River Promenade|Beachfront Promenade|Public Square|Fountain Plaza|Sculpture Park|Urban Farm|Community Gardens|Forest Park|Wetlands Park|Solar Farm|Wind Farm|Hydroelectric Dam|Water-treatment Plant|Geothermal Plant|Solar Canopies|River Ferry Network|Marina|Cruise Terminal|Landmark Tower',
+'Abandoned Shopping Mall|Traffic-clogged Junction|Broken Bridge|Empty Office Tower|Dry Canal|Rubble Quarry|Rusty Freight Yard|Closed Water Park',
+True,'as a full-size distinct city district or major structure within the whole city site')
+family('theme-park','🎢',
+'Dream Theme Park|Coastal Theme Park|Island Theme Park|Forest Theme Park|Mountain Theme Park|Desert Theme Park|Lake Theme Park|City Theme Park',
+'a whole empty landscaped amusement-park site with open land',
+[('entrance','Park entrance','a modest entrance gate and a wide empty main path')],
+'Looping Roller Coaster|Wooden Roller Coaster|Launch Coaster|Dive Coaster|Flying Coaster|Suspended Coaster|Wing Coaster|Spinning Coaster|Mine Train|Family Coaster|Alpine Coaster|Water Coaster|Log Flume|River Rapids|Splash Boats|Lazy River|Wave Pool|Water Slides|Ferris Wheel|Observation Tower|Drop Tower|Swing Tower|Sky Flyer|Giant Pendulum|Pirate Ship|Top Spin|Carousel|Flying Chairs|Teacups|Dodgems|Go-kart Track|Mini-golf Course|Adventure Playground|Climbing Wall|Zipline|Ropes Course|Trampoline Park|Mirror Maze|Laser Maze|Escape Rooms|Haunted Mansion|Jungle Boat Ride|Dinosaur Ride|Space Ride|Submarine Ride|Safari Train|Ghost Train|Flying Theatre|Planetarium Ride|Underwater Tunnel|Aquarium|Butterfly House|Bird Aviary|Botanical Dome|Light Railway|Monorail|Cable Car|Skywalk|Canopy Walk|Park Hotel|Treehouse Lodges|Lake Cabins|Castle Restaurant|Rooftop Restaurant|Food Market|Ice-cream Parlour|Chocolate Factory|Pizza Piazza|Barbecue Terrace|Picnic Gardens|Central Fountain|Waterfall Gardens|Sculpture Garden|Concert Stage|Stunt Arena|Amphitheatre|Outdoor Cinema|Firework Lagoon|Light-show Plaza|Drone-show Lawn',
+'Broken Ferris Wheel|Abandoned Coaster|Closed Ghost Train|Rusty Dodgems|Dry Log Flume|Collapsed Food Stall|Cracked Carousel|Broken Monorail',
+True,'as a full-size separate attraction within the theme park')
+family('water-park','🌊',
+'Dream Water Park|Tropical Water Park|Island Water Park|River Water Park|Lakeside Water Park|Mountain Water Park|Coastal Water Park|Desert Water Park',
+'a whole empty generous water-park site with open space for several attractions',
+[('entrance','Park entrance','one modest entrance pavilion')],
+'Lazy River|Wave Pool|Surf Simulator|Water Coaster|Vertical Drop Slide|Loop Slide|Bowl Slide|Funnel Slide|Racing Slides|Family Raft Slide|Tube Slide|Body Slide|Corkscrew Slide|Black-hole Slide|Rainbow Slides|Half-pipe Slide|Boomerang Slide|Multi-lane Slide|Mat Racer|Freefall Slide|Aqua Loop|Water Tunnel|Cliff Jump Pool|Diving Pool|Lap Pool|Infinity Pool|Lagoon Pool|Saltwater Pool|Cold-plunge Pool|Hot-spring Pool|Whirlpool Pool|Cave Pool|Floating Pool|Rooftop Pool|Glass-bottom Pool|Sunken Pool Bar|Swim-up Bar|Waterfall Grotto|Rain Curtain|Splash Playground|Water Fortress|Tipping Bucket Tower|Water Cannons|Water Obstacle Course|Floating Climbing Wall|Floating Ropes Course|Aquatic Zipline|River Rapids|Whitewater Course|Snorkel Lagoon|Coral Lagoon|Underwater Tunnel|Aquarium Pool|Spa Pavilion|Sauna Village|Steam Rooms|Massage Pavilions|Cabana Village|Overwater Cabanas|Beach Cabanas|Daybed Terrace|Hammock Grove|Palm Island|Sand Beach|Rock Beach|Picnic Gardens|Waterfront Restaurant|Floating Restaurant|Food Market|Ice-cream Parlour|Juice Bar|Tropical Greenhouse|Water Garden|River Bridge|Island Bridge|Canopy Walk|Waterfront Hotel|Family Lodges|Changing Pavilion|Observation Tower',
+'Cracked Pool|Dry Lazy River|Broken Wave Machine|Abandoned Slide|Collapsed Cabana|Rusty Water Tower|Broken Footbridge|Leaking Pool Wall',
+True,'as a full-size separate pool, slide or leisure area within the water park')
+family('zoo','🦒',
+'Dream Zoo|Safari Zoo|Island Zoo|Forest Zoo|Mountain Zoo|City Zoo|Coastal Zoo|Wetland Zoo',
+'a whole generous empty zoo landscape with paths and no animal habitats yet',
+[('entrance','Zoo entrance','one modest zoo entrance pavilion')],
+'Lion Habitat|Tiger Habitat|Elephant Habitat|Giraffe Habitat|Zebra Habitat|Gorilla Habitat|Chimpanzee Habitat|Orangutan Habitat|Panda Habitat|Polar Bear Habitat|Brown Bear Habitat|Wolf Habitat|Red Panda Habitat|Snow Leopard Habitat|Cheetah Habitat|Leopard Habitat|Rhino Habitat|Hippo Habitat|Meerkat Habitat|Lemur Island|Gibbon Habitat|Baboon Habitat|Mandrill Habitat|Capybara Habitat|Otter Habitat|Beaver Habitat|Tapir Habitat|Anteater Habitat|Sloth Habitat|Armadillo Habitat|Kangaroo Habitat|Wallaby Habitat|Koala Habitat|Wombat Habitat|Tasmanian Devil Habitat|Bison Habitat|Buffalo Habitat|Camel Habitat|Alpaca Habitat|Llama Habitat|Reindeer Habitat|Moose Habitat|Fallow Deer Habitat|Ibex Habitat|Mountain Goat Habitat|Flamingo Lagoon|Penguin Coast|Pelican Lagoon|Crane Marsh|Ostrich Habitat|Emu Habitat|Cassowary Habitat|Macaw Aviary|Toucan Aviary|Owl Aviary|Eagle Aviary|Hornbill Aviary|Peacock Garden|Tortoise Habitat|Crocodile Lagoon|Alligator Swamp|Komodo Dragon Habitat|Iguana Habitat|Snake House|Frog House|Butterfly House|Insect House|Reef Aquarium|Shark Aquarium|Jellyfish Aquarium|Ray Lagoon|Seahorse Aquarium|Seal Coast|Sea Lion Coast|Safari Train|Canopy Walk|Night Animal House|Botanical Dome|Zoo Restaurant|Observation Tower',
+'Abandoned Aviary|Dry Penguin Pool|Broken Safari Train|Overgrown Habitat|Closed Butterfly House|Collapsed Observation Deck|Rusty Fence|Empty Aquarium',
+True,'as a spacious natural habitat with the named living animals plainly visible, or a separate full-size zoo attraction')
+family('resort','🏖️',
+'Dream Resort|Island Resort|Mountain Resort|Lake Resort|Desert Resort|Forest Resort|River Resort|Coastal Resort',
+'a whole generous empty leisure-resort landscape with usable land',
+[('reception','Reception lodge','one simple reception lodge')],
+'Beach Villas|Overwater Villas|Pool Villas|Garden Villas|Clifftop Villas|Family Villas|Treehouse Suites|Lake Cabins|Jungle Lodges|Glass Suites|Luxury Hotel|Boutique Hotel|Spa Hotel|Private Marina|Yacht Club|Infinity Pool|Lagoon Pool|Rooftop Pool|Wave Pool|Lazy River|Water Park|Surf Lagoon|Natural Swimming Pond|Hot Springs|Spa Pavilion|Sauna Village|Steam Rooms|Massage Gardens|Yoga Pavilion|Meditation Garden|Fitness Centre|Tennis Centre|Padel Courts|Golf Course|Mini-golf Course|Football Pitch|Basketball Court|Beach Volleyball|Climbing Park|Zipline Park|Adventure Park|Cycle Trails|Horse-riding Centre|Water-sports Centre|Diving Centre|Sailing School|Kayak Lagoon|Floating Restaurant|Underwater Restaurant|Sunset Restaurant|Rooftop Restaurant|Beach Restaurant|Garden Restaurant|Food Market|Barbecue Terrace|Beach Club|Rooftop Bar|Swim-up Bar|Wine Cellar|Cocktail Pavilion|Outdoor Cinema|Amphitheatre|Concert Stage|Dance Pavilion|Art Gallery|Cooking School|Botanical Gardens|Butterfly Dome|Waterfall Gardens|Palm Grove|Fruit Orchard|Forest Trail|Coastal Boardwalk|Canopy Walk|Suspension Bridge|Stargazing Deck|Observatory|Scenic Cable Car|Seaplane Dock|Helipad',
+'Abandoned Hotel Wing|Dry Swimming Pool|Broken Cable Car|Closed Beach Club|Collapsed Pier|Rusty Tennis Court|Overgrown Villas|Cracked Spa Roof',
+True,'as a full-size distinct resort development with its own visible footprint')
+family('restaurant','🍽️',
+'Dream Restaurant|Rooftop Restaurant|Seaside Restaurant|Garden Restaurant|Lake Restaurant|Courtyard Restaurant|City Restaurant|Forest Restaurant',
+'a spacious plain restaurant room with generous empty floor space',
+[('kitchen','Working kitchen','one modest open kitchen along the rear wall'),('tables','Basic dining tables','three simple dining tables with chairs')],
+'Chef Table|Open Kitchen Theatre|Pizza Oven|Charcoal Grill|Tandoor Oven|Rotisserie|Sushi Counter|Oyster Bar|Seafood Display|Pasta Station|Dim-sum Station|Carving Station|Dessert Counter|Chocolate Fountain|Cheese Trolley|Wine Cellar|Glass Wine Wall|Cocktail Bar|Champagne Bar|Coffee Bar|Tea Counter|Juice Bar|Private Dining Room|Banquet Table|Round Dining Tables|Booth Seating|Window Seats|Velvet Banquettes|Leather Banquettes|Outdoor Terrace|Roof Terrace|Garden Courtyard|Waterside Deck|Balcony Dining|Glass Dining Pod|Conservatory|Skylight|Panoramic Windows|Sliding Glass Doors|Stone Fireplace|Hanging Fireplace|Piano Stage|Jazz Stage|Acoustic Stage|Chef Demonstration Stage|Outdoor Cinema|Art Gallery Wall|Sculpture Display|Indoor Olive Tree|Indoor Palm|Living Wall|Herb Garden|Waterfall Wall|Reflecting Pool|Koi Pond|Aquarium|Chandelier|Pendant Lights|Wall Sconces|Candlelit Tables|Table Lamps|Cove Lighting|Marble Floor|Oak Floor|Terrazzo Floor|Mosaic Floor|Exposed Brick|Stone Walls|Wood Panelling|Decorative Ceiling|Copper Ceiling|Chef Library|Bread Display|Cake Display|Pastry Counter|Ice-cream Counter|Salad Bar|Buffet Island|Breakfast Counter|Spice Display',
+'Wobbly Dining Tables|Broken Oven|Cracked Wine Wall|Dripping Ceiling|Burnt Pizza Oven|Crooked Chandelier|Rusty Grill|Peeling Wallpaper',
+placement='as a clearly visible full-size feature in a distinct area of the restaurant')
+family('cafe','☕',
+'Dream Cafe|Book Cafe|Garden Cafe|Seaside Cafe|Rooftop Cafe|City Cafe|Cabin Cafe|Courtyard Cafe',
+'a spacious plain cafe room with neutral walls and empty floor space',
+[('counter','Cafe counter','one simple serving counter'),('seating','Cafe seating','two modest tables with chairs')],
+'Espresso Machine|Coffee Grinder|Cold-brew Tower|Pour-over Station|Tea Station|Matcha Station|Hot-chocolate Station|Juice Bar|Smoothie Bar|Milkshake Station|Cake Counter|Pastry Counter|Croissant Display|Doughnut Display|Cookie Display|Macaron Display|Sandwich Counter|Bagel Counter|Toastie Station|Waffle Station|Pancake Station|Ice-cream Counter|Chocolate Fountain|Bread Display|Fruit Display|Granola Bar|Breakfast Counter|Salad Counter|Open Bakery|Roasting Machine|Coffee Bean Wall|Tea Collection|Coffee Library|Cookbook Shelves|Bookcase Wall|Reading Nook|Window Seats|Booth Seating|Velvet Armchairs|Leather Sofa|Rocking Chairs|Hanging Chairs|Beanbags|Long Shared Table|Chess Tables|Board-game Shelves|Vinyl Corner|Piano Corner|Acoustic Stage|Art Gallery Wall|Photo Gallery Wall|Sculpture Display|Indoor Olive Tree|Indoor Palm|Bonsai Garden|Living Wall|Herb Garden|Flower Wall|Aquarium|Terrarium|Stone Fireplace|Wood-burning Stove|Skylight|Panoramic Window|French Doors|Roof Terrace|Garden Courtyard|Waterside Deck|Outdoor Pergola|Glass Conservatory|Chandelier|Pendant Lights|Floor Lamps|Wall Sconces|Cove Lighting|Oak Flooring|Mosaic Floor|Exposed Brick|Wood Panelling|Window Shutters',
+'Broken Coffee Machine|Burnt Pastry Counter|Wobbly Tables|Leaking Roof|Cracked Cake Display|Dead Houseplant|Broken Grinder|Crooked Bookcase',
+placement='as a distinct visible feature within the cafe')
+family('bakery','🥐',
+'Dream Bakery|Village Bakery|City Bakery|Seaside Bakery|Garden Bakery|Market Bakery|Courtyard Bakery|Rooftop Bakery',
+'a spacious plain bakery room with a large empty serving area',
+[('oven','Bakery oven','one modest working bakery oven'),('counter','Bakery counter','one plain serving counter')],
+'Sourdough Display|Baguette Display|Ciabatta Display|Focaccia Display|Rye Bread Display|Brioche Display|Bagel Display|Pretzel Display|Croissant Display|Pain-au-chocolat Display|Almond Croissant Display|Danish Pastry Display|Cinnamon Roll Display|Chelsea Bun Display|Hot-cross Bun Display|Sticky Bun Display|Doughnut Display|Eclair Display|Profiterole Display|Choux Bun Display|Macaron Display|Madeleine Display|Financier Display|Palmier Display|Mille-feuille Display|Fruit Tart Display|Custard Tart Display|Lemon Tart Display|Chocolate Tart Display|Apple Pie Display|Cherry Pie Display|Pecan Pie Display|Brownie Display|Blondie Display|Cookie Display|Shortbread Display|Flapjack Display|Rocky Road Display|Scone Display|Bakewell Slice Display|Carrot Cake Display|Chocolate Cake Display|Red Velvet Cake Display|Lemon Cake Display|Victoria Sponge Display|Coffee Cake Display|Cheesecake Display|Tiramisu Display|Banana Bread Display|Fruitcake Display|Wedding Cake Display|Celebration Cake Display|Cupcake Display|Cake-pop Display|Baklava Display|Pistachio Roll Display|Cannoli Display|Sfogliatella Display|Churro Counter|Waffle Station|Sandwich Counter|Toastie Station|Quiche Display|Sausage-roll Display|Cornish Pasty Display|Filo Pie Display|Pizza Slice Counter|Soup Station|Espresso Station|Tea Station|Hot-chocolate Station|Chocolate Fountain|Open Mixing Station|Stone Oven|Proving Cabinet|Baking Class Table|Window Seating|Garden Terrace|Cookbook Wall|Flower Display',
+'Burnt Loaves|Collapsed Cake|Cracked Display Case|Broken Mixer|Leaking Roof|Wobbly Counter|Rusty Baking Trays|Broken Oven Door',
+placement='as a separate full-size bakery display or working station, with the named food visibly displayed')
+family('bar','🍸',
+'Dream Bar|Rooftop Bar|Beach Bar|Jazz Bar|Garden Bar|City Bar|Lake Bar|Cabin Bar',
+'a spacious plain bar room with open floor space',
+[('bar','Basic bar counter','one simple wooden bar counter'),('seating','Bar stools','four plain bar stools')],
+'Cocktail Station|Wine Wall|Wine Cellar|Beer Taps|Craft Beer Fridge|Champagne Display|Whisky Display|Rum Display|Gin Display|Tequila Display|Mocktail Station|Juice Station|Coffee Station|Tea Station|Chocolate Fountain|Ice Machine|Copper Bar|Marble Bar|Oak Bar|Circular Bar|Swim-up Bar|Sunken Bar|Outdoor Bar|Sky Bar|Cocktail Laboratory|Tasting Table|Private Booths|Velvet Banquettes|Leather Sofas|Hanging Chairs|Window Seats|Garden Pods|Roof Terrace|Balcony Terrace|Waterside Deck|Courtyard Lounge|Fire-pit Lounge|Stone Fireplace|Hanging Fireplace|Wood-burning Stove|Jazz Stage|Piano Stage|Acoustic Stage|DJ Booth|Dance Floor|Disco Ceiling|Karaoke Stage|Outdoor Cinema|Pool Table|Snooker Table|Darts Lanes|Shuffleboard Table|Table Football|Arcade Corner|Chess Tables|Board-game Shelves|Bowling Lanes|Mini-golf Course|Sculpture Wall|Art Gallery Wall|Record Wall|Sports Screen|Projector Screen|Aquarium|Living Wall|Indoor Palm|Bonsai Tree|Waterfall Wall|Chandelier|Pendant Lights|Wall Sconces|Cove Lighting|Glass Ceiling|Skylight|Panoramic Window|Exposed Brick|Wood Panelling|Marble Floor|Oak Floor|Mosaic Floor',
+'Cracked Pool Table|Broken Beer Tap|Wobbly Bar Stools|Broken Speakers|Leaking Ceiling|Rusty Ice Machine|Crooked Chandelier|Peeling Wallpaper',
+placement='as a distinct full-size feature within the bar')
+family('office','💼',
+'Dream Office|Loft Office|Garden Office|Penthouse Office|Cabin Office|City Office|Seaside Office|Courtyard Office',
+'a spacious plain work room with neutral walls',
+[('desk','Basic desk','one simple desk'),('chair','Desk chair','one plain working desk chair')],
+'Standing Desk|Oak Desk|Glass Desk|Corner Desk|Executive Desk|Meeting Table|Round Meeting Table|Conference Table|Ergonomic Chair|Mesh Chair|Leather Chair|Kneeling Chair|Lounge Chair|Beanbag Lounge|Sofa Corner|Window Seat|Bookcase Wall|Floating Shelves|Storage Cabinets|Filing Cabinet|Display Cabinet|Magazine Rack|Whiteboard Wall|Glass Whiteboard|Pinboard Wall|Planning Table|Presentation Screen|Video-call Booth|Phone Booth|Quiet Pod|Recording Booth|Podcast Desk|Dual Monitors|Ultrawide Monitor|Vertical Monitor|Drawing Tablet|Projector|Printer Station|Scanner Station|3D Printer|Laser Cutter|Workshop Bench|Photography Corner|Product Display|Coffee Station|Tea Station|Juice Station|Drinks Fridge|Kitchenette|Dining Nook|Indoor Palm|Bonsai Tree|Living Wall|Terrarium|Aquarium|Flower Display|Art Gallery Wall|Sculpture Display|Map Wall|Clock Wall|Skylight|Panoramic Window|French Doors|Roof Terrace|Garden Deck|Courtyard|Chandelier|Pendant Lights|Desk Lamps|Floor Lamps|Cove Lighting|Oak Flooring|Cork Flooring|Carpet Tiles|Acoustic Panels|Soundproof Wall|Blackout Blinds|Window Shutters|Stone Fireplace|Library Nook',
+'Wobbly Desk|Broken Monitor|Tangled Cables|Cracked Whiteboard|Squeaky Chair|Broken Printer|Leaking Roof|Dead Houseplant',
+placement='as a clearly visible distinct feature within the office')
+family('gym','🏋️',
+'Dream Gym|Rooftop Gym|Garage Gym|Garden Gym|City Gym|Seaside Gym|Cabin Gym|Courtyard Gym',
+'a spacious plain fitness room with open floor space',
+[('floor','Exercise floor','one clear exercise area with rubber flooring')],
+'Squat Rack|Power Rack|Smith Machine|Cable Machine|Leg Press|Hack Squat|Leg Extension|Leg Curl|Calf Machine|Chest Press|Shoulder Press|Lat Pulldown|Seated Row|Assisted Pull-up Station|Dip Station|Hip Thrust Bench|Weightlifting Platform|Olympic Barbells|Dumbbell Rack|Kettlebell Rack|Medicine Balls|Weight Plates|Adjustable Benches|Incline Benches|Decline Bench|Roman Chair|Pull-up Rig|Battle Ropes|Sled Track|Tyre-flip Station|Rope Climb|Pegboard Wall|Gymnastics Rings|Trampoline|Climbing Wall|Bouldering Wall|Parkour Rig|Obstacle Course|Treadmill Row|Curved Treadmills|Exercise Bikes|Spin Bikes|Rowing Machines|Ski Ergometers|Cross Trainers|Stair Climbers|Assault Bikes|Punching Bags|Boxing Ring|Speed Bags|Kickboxing Mats|Wrestling Mats|Dance Studio|Yoga Studio|Pilates Reformers|Stretching Zone|Resistance Band Wall|Balance Boards|Agility Ladders|Running Track|Sprint Track|Swimming Pool|Cold-plunge Pool|Hot Tub|Sauna|Steam Room|Massage Room|Recovery Chairs|Physio Table|Juice Bar|Smoothie Bar|Protein Snack Counter|Hydration Station|Locker Wall|Mirror Wall|Sound System|Projector|Training Screen|Living Wall|Roof Terrace',
+'Broken Treadmill|Wobbly Weight Bench|Rusty Dumbbells|Cracked Mirror|Tangled Ropes|Broken Bike|Leaking Ceiling|Collapsed Punching Bag',
+placement='as a full-size fitness station in its own clearly visible area of the gym')
+family('studio','🎨',
+'Dream Creative Studio|Loft Studio|Garden Studio|Seaside Studio|Penthouse Studio|Cabin Studio|City Studio|Courtyard Studio',
+'a spacious plain creative studio with open floor space and a window',
+[('bench','Work table','one plain large work table')],
+'Painting Easels|Pottery Wheel|Pottery Kiln|Sculpture Bench|Woodworking Bench|Jewellery Bench|Printmaking Press|Screen-printing Table|Etching Press|Drawing Desk|Animation Desk|Digital Art Tablet|Light Table|Drafting Table|Sewing Machine|Embroidery Machine|Weaving Loom|Quilting Table|Fabric Wall|Pattern Cutting Table|Leatherworking Bench|Glassworking Table|Stained-glass Station|Mosaic Table|Flower-arranging Bench|Bookbinding Press|Ceramics Shelves|Paint Wall|Brush Cabinet|Tool Wall|Material Drawers|Flat-file Cabinet|Drying Racks|Display Pedestals|Art Gallery Wall|Sculpture Gallery|Photography Backdrop|Product Photography Table|Portrait Lighting|Lightbox|Darkroom|Camera Wall|Film Editing Desk|Podcast Desk|Recording Booth|Mixing Desk|Synthesizer Rack|Upright Piano|Grand Piano|Guitar Wall|Drum Kit|Violin Cabinet|DJ Booth|Microphone Wall|Soundproof Panels|Acoustic Ceiling|Green Screen|Projector Screen|3D Printer|Laser Cutter|CNC Router|Vinyl Cutter|Robotics Bench|Modelmaking Table|Architecture Bench|Presentation Wall|Library Corner|Reading Nook|Sofa Corner|Meeting Table|Coffee Station|Tea Station|Drinks Fridge|Indoor Palm|Bonsai Tree|Living Wall|Skylight|Panoramic Window|Garden Terrace|Courtyard',
+'Broken Easel|Cracked Kiln|Tangled Cables|Wobbly Workbench|Broken Sewing Machine|Leaking Roof|Rusty Print Press|Cracked Camera Lens',
+placement='as a separate full-size creative station within the studio')
+family('shop','🛍️',
+'Dream Department Store|Seaside Department Store|City Department Store|Rooftop Department Store|Village Department Store|Island Department Store|Garden Department Store|Courtyard Department Store',
+'a spacious plain department-store interior with empty display bays',
+[('checkout','Checkout counter','one modest checkout counter')],
+'Fashion Hall|Shoe Hall|Trainer Wall|Handbag Gallery|Jewellery Gallery|Watch Gallery|Perfume Hall|Beauty Counter|Skincare Counter|Haircare Counter|Grooming Counter|Sunglasses Wall|Travel Luggage Hall|Outdoor Clothing Hall|Sportswear Hall|Swimwear Hall|Denim Hall|Formalwear Hall|Knitwear Hall|Accessories Hall|Furniture Hall|Sofa Gallery|Bedroom Furniture Gallery|Kitchen Showroom|Bathroom Showroom|Lighting Gallery|Rug Gallery|Curtain Gallery|Home Decor Gallery|Art Gallery|Bookshop|Record Shop|Music Instrument Hall|Camera Counter|Gaming Hall|Computer Counter|Phone Counter|Television Gallery|Audio Listening Room|Appliance Hall|Cookware Hall|Tableware Gallery|Baking Counter|Coffee Equipment Counter|Tea Counter|Chocolate Hall|Bakery|Delicatessen|Cheese Counter|Wine Cellar|Food Hall|Fresh Produce Hall|Flower Shop|Plant Nursery|Garden Equipment Hall|DIY Workshop|Craft Hall|Stationery Hall|Modelmaking Hall|Board-game Shop|Puzzle Shop|Toy Shop|Collectibles Hall|Pet Supplies Hall|Bicycle Showroom|Camping Hall|Climbing Equipment Hall|Fishing Equipment Hall|Roof Garden|Rooftop Cafe|Restaurant Terrace|Tea Room|Champagne Bar|Coffee Bar|Demonstration Kitchen|Fashion Runway|Tailoring Studio|Gift-wrapping Studio|Personal Shopping Lounge|Glass Lift',
+'Empty Shopfront|Broken Escalator|Cracked Display Case|Wobbly Shelves|Leaking Roof|Abandoned Food Counter|Crooked Sign|Rusty Shopping Trolleys',
+placement='as a distinct full-size department or attraction inside the department store')
+family('space-base','🚀',
+'Dream Space Base|Moon Base|Mars Base|Asteroid Base|Spaceport Base|Lunar Crater Base|Red Canyon Base|Polar Moon Base',
+'a whole empty rocky science-fiction base site beneath a dark sky, with no purchased buildings',
+[('habitat','Starter habitat','one sealed modest habitation module'),('airlock','Airlock','one working airlock attached to the habitat')],
+'Glass Habitat Dome|Greenhouse Dome|Botanical Dome|Hydroponic Farm|Algae Farm|Mushroom Farm|Orchard Dome|Aquaculture Dome|Food Laboratory|Water Recycler|Ice Refinery|Desalination Module|Oxygen Plant|Solar Farm|Solar Tower|Wind Turbine Array|Geothermal Plant|Battery Vault|Power Station|Radiator Array|Landing Pad|Rocket Hangar|Spaceport Terminal|Cargo Dock|Shuttle Hangar|Rover Garage|Rover Track|Transport Tunnel|Maglev Line|Monorail|Cable Car|Pressure Bridge|Glass Skywalk|Underground Habitat|Cliff Habitat|Habitation Tower|Luxury Residence Dome|Crew Village|Hotel Dome|Dining Dome|Cooking Laboratory|Coffee Dome|Recreation Dome|Swimming Pool Dome|Gym Dome|Sports Dome|Climbing Dome|Skating Dome|Zero-gravity Arena|Art Gallery Dome|Concert Dome|Cinema Dome|Library Dome|Museum Dome|Planetarium|Observatory|Radio Telescope|Solar Telescope|Research Laboratory|Chemistry Laboratory|Biology Laboratory|Geology Laboratory|Robotics Laboratory|Fabrication Workshop|3D-printing Factory|Medical Centre|Training Centre|Mission Control|Communications Tower|Satellite Station|Antenna Array|Exploration Airship|Weather Station|Meteor Shield|Radiation Shelter|Emergency Habitat|Rescue Station|Ore Refinery|Mining Site|Sample Archive',
+'Abandoned Habitat|Broken Rover Hangar|Cracked Greenhouse Dome|Dry Hydroponic Farm|Broken Antenna|Collapsed Skywalk|Rusted Cargo Bay|Closed Landing Pad',
+True,'as a distinct full-size sealed structure or facility within the science-fiction base site')
+family('campsite','⛺',
+'Dream Campsite|Forest Campsite|Lake Campsite|Coastal Campsite|Mountain Campsite|River Campsite|Desert Campsite|Island Campsite',
+'a whole empty scenic campsite landscape with open land',
+[('camp','Basic camp','one simple tent and a modest fire ring')],
+'Lake Cabins|Forest Cabins|Clifftop Cabins|Glass Cabins|Log Cabins|Treehouses|Safari Tents|Bell Tents|Yurts|Tipis|Geodesic Domes|Airstream Village|Campervan Pitches|Shepherd Huts|Tiny Houses|Floating Cabins|Hammock Grove|Covered Hammocks|Daybed Deck|Sunken Fire Pit|Campfire Circle|Barbecue Pavilion|Outdoor Kitchen|Pizza Oven|Camp Dining Hall|Coffee Cabin|Bakery Cabin|Farm Shop|Food Market|Cooking Pavilion|Natural Swimming Pond|Lake Swimming Deck|River Swimming Deck|Hot Tub|Sauna Cabin|Cold-plunge Pool|Outdoor Showers|Spa Pavilion|Yoga Deck|Meditation Garden|Forest Trail|Canopy Walk|Suspension Bridge|Boardwalk|Lake Jetty|Boat House|Canoe Dock|Kayak Launch|Sailing School|Paddleboard Dock|Fishing Jetty|Bird Hide|Wildlife Observatory|Butterfly Garden|Botanical Garden|Vegetable Garden|Herb Garden|Fruit Orchard|Wildflower Meadow|Bamboo Grove|Horse Stables|Riding Arena|Cycle Trails|Mountain-bike Track|Climbing Wall|Bouldering Rocks|Ropes Course|Zipline|Archery Range|Adventure Playground|Mini-golf Course|Boules Court|Outdoor Cinema|Acoustic Stage|Craft Cabin|Pottery Cabin|Reading Cabin|Stargazing Deck|Observatory|Scenic Lookout',
+'Collapsed Tent|Broken Jetty|Dry Swimming Pond|Rusty Caravan|Leaking Cabin|Overgrown Trail|Broken Footbridge|Abandoned Shower Block',
+True,'as a full-size separate campsite area or attraction')
+family('sports-complex','🏟️',
+'Dream Sports Complex|Island Sports Complex|Mountain Sports Complex|City Sports Complex|Lake Sports Complex|Coastal Sports Complex|Forest Sports Complex|Desert Sports Complex',
+'a whole generous empty sports-campus site with open land',
+[('reception','Sports reception','one modest reception pavilion')],
+'Football Stadium|Training Pitches|Five-a-side Courts|Futsal Hall|Basketball Arena|Outdoor Basketball Courts|Tennis Stadium|Tennis Courts|Padel Courts|Squash Courts|Badminton Hall|Volleyball Hall|Beach Volleyball Courts|Rugby Stadium|Cricket Ground|Baseball Diamond|Softball Field|Hockey Stadium|Ice Hockey Arena|Ice Skating Rink|Curling Rink|Speed Skating Oval|Athletics Stadium|Running Track|Indoor Running Track|Sprint Track|Cross-country Course|Cycling Velodrome|BMX Track|Mountain-bike Trails|Road Cycling Circuit|Skate Park|Scooter Park|Roller Rink|Parkour Park|Climbing Centre|Bouldering Hall|Ropes Course|Zipline Park|Adventure Course|Olympic Pool|Diving Pool|Water-polo Pool|Wave Pool|Surf Lagoon|Whitewater Course|Rowing Lake|Canoe Course|Sailing Lake|Water-ski Lake|Golf Course|Driving Range|Putting Green|Mini-golf Course|Archery Range|Fencing Hall|Boxing Gym|Boxing Arena|Wrestling Hall|Martial Arts Dojo|Gymnastics Hall|Trampoline Hall|Dance Studio|Yoga Pavilion|Pilates Studio|Weightlifting Hall|Strongman Yard|Fitness Centre|Recovery Spa|Sauna Village|Medical Centre|Physio Centre|Sports Science Lab|Nutrition Kitchen|Athlete Village|Sports Hotel|Coach Training Centre|Equipment Workshop|Training Library|Sports Museum',
+'Cracked Running Track|Broken Scoreboard|Dry Swimming Pool|Rusty Goalposts|Abandoned Stadium|Collapsed Grandstand|Broken Floodlights|Overgrown Tennis Courts',
+True,'as a distinct full-size sports facility within the sports campus')
+family('festival','🎪',
+'Dream Festival|Beach Festival|Forest Festival|Lake Festival|Island Festival|City Festival|Mountain Festival|Desert Festival',
+'a whole empty open-air festival landscape with generous usable land',
+[('entrance','Festival entrance','one modest entrance gate and a clear central walking path')],
+'Main Stage|Acoustic Stage|Jazz Stage|Dance Stage|Electronic Stage|Rock Stage|Comedy Stage|Theatre Stage|Poetry Stage|Classical Stage|World Music Stage|Cinema Tent|Open-air Cinema|Planetarium Tent|Silent Disco|Dance Dome|Light-show Dome|Laser Arena|Art Gallery|Sculpture Park|Street-art Wall|Photography Gallery|Craft Village|Pottery Tent|Printmaking Tent|Painting Pavilion|Workshop Village|Cooking Stage|Food Market|Street-food Lane|Pizza Village|Barbecue Yard|Seafood Terrace|Dessert Village|Chocolate Tent|Ice-cream Village|Coffee Village|Tea Garden|Juice Bar|Cocktail Village|Wine Garden|Beer Garden|Mocktail Pavilion|Lakeside Restaurant|Forest Restaurant|Rooftop Terrace|VIP Lounge|Hammock Grove|Chill-out Dome|Garden Lounge|Treehouse Lounge|Lake Deck|Beach Lounge|Spa Village|Sauna Village|Hot-tub Garden|Yoga Pavilion|Meditation Garden|Sound-bath Pavilion|Wellness Dome|Ferris Wheel|Carousel|Dodgems|Adventure Park|Zipline|Climbing Wall|Ropes Course|Skate Park|Mini-golf Course|Games Lawn|Light Railway|Monorail|Canopy Walk|Forest Trail|Flower Garden|Butterfly Garden|Glamping Village|Cabin Village|Yurt Village|Stargazing Deck',
+'Broken Main Stage|Abandoned Food Stall|Collapsed Tent|Cracked Dance Floor|Broken Ferris Wheel|Leaking Glamping Cabins|Rusty Sound Tower|Overgrown Festival Path',
+True,'as a full-size separate stage, venue or leisure area within the festival')
+family('arcade','🕹️',
+'Dream Arcade|Seaside Arcade|City Arcade|Rooftop Arcade|Retro Arcade|Garden Arcade|Cabin Arcade|Underground Arcade',
+'a spacious plain arcade room with open space for machines',
+[('entrance','Arcade entrance','one simple entrance with clear walkways')],
+'Pac-Man Cabinet|Space Invaders Cabinet|Galaga Cabinet|Donkey Kong Cabinet|Frogger Cabinet|Asteroids Cabinet|Centipede Cabinet|Dig Dug Cabinet|Q*bert Cabinet|Defender Cabinet|Tempest Cabinet|Missile Command Cabinet|Robotron Cabinet|Joust Cabinet|Bubble Bobble Cabinet|Snow Bros Cabinet|Metal Slug Cabinet|Golden Axe Cabinet|Final Fight Cabinet|Streets of Rage Cabinet|Street Fighter Cabinet|Mortal Kombat Cabinet|Tekken Cabinet|Virtua Fighter Cabinet|King of Fighters Cabinet|Soulcalibur Cabinet|Marvel vs Capcom Cabinet|Time Crisis Cabinet|House of the Dead Cabinet|Virtua Cop Cabinet|Point Blank Cabinet|Silent Scope Cabinet|Jurassic Park Cabinet|Operation Wolf Cabinet|OutRun Racer|Daytona USA Racer|Sega Rally Racer|Crazy Taxi Racer|Mario Kart Racer|Cruisn Racer|F-Zero Racer|Ridge Racer|Initial D Racer|Wangan Racer|Motorcycle Racer|Snowmobile Racer|Powerboat Racer|Flight Simulator|Space Combat Simulator|Tank Simulator|Dance Dance Revolution|Pump It Up|Dance Evolution|Beatmania|Drum Mania|Guitar Freaks|Taiko Drums|Popn Music|Rhythm Piano|Karaoke Booth|Pinball Row|Basketball Hoops Game|Air Hockey|Table Football|Shuffleboard|Skee-ball|Bowling Lanes|Mini Bowling|Claw Machines|Coin Pushers|Whack-a-mole|Ring Toss|Reaction Wall|Punching Machine|Strength Tester|Laser Maze|VR Arena|Escape-room Booth|Motion Cinema|Prize Counter',
+'Broken Claw Machine|Cracked Racing Screen|Rusty Coin Pusher|Broken Air Hockey|Wobbly Pinball Table|Tangled Game Cables|Collapsed Prize Shelf|Broken Dance Platform',
+placement='as a separate full-size arcade machine or attraction on the arcade floor')
+family('museum','🏛️',
+'Dream Museum|Island Museum|City Museum|Garden Museum|Lake Museum|Mountain Museum|Coastal Museum|Courtyard Museum',
+'a whole spacious museum site with empty halls and open courtyards',
+[('entrance','Museum entrance','one plain museum entrance and an empty central hall')],
+'Dinosaur Hall|Fossil Gallery|Meteorite Gallery|Gemstone Gallery|Mineral Gallery|Volcano Gallery|Earthquake Simulator|Glacier Gallery|Ocean Gallery|Coral Gallery|Shark Gallery|Whale Skeleton Hall|Bird Gallery|Butterfly Gallery|Insect Gallery|Mammal Gallery|Evolution Gallery|Ancient Egypt Hall|Ancient Greece Hall|Ancient Rome Hall|Mesopotamia Hall|Mayan Hall|Medieval Hall|Renaissance Hall|Victorian Hall|Industrial History Hall|Maritime Hall|Aviation Hall|Railway Hall|Motoring Hall|Spaceflight Hall|Astronomy Hall|Planetarium|Observatory|Robotics Gallery|Computing Gallery|Communications Gallery|Photography Gallery|Cinema Gallery|Music Gallery|Musical Instrument Hall|Fashion Gallery|Textile Gallery|Jewellery Gallery|Glass Gallery|Ceramics Gallery|Sculpture Hall|Portrait Gallery|Landscape Gallery|Modern Art Hall|Abstract Art Hall|Street-art Hall|Architecture Gallery|Design Gallery|Toy Gallery|Game Gallery|Clock Gallery|Map Gallery|Coin Gallery|Book Gallery|Print Gallery|Food History Hall|Agriculture Hall|Medicine Gallery|Human Biology Hall|Chemistry Lab|Physics Lab|Light Gallery|Sound Gallery|Mathematics Gallery|Optical Illusion Hall|Mirror Maze|Interactive Workshop|Conservation Studio|Museum Library|Reading Garden|Sculpture Garden|Museum Cafe|Lecture Theatre|Immersive Cinema',
+'Empty Exhibition Hall|Broken Planetarium|Cracked Display Cases|Closed Sculpture Garden|Leaking Gallery Roof|Broken Interactive Screen|Rusty Lift|Abandoned Workshop',
+True,'as a full-size museum gallery or attraction with representative displays clearly visible')
+family('airport','✈️',
+'Dream Airport|Island Airport|Mountain Airport|City Airport|Coastal Airport|Desert Airport|Lake Airport|Garden Airport',
+'a whole large undeveloped airport site with open land',
+[('runway','Runway','one usable long paved runway'),('terminal','Starter terminal','one modest terminal with two gates')],
+'Second Runway|Crosswind Runway|Parallel Taxiways|Cargo Terminal|Domestic Terminal|International Terminal|Private Jet Terminal|VIP Terminal|Seaplane Terminal|Helicopter Terminal|Satellite Concourse|Glass Concourse|Circular Concourse|Observation Concourse|Skybridge|Underground Concourse|Control Tower|Cargo Hangars|Aircraft Maintenance Hangar|Private Jet Hangars|Helicopter Hangars|Flight School|Simulator Centre|Aviation Museum|Viewing Terrace|Runway Cafe|Rooftop Restaurant|Terminal Restaurant|Food Hall|Coffee Hall|Bakery Hall|Chocolate Shop|Wine Shop|Bookshop|Record Shop|Fashion Hall|Electronics Hall|Art Gallery|Sculpture Garden|Indoor Forest|Botanical Dome|Butterfly Garden|Waterfall Hall|Aquarium Hall|Reflecting Pool|Canal Hall|Roof Garden|Indoor Orchard|Luxury Hotel|Transit Hotel|Sleep Pods|First-class Lounge|Business Lounge|Garden Lounge|Family Lounge|Quiet Lounge|Spa Lounge|Fitness Centre|Swimming Pool|Cinema|Concert Hall|Conference Centre|Workstation Hall|Co-working Lounge|Medical Centre|Airport Railway|High-speed Station|Metro Station|Tram Terminal|Monorail|Cable Car|Ferry Terminal|Marina Terminal|Bus Terminal|Cycle Hub|Solar Canopies|Solar Farm|Ground Transport Hub|Covered Plaza|Terminal Observatory',
+'Abandoned Terminal|Broken Jet Bridge|Cracked Taxiway|Rusty Cargo Hangar|Closed Viewing Deck|Broken Monorail|Leaking Concourse|Empty Shopping Hall',
+True,'as a distinct full-size airport facility within the airport site')
+family('yacht','🛥️',
+'Dream Yacht|Explorer Yacht|Sailing Superyacht|Catamaran Yacht|Classic Motor Yacht|Expedition Yacht|River Yacht|Ocean Yacht',
+'a large plain luxury yacht seen from a raised angle with generous open decks and visible interior sections',
+[('hull','Seaworthy hull','one complete full-size yacht hull'),('helm','Helm','one working bridge and helm'),('cabin','Starter cabin','one plain sleeping cabin')],
+'Bow Lounge|Stern Lounge|Sun Deck|Roof Terrace|Beach Club Deck|Fold-out Deck|Glass Skybridge|Viewing Platform|Observation Lounge|Glass-bottom Lounge|Infinity Pool|Plunge Pool|Hot Tub|Cold-plunge Pool|Waterfall Wall|Water Slide|Diving Platform|Swim Platform|Floating Pool|Sauna|Steam Room|Spa Suite|Massage Room|Beauty Salon|Fitness Room|Yoga Deck|Pilates Room|Climbing Wall|Basketball Court|Mini-golf Deck|Cinema Room|Outdoor Cinema|Concert Lounge|Piano Lounge|Recording Studio|Art Gallery|Sculpture Gallery|Library|Reading Lounge|Games Room|Pool Table|Table Football|Darts Room|Arcade Room|VR Room|Cocktail Bar|Wine Cellar|Champagne Lounge|Coffee Bar|Tea Lounge|Chef Kitchen|Pizza Oven|Barbecue Deck|Sushi Counter|Seafood Grill|Dining Terrace|Formal Dining Room|Breakfast Room|Underwater Dining Room|Master Suite|Guest Suites|Panoramic Suites|Balcony Suites|Glass Roof Cabin|Walk-in Wardrobe|Marble Bathroom|Star Ceiling|Indoor Garden|Palm Garden|Herb Garden|Aquarium|Moon Pool|Tender Garage|Sailing Dinghy|Speedboat Tender|Jet-ski Garage|Kayak Rack|Paddleboard Rack|Diving Centre|Helipad',
+'Rusty Railings|Leaking Cabin|Cracked Skylight|Broken Hot Tub|Torn Sun Canopy|Wobbly Deck Chairs|Abandoned Tender|Broken Cinema Screen',
+placement='as a full-size distinct deck feature or room aboard the yacht')
+family('supercar','🏎️',
+'Dream Supercar|Track Supercar|Touring Supercar|Retro Supercar|Roadster Supercar|Coupe Supercar|Endurance Supercar|Show Supercar',
+'one complete plain road-going sports car viewed from a raised three-quarter angle with the whole vehicle visible',
+[('body','Car body','one complete sports-car body with two doors'),('wheels','Working wheels','four plain road wheels'),('engine','Engine','one working petrol engine')],
+'Carbon-fibre Bonnet|Carbon-fibre Roof|Carbon-fibre Spoiler|Carbon-fibre Diffuser|Carbon-fibre Side Skirts|Carbon-fibre Mirrors|Carbon-fibre Splitter|Carbon-fibre Engine Cover|Forged Alloy Wheels|Chrome Wheels|Bronze Wheels|Black Alloy Wheels|White Alloy Wheels|Gold Alloy Wheels|Centre-lock Wheels|Aerodynamic Wheels|Racing Slick Tyres|Performance Road Tyres|All-weather Tyres|Semi-slick Tyres|Red Brake Calipers|Yellow Brake Calipers|Blue Brake Calipers|Carbon-ceramic Brakes|Big Brake Kit|Lowered Suspension|Adjustable Suspension|Track Suspension|Air Suspension|Widebody Kit|Flared Wheel Arches|Rear Wing|Ducktail Spoiler|Front Splitter|Side Vents|Roof Scoop|Bonnet Vents|Active Aero|Racing Exhaust|Titanium Exhaust|Twin Exhaust|Quad Exhaust|Supercharger|Twin Turbochargers|Performance Intake|Intercooler|Engine Strut Brace|Engine Dress-up Kit|Bucket Seats|Leather Seats|Alcantara Seats|Heated Seats|Racing Harnesses|Roll Cage|Sports Steering Wheel|Carbon Steering Wheel|Digital Dashboard|Analogue Dashboard|Head-up Display|Premium Sound System|Track Telemetry Screen|Red Metallic Paint|Blue Metallic Paint|Green Metallic Paint|Orange Metallic Paint|Silver Paint|Pearl White Paint|Matte Black Paint|Racing Stripes|Two-tone Paint|Painted Roof|Racing Livery|Tinted Windows|Glass Roof|LED Headlights|Laser Headlights|LED Tail Lights|Underbody Lights|Scissor Doors|Gullwing Doors',
+'Cracked Windscreen|Rusty Bonnet|Flat Tyre|Dented Door|Broken Spoiler|Peeling Paint|Cracked Headlight|Bent Exhaust',
+placement='installed at its correct full-size location on the same complete sports car')
+family('aquarium','🐠',
+'Dream Aquarium|Island Aquarium|Coastal Aquarium|City Aquarium|Lake Aquarium|Garden Aquarium|Underground Aquarium|Rooftop Aquarium',
+'a whole spacious aquarium venue with empty display halls and room for several exhibits',
+[('entrance','Aquarium entrance','one modest entrance hall')],
+'Coral Reef Tank|Tropical Fish Tank|Clownfish Tank|Seahorse Tank|Jellyfish Tank|Shark Tunnel|Ray Lagoon|Sea Turtle Tank|Octopus Tank|Cuttlefish Tank|Squid Tank|Moray Eel Tank|Lionfish Tank|Pufferfish Tank|Parrotfish Tank|Angelfish Tank|Butterflyfish Tank|Surgeonfish Tank|Wrasse Tank|Grouper Tank|Barracuda Tank|Tarpon Tank|Sturgeon Tank|Paddlefish Tank|Arapaima Tank|Arowana Tank|Discus Tank|Angelfish River Tank|Piranha Tank|Tetra Tank|Gourami Tank|Cichlid Tank|Catfish Tank|Electric Eel Tank|Stingray River Tank|Mangrove Tank|Amazon River Tank|Flooded Forest Tank|Kelp Forest Tank|Rockpool Tank|Tidepool Tank|Anemone Tank|Starfish Tank|Sea Urchin Tank|Sea Cucumber Tank|Crab Tank|Lobster Tank|Shrimp Tank|Nautilus Tank|Horseshoe Crab Tank|Leafy Sea Dragon Tank|Weedy Sea Dragon Tank|Garden Eel Tank|Lungfish Tank|Mudskipper Tank|Archerfish Tank|Knifefish Tank|Elephantnose Fish Tank|Rainbowfish Tank|Killifish Tank|Goldfish Pond|Koi Pond|Otter River|Penguin Coast|Seal Coast|Sea Lion Coast|Reptile River|Frog Wetland|Underwater Restaurant|Glass-bottom Walkway|Ocean Dome|Deep-sea Gallery|Submarine Simulator|Ocean Cinema|Marine Laboratory|Conservation Nursery|Coral Nursery|Aquarium Library|Viewing Terrace|Aquarium Cafe',
+'Empty Coral Tank|Cracked Viewing Window|Broken Submarine Simulator|Dry Koi Pond|Closed Penguin Pool|Leaking Tank Wall|Abandoned Ocean Gallery|Broken Walkway',
+True,'as a separate spacious aquatic exhibit with the named living species visible, or a distinct aquarium attraction')
+family('hotel','🏨',
+'Dream Hotel|City Hotel|Island Hotel|Mountain Hotel|Lake Hotel|Seaside Hotel|Garden Hotel|Desert Hotel',
+'a whole generous hotel site with a plain starter building and open grounds',
+[('rooms','Guest rooms','a modest wing of simple guest bedrooms with working beds'),('reception','Hotel reception','one plain reception lobby')],
+'Penthouse Suites|Pool Suites|Garden Suites|Balcony Suites|Panoramic Suites|Glass Suites|Family Suites|Duplex Suites|Spa Suites|Terrace Suites|Villa Wing|Cabin Wing|Treehouse Wing|Overwater Wing|Courtyard Wing|Beach Wing|Infinity Pool|Lagoon Pool|Rooftop Pool|Indoor Pool|Lap Pool|Hot Tub|Cold-plunge Pool|Lazy River|Water Slides|Spa Pavilion|Sauna Village|Steam Rooms|Massage Rooms|Beauty Salon|Fitness Centre|Yoga Pavilion|Pilates Studio|Tennis Courts|Padel Courts|Golf Course|Mini-golf Course|Running Track|Cycle Trails|Adventure Park|Rooftop Restaurant|Garden Restaurant|Waterfront Restaurant|Underwater Restaurant|Chef Table|Buffet Hall|Breakfast Terrace|Tea Room|Coffee Bar|Cocktail Bar|Wine Cellar|Champagne Lounge|Beach Club|Jazz Lounge|Piano Lounge|Dance Pavilion|Outdoor Cinema|Cinema Room|Concert Hall|Theatre|Art Gallery|Sculpture Garden|Botanical Garden|Butterfly Dome|Indoor Forest|Waterfall Atrium|Reflecting Pool|Palm Court|Rose Garden|Herb Garden|Fruit Orchard|Library Lounge|Reading Garden|Games Room|Bowling Lanes|Conference Hall|Co-working Lounge|Wedding Pavilion|Marina|Helipad',
+'Abandoned Bedroom Wing|Dry Swimming Pool|Broken Lift|Leaking Lobby Roof|Cracked Spa Wall|Closed Restaurant|Overgrown Garden|Rusty Balcony Railings',
+True,'as a full-size distinct hotel development within the same hotel grounds')
+family('cinema','🎬',
+'Dream Cinema|Rooftop Cinema|Seaside Cinema|Garden Cinema|City Cinema|Lake Cinema|Cabin Cinema|Underground Cinema',
+'a spacious plain cinema venue with room for a main auditorium and additional areas',
+[('screen','Cinema screen','one plain full-size cinema screen'),('seating','Cinema seats','three rows of simple cinema seats')],
+'IMAX Screen|Dolby Cinema Screen|Laser Projector|Digital Projector|35mm Projector|70mm Projector|Outdoor Screen|Drive-in Screen|Floating Screen|Dome Screen|Panoramic Screen|Wraparound Screen|LED Cinema Wall|Giant Screen|Curved Screen|Retractable Screen|Reclining Seats|Leather Seats|Velvet Seats|Sofa Seating|Beanbag Seating|Bed Seating|Couple Pods|Private Booths|Balcony Seats|VIP Boxes|Dining Seats|Heated Seats|Motion Seats|Massage Seats|Surround Sound|Ceiling Speakers|Bass Array|Acoustic Walls|Acoustic Ceiling|Soundproof Doors|Star Ceiling|Cove Lighting|Wall Sconces|Aisle Lights|Film Poster Gallery|Film Prop Gallery|Costume Gallery|Camera Gallery|Animation Gallery|Film Library|Reading Lounge|Editing Studio|Sound Studio|Screening Suite|Director Lounge|Festival Stage|Premiere Hall|Red-carpet Entrance|Glass Atrium|Roof Garden|Courtyard Lounge|Garden Terrace|Lakeside Deck|Fireplace Lounge|Popcorn Station|Nacho Station|Hotdog Station|Pizza Station|Burger Counter|Ice-cream Counter|Milkshake Bar|Coffee Bar|Tea Bar|Hot-chocolate Bar|Sweet Shop|Dessert Counter|Cocktail Bar|Wine Bar|Champagne Lounge|Arcade Room|Pool Tables|Board-game Lounge|VR Room|Film Quiz Lounge',
+'Cracked Cinema Screen|Broken Projector|Squeaky Seats|Tangled Sound Cables|Broken Popcorn Machine|Leaking Auditorium Roof|Peeling Seat Fabric|Broken Speakers',
+placement='as a separate full-size cinema installation or room, with the main screen still visible')
+# Department stores use a separate future venue pool; the reviewed launch set contains 30 families.
+families = [f for f in families if f['key'] != 'shop']
+
+# Four additional ideas have their own pools, rather than being padded variants of a room.
+specials = [
+('breakfast-plate','Breakfast Plate','🍳','a completely empty white breakfast plate on a wooden table', [('plate','Breakfast plate','one empty white plate')],
+'Eggs|Bacon Strips|Sausages|Baked Beans|Hash Browns|Grilled Tomatoes|Mushrooms|Toast|Avocado Slices|Smoked Salmon|Sardines|Tofu Cubes|Fried Egg|Poached Egg|Scrambled Eggs|Omelette|Boiled Egg|Egg Muffin|Black Pudding|Turkey Bacon|Halloumi|Feta|Cheddar|Mozzarella|Goat Cheese|Cream Cheese|Cottage Cheese|Greek Yoghurt|Granola|Porridge|Muesli|Cornflakes|Rice Pudding|Chia Pudding|Pancakes|Waffle|French Toast|Crumpet|English Muffin|Bagel|Croissant|Brioche|Sourdough|Rye Bread|Ciabatta|Focaccia|Banana Bread|Cinnamon Roll|Pain au Chocolat|Scone|Strawberries|Blueberries|Raspberries|Blackberries|Banana Slices|Apple Slices|Pear Slices|Orange Segments|Grapefruit Segments|Kiwi Slices|Mango Slices|Pineapple Chunks|Melon Slices|Peach Slices|Grapes|Dates|Walnuts|Almonds|Pistachios|Peanut Butter|Almond Butter|Nutella|Honey|Maple Syrup|Golden Syrup|Strawberry Jam|Apricot Jam|Marmalade|Butter|Fresh Parsley',
+'Raw Onion|Pickled Gherkins|Ketchup Puddle|Mustard Puddle|Burnt Toast|Overcooked Sausage|Crushed Cracker|Wilted Lettuce', 'on the plate as a separate recognisable portion, without implying any other food',False),
+('dessert-buffet','Dessert Buffet','🍰','a long empty dessert buffet counter in a bright dining room', [('counter','Buffet counter','one long empty dessert serving counter')],
+'Chocolate Cake|Carrot Cake|Red Velvet Cake|Lemon Cake|Victoria Sponge|Coffee Cake|Banana Cake|Pistachio Cake|Coconut Cake|Black Forest Cake|Battenberg Cake|Fruitcake|Honey Cake|Marble Cake|Swiss Roll|Yule Log|Chocolate Brownies|Blondies|Cookies|Shortbread|Flapjacks|Rocky Road|Millionaire Shortbread|Bakewell Slices|Lemon Bars|Chocolate Truffles|Macarons|Madeleines|Financiers|Palmiers|Eclairs|Profiteroles|Choux Buns|Mille-feuille|Paris-Brest|Croquembouche|Apple Pie|Cherry Pie|Pecan Pie|Key Lime Pie|Banoffee Pie|Pumpkin Pie|Fruit Tart|Custard Tart|Lemon Tart|Chocolate Tart|Treacle Tart|Bakewell Tart|Cheesecake|Tiramisu|Panna Cotta|Creme Brulee|Chocolate Mousse|Lemon Posset|Trifle|Eton Mess|Pavlova|Rice Pudding|Bread Pudding|Sticky Toffee Pudding|Chocolate Fondant|Apple Crumble|Pear Crumble|Peach Cobbler|Baklava|Cannoli|Churros|Doughnuts|Cinnamon Rolls|Cupcakes|Cake Pops|Waffles|Pancakes|Ice Cream|Gelato|Sorbet|Frozen Yoghurt|Fruit Salad|Chocolate Fountain|Cheese Board',
+'Collapsed Cake|Burnt Brownies|Crushed Biscuits|Overbaked Tart|Melted Ice Cream|Sunken Souffle|Broken Chocolate Fountain|Soggy Pastry', 'as a separate recognisable dessert on its own serving dish on the buffet counter',False),
+('bookshop','Dream Bookshop','📚','a spacious plain bookshop with empty floor space', [('counter','Bookshop counter','one simple counter'),('shelves','Starter bookshelves','two simple bookcases with plain books')],
+'Fiction Gallery|Crime Fiction Section|Fantasy Section|Science Fiction Section|Romance Section|Historical Fiction Section|Adventure Section|Mystery Section|Literary Fiction Section|Short Story Section|Poetry Section|Drama Section|Classic Literature Section|Modern Literature Section|Translated Fiction Section|Graphic Novel Section|Comics Section|Manga Section|Illustrated Books Section|Art Books Section|Photography Books Section|Architecture Books Section|Design Books Section|Fashion Books Section|Film Books Section|Music Books Section|Theatre Books Section|Dance Books Section|Travel Books Section|Maps Gallery|Atlas Section|Nature Books Section|Wildlife Books Section|Bird Books Section|Botany Books Section|Gardening Books Section|Cooking Books Section|Baking Books Section|Coffee Books Section|Wine Books Section|History Books Section|Ancient History Section|Medieval History Section|Military History Section|Biography Section|Memoir Section|Philosophy Section|Psychology Section|Sociology Section|Politics Section|Economics Section|Business Books Section|Science Books Section|Astronomy Books Section|Physics Books Section|Chemistry Books Section|Biology Books Section|Geology Books Section|Mathematics Books Section|Computing Books Section|Engineering Books Section|Medical Books Section|Sports Books Section|Football Books Section|Cricket Books Section|Tennis Books Section|Chess Books Section|Language Books Section|Reference Library|Rare Book Gallery|Reading Nook|Window Seats|Library Ladder|Coffee Bar|Tea Room|Garden Terrace|Author Stage|Writing Workshop|Bookbinding Bench|Print Gallery',
+'Leaking Roof|Broken Bookcase|Wobbly Reading Chair|Cracked Window|Broken Library Ladder|Peeling Wallpaper|Collapsed Display Table|Broken Coffee Machine', 'as a distinct full-size bookshop area with representative books or furnishings visibly displayed',False),
+('golf-course','Dream Golf Course','⛳','a whole generous empty golf-course landscape with natural grass and open land', [('clubhouse','Starter clubhouse','one modest clubhouse')],
+'Island Green|Clifftop Green|Lakeside Green|Elevated Green|Sunken Green|Double Green|Tiered Green|Plateau Green|Valley Green|Peninsula Green|Dogleg Fairway|Links Fairway|Woodland Fairway|Desert Fairway|Mountain Fairway|Riverside Fairway|Coastal Fairway|Valley Fairway|Split Fairway|Hillside Fairway|Waterfall Hole|Canyon Hole|Island Hole|Beach Hole|Forest Hole|Bridge Hole|Tunnel Hole|Rock Arch Hole|Stream Hole|Dune Hole|Pot Bunkers|Waste Bunkers|Beach Bunker|Grass Bunkers|Deep Bunker|Stone-edged Bunker|Bunker Complex|Sand Dunes|Natural Lake|Reflecting Lake|River Crossing|Waterfall|Stream Network|Wetland|Palm Grove|Pine Grove|Oak Grove|Birch Grove|Olive Grove|Wildflower Meadow|Stone Bridge|Suspension Bridge|Timber Bridge|Boardwalk|Clifftop Lookout|Lake Jetty|Scenic Cable Car|Electric Buggy Fleet|Buggy Garages|Practice Green|Putting Course|Driving Range|Covered Driving Range|Golf Simulator Hall|Short-game Area|Coaching Studio|Club-fitting Workshop|Equipment Shop|Members Lounge|Club Restaurant|Rooftop Bar|Sunset Terrace|Spa Pavilion|Fitness Centre|Tennis Courts|Swimming Pool|Golf Hotel|Lake Cabins|Wedding Pavilion|Golf Museum',
+'Dry Water Hazard|Overgrown Fairway|Cracked Putting Green|Broken Buggy Garage|Collapsed Footbridge|Rusty Practice Nets|Leaking Clubhouse|Abandoned Bunker', 'as a full-size distinct golf hole, terrain feature or clubhouse facility within the course',True),
+]
+
+# Functional minimums are authored per family, not inferred from a single example.
+# Only include modest starters. Luxury attractions and ingredients stay in the draft.
+FUNDAMENTALS = {
+ 'bedroom': [('storage','Basic clothes storage','one small plain clothes cupboard')],
+ 'kitchen': [('fridge','Basic fridge','one small plain refrigerator'), ('worktop','Prep worktop','one plain food-preparation worktop'), ('storage','Kitchen storage','one set of simple lower cupboards'), ('tools','Basic cookware','a small set of plain pans, plates and utensils on the worktop')],
+ 'city': [('homes','Starter homes','one small residential block with modest homes'), ('roads','Local street network','one short connected network of basic local streets serving the homes'), ('services','Basic city services','one compact working utility building supplying water and power to the starter neighbourhood')],
+ 'theme-park': [('ride','Starter ride','one small simple roundabout ride beside the entrance'), ('facilities','Visitor facilities','one modest visitor toilet pavilion connected by a safe path')],
+ 'water-park': [('pool','Starter swimming pool','one small plain shallow swimming pool'), ('facilities','Changing and toilets','one modest changing-room and toilet pavilion')],
+ 'zoo': [('habitat','Starter animal habitat','one modest safely enclosed grassy goat habitat with two live goats and a small animal shelter'), ('care','Animal care building','one small animal-care and feed-storage building')],
+ 'resort': [('rooms','Starter accommodation','one modest guest-lodge wing with working bedrooms and bathrooms'), ('dining','Basic dining room','one modest dining lodge serving the guest accommodation')],
+ 'cafe': [('brewer','Basic coffee brewer','one plain filter-coffee brewer with mugs on the serving counter'), ('sink','Cafe sink','one simple wash-up sink behind the counter')],
+ 'bakery': [('prep','Baking workbench','one plain baking workbench with mixing bowls, utensils and dough trays'), ('bread','Starter bread display','one small rack with a few plain baked loaves')],
+ 'bar': [('drinks','Starter drinks stock','one modest shelf of plain drinks bottles and drinking glasses behind the bar'), ('sink','Bar sink','one simple wash-up sink behind the bar')],
+ 'office': [('computer','Basic work computer','one plain laptop on the existing work desk')],
+ 'gym': [('equipment','Starter exercise equipment','one modest rack holding a basic set of dumbbells and one exercise mat')],
+ 'studio': [('tools','Basic art tools','one small set of drawing paper, pencils, brushes and paint pots on the work table')],
+ 'space-base': [('life-support','Life support','one compact life-support unit attached to the sealed habitat'), ('power','Starter power supply','one small solar panel array connected to the habitat')],
+ 'campsite': [('facilities','Campsite water and toilets','one modest washroom hut with toilets and a drinking-water tap')],
+ 'sports-complex': [('court','Starter sports court','one plain full-size multi-use sports court with basic line markings'), ('changing','Basic changing rooms','one modest changing-room and toilet block')],
+ 'festival': [('stage','Starter performance stage','one modest raised performance platform with two small speakers'), ('facilities','Festival toilets and water','one modest toilet block with drinking-water taps')],
+ 'arcade': [('machine','Starter arcade machine','one plain working generic arcade cabinet with its game screen and controls')],
+ 'museum': [('collection','Starter museum exhibits','one modest display of local historical objects in two glass cases with plain interpretation panels')],
+ 'airport': [('taxiway','Taxiway and apron','one basic taxiway connecting the runway to a small aircraft parking apron at the terminal'), ('tower','Basic control tower','one modest airport control tower')],
+ 'yacht': [('galley','Basic galley','one modest galley kitchenette built into the yacht'), ('bathroom','Yacht bathroom','one small enclosed bathroom within the hull')],
+ 'supercar': [('seats','Basic car seats','two plain sports-car seats visible through the windscreen'), ('steering','Working steering wheel','one plain steering wheel visible through the windscreen'), ('brakes','Working brakes','one complete set of plain brakes behind the four wheels')],
+ 'aquarium': [('tank','Starter fish tank','one modest filled freshwater tank with several live goldfish and simple aquatic plants')],
+ 'hotel': [('bathrooms','Guest bathrooms','simple working bathrooms within the guest-room wing')],
+ 'cinema': [('projector','Basic projector','one plain digital projector aimed at the cinema screen'), ('sound','Basic sound system','one plain pair of cinema loudspeakers beside the screen')],
+}
+for f in families:
+    f['essentials'] += FUNDAMENTALS.get(f['key'], [])
+    if f['key']=='restaurant':
+        f['essentials']=[(a,b,'one modest open kitchen with a working cooker, preparation counter, sink and plain fridge along the rear wall' if a=='kitchen' else c) for a,b,c in f['essentials']]
+# A golf course needs playable golf, rather than just a clubhouse on empty grass.
+specials = [(k,title,emoji,foundation,essentials + ([('holes','Starter golf holes','three simple playable golf holes with fairways, putting greens, tee markers and flags')] if k=='golf-course' else []),names,bad,placement,spatial)
+            for k,title,emoji,foundation,essentials,names,bad,placement,spatial in specials]
+
+# A shared, explicit alternative group prevents repetitive auctions and conflicting replacements.
+BED_NAMES = set(families[0]['names'][:12])
+GROUPS = {
+ 'bedroom': {'bed-upgrade': (BED_NAMES,1,'bed'), 'bedding': ({'Silk Bedding','Linen Bedding'},1,None), 'wardrobe': ({'Walk-in Wardrobe','Mirrored Wardrobe','Built-in Wardrobe','Oak Wardrobe'},1,None), 'flooring': ({'Oak Flooring','Cork Flooring'},1,None)},
+ 'living-room': {'sofa': (set(families[1]['names'][:8]),1,'seating'), 'coffee-table': ({'Oak Coffee Table','Glass Coffee Table','Marble Coffee Table','Nesting Tables'},1,None), 'flooring': ({'Oak Flooring','Marble Flooring'},1,None)},
+ 'kitchen': {'worktops': ({'Marble Worktops','Granite Worktops','Quartz Worktops','Butcher-block Worktops'},1,None), 'cabinets': ({'Oak Cabinets','Glass Cabinets','Handleless Cabinets'},1,None), 'cooker': ({'Range Cooker'},1,'cooker'), 'flooring': ({'Wood Flooring','Terrazzo Floor','Tile Floor'},1,None)},
+ 'bathroom': {'bath': (set(families[3]['names'][:8]),1,None), 'vanity': ({'Double Vanity','Floating Vanity','Oak Vanity','Marble Vanity'},1,None), 'toilet': ({'Smart Toilet','Wall-hung Toilet'},1,'toilet')},
+ 'supercar': {'wheels': (set(next(f for f in families if f['key']=='supercar')['names'][8:16]),1,'wheels'), 'paint': (set(next(f for f in families if f['key']=='supercar')['names'][61:72]),1,None), 'seats': ({'Bucket Seats','Leather Seats','Alcantara Seats','Heated Seats'},1,None), 'doors': ({'Scissor Doors','Gullwing Doors'},1,None)},
+}
+GROUPS['bedroom'].update({'curtains': ({'Blackout Curtains','Linen Curtains','Roman Blinds','Wooden Shutters'},1,None), 'main-seat': ({'Chaise Longue','Armchair','Hanging Chair'},1,None), 'rug': ({'Persian Rug','Shaggy Rug','Wool Rug'},1,None)})
+GROUPS['living-room'].update({'armchair': ({'Wingback Chair','Rocking Chair','Egg Chair','Lounge Chair','Beanbag','Hanging Chair','Chaise Longue'},1,None), 'rug': ({'Wool Rug','Persian Rug','Cowhide Rug'},1,None), 'curtains': ({'Velvet Curtains','Linen Curtains','Roman Blinds','Window Shutters'},1,None)})
+GROUPS['bathroom'].update({'washbasin': ({'Double Washbasin','Stone Washbasin','Copper Washbasin'},1,'sink'), 'shower': ({'Rainfall Shower','Waterfall Shower','Steam Shower','Walk-in Shower'},1,'shower'), 'floor': ({'Terrazzo Floor','Pebble Floor','Oak Flooring','Slate Floor'},1,None)})
+# Use family keys, not list indexes, for the car groups (ordering is checked below).
+car = next(f for f in families if f['key']=='supercar')
+GROUPS['supercar']['wheels'] = (set(car['names'][8:16]),1,'wheels')
+GROUPS['supercar']['paint'] = ({n for n in car['names'] if n.endswith('Paint') or n in {'Racing Stripes','Two-tone Paint','Painted Roof','Racing Livery'}},1,None)
+
+# Functional upgrades replace a baseline instead of creating redundant copies.
+GROUPS['bedroom']['basic-storage'] = (GROUPS['bedroom']['wardrobe'][0],1,'storage')
+del GROUPS['bedroom']['wardrobe']
+GROUPS['kitchen'].update({'worktops': (GROUPS['kitchen']['worktops'][0],1,'worktop'), 'cabinets': (GROUPS['kitchen']['cabinets'][0],1,'storage'), 'fridge': ({'American Fridge','Integrated Fridge'},1,'fridge'), 'sink': ({'Double Sink','Copper Sink'},1,'sink')})
+GROUPS['office'] = {'desk': ({'Standing Desk','Oak Desk','Glass Desk','Corner Desk','Executive Desk'},1,'desk'), 'chair': ({'Ergonomic Chair','Mesh Chair','Leather Chair','Kneeling Chair'},1,'chair')}
+GROUPS['bar'] = {'bar-counter': ({'Copper Bar','Marble Bar','Oak Bar','Circular Bar'},1,'bar')}
+GROUPS['cafe'] = {'brewer': ({'Espresso Machine','Pour-over Station'},1,'brewer')}
+GROUPS['bakery'] = {'oven': ({'Stone Oven'},1,'oven')}
+GROUPS['festival'] = {'main-stage': ({'Main Stage'},1,'stage')}
+GROUPS['airport'] = {'control-tower': ({'Control Tower'},1,'tower')}
+GROUPS['cinema'] = {'main-screen': ({'IMAX Screen','Dolby Cinema Screen','Panoramic Screen','Wraparound Screen','LED Cinema Wall','Giant Screen','Curved Screen','Retractable Screen'},1,'screen'), 'projector': ({'Laser Projector','Digital Projector','35mm Projector','70mm Projector'},1,'projector'), 'main-seating': ({'Reclining Seats','Leather Seats','Velvet Seats','Sofa Seating','Beanbag Seating','Bed Seating','Couple Pods','Heated Seats','Motion Seats','Massage Seats'},1,'seating'), 'sound': ({'Surround Sound'},1,'sound')}
+GROUPS['supercar']['seats'] = (GROUPS['supercar']['seats'][0],1,'seats')
+GROUPS['supercar']['steering'] = ({'Sports Steering Wheel','Carbon Steering Wheel'},1,'steering')
+GROUPS['supercar']['brakes'] = ({'Carbon-ceramic Brakes','Big Brake Kit'},1,'brakes')
+
+def slug(s): return re.sub(r'[^a-z0-9]+','-',s.lower()).strip('-')
+def item(name, placement, index, family_key, bad=False):
+    # The same physical item has the same isolated-art prompt across compatible ideas.
+    prefix = 'a clearly visible ' + name.lower()
+    x = dict(id=slug(name), name=name, blurb=name, visual=prefix + ' ' + placement, pic=prefix,
+             weight=10 if index<20 else 5 if index<60 else 2)
+    if bad: x['weight']=1
+    for group,(members,limit,replaces) in GROUPS.get(family_key,{}).items():
+        if name in members:
+            x.update(group=group,groupLimit=limit)
+            if replaces:
+                x['replaces']=replaces
+                x['visual']=prefix+' '+placement+'; this replaces the matching basic essential in its original functional position, leaving only the upgraded version'
+    if family_key=='bedroom':
+        x['requires']=['bed']
+        if name in BED_NAMES:
+            x['visual']='one '+name.lower()+' with a mattress and bedding in place of the basic bed, at the same central sleeping position; exactly one bed in the room'
+            x['weight']=4
+    if family_key=='zoo' and name.endswith('Habitat'):
+        animal=name[:-8].strip().lower()
+        x['visual']=f'a spacious natural {animal} habitat with several live {animal}s clearly visible, appropriate vegetation and a safe boundary'
+    return x
+
+pools={}
+themes=[]
+for t in legacy:
+    t['category']='Food' if t['id'] in {'pancakes','burger','pizza'} else 'Homes & hobbies'
+    t['startMode']='auction'
+    t['aliases']=[t['id'],t['title'].lower()]
+    if t['id']=='house':
+        t['essentials']=[dict(id='access',name='Working house entrance',visual='a usable front door with a short access path'),dict(id='habitable',name='Habitable rooms',visual='the house has basic working bedrooms, a kitchen and a bathroom inside; preserve them without exposing the interior',visible=False)]
+    if t['id']=='gaming':
+        t['essentials']=[dict(id='gaming-unit',name='Working gaming unit',visual='one plain starter gaming unit connected to the existing monitor or television, with one simple controller')]
+        t['items']=[dict(zip(('name','blurb','visual'),x.split('|'))) if isinstance(x,str) else x for x in t['items']]
+        for x in t['items']:
+            if x['name']=='Gaming PC': x.update(replaces='gaming-unit',group='gaming-unit',groupLimit=1)
+    if t['id']=='garage':
+        t['essentials']=[dict(id='entrances',name='Two garage entrances',visual='two separate full-size vehicle doorways into the garage, both clearly visible')]
+    themes.append(t)
+for f in families:
+    k=f['key']; pools[k]=dict(items=[item(n,f['placement'],i,k) for i,n in enumerate(f['names'])],bad=[item(n,f['placement'],i,k,True) for i,n in enumerate(f['bad'])])
+    category='Places & attractions' if f['spatial'] else 'Food & venues' if k in {'restaurant','cafe','bakery','bar'} else 'Homes & hobbies'
+    for i,title in enumerate(f['titles']):
+        # The geography/style changes the included foundation, never the validity of its item pool.
+        base=dict(name=title+' starter',blurb='Essentials included',visual=f['foundation']+'. '+title+' setting, plain and unfinished beyond the included essentials')
+        foundation = f['foundation']
+        if title=='Roof Garden': foundation='a whole generous empty roof garden above a city, with grass, secure parapets and a large clear usable area'
+        if title=='Courtyard Garden': foundation='a whole generous empty garden within a spacious stone-walled courtyard'
+        if title=='Lagoon Island': foundation='a whole large undeveloped tropical island with a natural shallow turquoise central lagoon, coastline and ample land'
+        if title=='Volcanic Island': foundation='a whole large undeveloped island with a dormant volcanic peak, coastline and ample flat coastal land'
+        if title=='Mountain Island': foundation='a whole large undeveloped island with a mountain ridge, coastline and ample flat coastal land'
+        if title=='Twin-bay Island': foundation='a whole large undeveloped tropical island with two separate natural bays and ample land'
+        if title=='Crescent Island': foundation='a whole large crescent-shaped undeveloped tropical island with coastline and ample usable land'
+        if title=='Attic Bedroom': foundation='a plain spacious attic bedroom with a sloped roof, dormer window and open space around the bed'
+        if title=='Loft Bedroom': foundation='a plain spacious loft bedroom with high ceilings, exposed beams and open space around the bed'
+        if title=='Sailing Superyacht': foundation+='; the complete yacht already has its working mast and sails'
+        if title=='Roadster Supercar': foundation='one complete plain open-top road-going sports car viewed from a raised three-quarter angle, with the whole vehicle visible'
+        base['visual']=foundation+'. '+title+' setting, plain and unfinished beyond the included essentials'
+        t=dict(id=k if i==0 else slug(title),title=title,emoji=f['emoji'],mode='build',noun=f['noun'],label='Addition',startLabel='Start',startMode='included',base=base,scene='Wide oblique aerial photograph of the entire full-size site in natural daylight' if f['spatial'] else 'Wide elevated interior photograph showing the whole room in natural daylight' if k not in {'yacht','supercar'} else 'Wide raised three-quarter photograph showing the complete full-size vehicle in natural daylight',spatial=f['spatial'],bases=[],pool=k,category=category,essentials=[dict(id=a,name=b,visual=c,**({'visible':False} if (k in {'supercar','yacht'} and a in {'engine','brakes','galley','bathroom','cabin'}) or (k=='hotel' and a=='bathrooms') else {})) for a,b,c in f['essentials']],aliases=[title.lower()])
+        if i==0: t['aliases'] += [k.replace('-',' '),'dream '+k.replace('-',' ')]
+        if k=='island' and i==0:t['aliases']+=['dream island','tropical island']
+        themes.append(t)
+for k,title,emoji,foundation,essentials,names,bad,placement,spatial in specials:
+    names=names.split('|');assert 75<=len(names)<=100,(k,len(names))
+    pools[k]=dict(items=[item(n,placement,i,k) for i,n in enumerate(names)],bad=[item(n,placement,i,k,True) for i,n in enumerate(bad.split('|'))])
+    themes.append(dict(id=k,title=title,emoji=emoji,mode='build',noun=title.lower(),label='Addition',startLabel='Start',startMode='included',base=dict(name=title+' starter',blurb='Essentials included',visual=foundation),scene='Wide oblique aerial photograph showing the whole full-size site' if spatial else 'Wide elevated photograph showing the complete subject in natural daylight',spatial=spatial,bases=[],pool=k,category='Places & attractions' if spatial else 'Food & venues',essentials=[dict(id=a,name=b,visual=c) for a,b,c in essentials],aliases=[title.lower(),k.replace('-',' ')]))
+assert len(families)==30, len(families)
+assert len(themes)==250, len(themes)
+assert len({t['id'] for t in themes})==250
+# The materialized library has 19,000+ meaningful choices; reusable family pools avoid copying the same art rules.
+result=dict(version=2,pools=pools,themes=themes)
+TARGET.write_text(json.dumps(result,ensure_ascii=False,separators=(',',':'))+'\n')
+print(json.dumps(dict(themes=len(themes),pools=len(pools),choices=sum(len(pools[t['pool']]['items']) if 'pool' in t else len(t['items']) for t in themes),unique_pool_items=sum(len(p['items']) for p in pools.values()),bytes=TARGET.stat().st_size)))

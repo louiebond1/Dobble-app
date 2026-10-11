@@ -29,7 +29,7 @@ for (const sig of ['SIGINT', 'SIGTERM']) process.on(sig, () => process.exit(1));
 
 await run('node', [path.join(here, 'mock-openai.mjs'), '4010'], { MOCK_DELAY: '900' }, 'mock openai');
 await run('node', ['server.js'], { PORT: '3100' }, 'listening');
-await run('bun', ['draft-night/server.ts'], { PORT: '3999', DRAFT_THEMES_URL: 'http://127.0.0.1:3100/draft-night-themes.json', OPENAI_API_KEY: 'mock', OPENAI_BASE_URL: 'http://127.0.0.1:4010/v1', DRAFT_SOLD_MS: '1300', DRAFT_UNSOLD_MS: '900', DRAFT_TURN_MS: '25000', DRAFT_CPU_MS: '500', DRAFT_REVERSE_SHARE: '0.4' }, null);
+await run('bun', ['draft-night/server.ts'], { PORT: '3999', DRAFT_THEMES_URL: 'http://127.0.0.1:3100/draft-night-themes.json', OPENAI_API_KEY: 'mock', CF_ACCOUNT_ID: 'mock', CF_API_TOKEN: 'mock', CF_API_BASE: 'http://127.0.0.1:4010', OPENAI_BASE_URL: 'http://127.0.0.1:4010/v1', DRAFT_SOLD_MS: '1300', DRAFT_UNSOLD_MS: '900', DRAFT_TURN_MS: '25000', DRAFT_CPU_MS: '500', DRAFT_REVERSE_SHARE: '0.4' }, null);
 const URL0 = 'http://127.0.0.1:3100/draft-night.html?api=' + encodeURIComponent('http://127.0.0.1:3999');
 
 const browser = await chromium.launch({ executablePath: process.env.CHROME || undefined });
@@ -141,6 +141,34 @@ async function scenario(name, fn) {
   try { await fn(); results.push(['PASS', name, ((Date.now() - t0) / 1000).toFixed(1) + 's']); }
   catch (e) { results.push(['FAIL', name, e.message.split('\n')[0]]); console.error(e); }
 }
+
+await scenario('L-curated-bedroom', async () => {
+  const a=await phone('Louie'),b=await phone('Ariel');
+  await a.click('[data-library]');
+  await a.fill('#librarySearch','bedroom');
+  assert.ok(await a.locator('[data-library-theme]').count()>=8);
+  assert.match(await a.textContent('[data-library-theme="bedroom"]'),/80 possible additions/);
+  assert.match(await a.textContent('[data-library-theme="bedroom"]'),/Basic clothes storage/);
+  assert.match(await a.textContent('[data-library-theme="bedroom"]'),/Possible upgrades: Four-poster Bed/);
+  await a.waitForTimeout(300);
+  assert.ok(await a.locator('#librarySearch').isVisible());
+  assert.ok(await a.locator('#librarySearch').evaluate(el=>el.getBoundingClientRect().top)>=0);
+  await shot(a,'L1-library.png');
+  await a.click('[data-library-theme="bedroom"]');
+  assert.match(await a.textContent('[data-theme="bedroom"]'),/Essentials included: Basic bed/);
+  await a.click('[data-players="2"]');await a.click('[data-budget="100"]');await a.click('#create');
+  const code=await created(a);await join(b,code);
+  await a.waitForSelector('[data-start]:not([disabled])');await a.click('[data-start]');
+  await a.waitForSelector('.game');await b.waitForSelector('.game');
+  const state=await (await fetch('http://127.0.0.1:3999/api/room?code='+code)).json();
+  assert.equal(state.theme.hasBases,false);assert.deepEqual(state.theme.essentials,['Basic bed','Basic clothes storage']);
+  assert.equal(state.lots[0].kind,'add');assert.equal(state.players[0].budget,100);
+  await shot(a,'L2-first-addition.png');await layoutCheck(a,'bedroom first addition');
+  await play([a,b],(seat,lot)=>seat===lot%2?0:'pass');
+  await a.waitForTimeout(3500);await a.screenshot({path:path.join(shots,'L3-final-full.png'),fullPage:true});
+  const final=await (await fetch('http://127.0.0.1:3999/api/room?code='+code)).json();
+  assert.ok(final.players.every(p=>p.won.length===5));
+});
 
 await scenario('A-property-2p', async () => {
   const ariel = await phone('Ariel'), louie = await phone('Louie');

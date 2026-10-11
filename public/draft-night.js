@@ -81,18 +81,40 @@
   }
 
   // ---------- home ----------
+  function startCopy(t) {
+    return hasStarts(t) ? 'Bid for your ' + esc(startWord(t).toLowerCase()) + ' first' : 'Essentials included' + (t.essentials && t.essentials.length ? ': ' + esc(t.essentials.join(', ')) : '. Start with additions');
+  }
+  function openLibrary() {
+    var sheet = document.getElementById('sheet');
+    sheet.innerHTML = '<div class="sheet-body" role="dialog" aria-modal="true" aria-label="Game library"><div class="grab"></div><div class="library-head"><h2>Pick your game</h2><button class="link" data-close>Close</button></div><input class="field" id="librarySearch" type="search" placeholder="Search '+ ui.presets.length +' ideas" aria-label="Search game ideas"><div id="libraryResults"></div></div>';
+    sheet.hidden = false;
+    var input = sheet.querySelector('#librarySearch');
+    function draw() {
+      var q = input.value.toLowerCase().trim();
+      var matches = ui.presets.filter(function(p) { return (p.title + ' ' + (p.category || '') + ' ' + (p.essentials || []).join(' ') + ' ' + (p.examples || []).join(' ') + ' ' + (p.starts || []).join(' ')).toLowerCase().includes(q); });
+      if (q) matches.sort(function(a,b) { return Number(!a.title.toLowerCase().includes(q)) - Number(!b.title.toLowerCase().includes(q)); });
+      sheet.querySelector('#libraryResults').innerHTML = '<p class="muted">'+matches.length+' ideas</p><div class="library-list">' + matches.map(function(p) {
+        var essentials = p.essentials || [], examples = p.examples || [];
+        var included = hasStarts(p) ? (essentials.length ? 'Every starter includes: ' + esc(essentials.join(', ')) : '') : startCopy(p);
+        return '<button class="theme" data-library-theme="'+esc(p.id)+'"><span class="library-title"><span class="em">'+esc(p.emoji)+'</span><b>'+esc(p.title)+'</b></span><small>'+esc(p.itemCount || 75)+' possible additions · '+(hasStarts(p) ? 'Starting auction' : 'Essentials free')+'</small>' + (included ? '<small class="library-included">'+included+'</small>' : '') + (hasStarts(p) ? '<small>Starting choices: '+esc((p.starts || []).slice(0,3).join(', '))+'</small>' : '') + '<small class="library-examples">Possible upgrades: '+esc(examples.slice(0,4).join(', '))+'</small><span class="library-choose">Choose this game</span></button>';
+      }).join('') + '</div>' + (matches.length ? '' : '<p>No matching games. Try a place, room or food such as island, kitchen or pizza.</p>');
+      sheet.querySelector('.sheet-body').scrollTop = 0;
+    }
+    input.addEventListener('input',draw); draw(); input.focus({ preventScroll: true });
+  }
   function renderHome() {
     var t = theme(), n = seats(), total = auctionTotal(), max = t.maxPlayers || 6;
-    var presetTiles = ui.presets.map(function (p) {
+    var featured = ui.presets.slice(0, 6);
+    if (t && !featured.some(function(p) { return p.id === t.id; })) featured.push(t);
+    var presetTiles = featured.map(function (p) {
       return '<button class="theme" data-theme="' + esc(p.id) + '" aria-pressed="' + (ui.themeId === p.id) + '"><span class="em">' + esc(p.emoji) + '</span><b>' + esc(p.title) + '</b><small>' +
-        (hasStarts(p) ? 'Bid for your ' + esc(startWord(p).toLowerCase()) + (p.starts && p.starts.length ? ': ' + esc(p.starts.slice(0, 3).join(', ')) + '…' : ', then build on it') : 'Start: ' + esc(p.base && p.base.name)) + '</small></button>';
+        startCopy(p) + '</small></button>';
     }).join('');
     var custom = '';
     if (ui.asking) custom = '<div class="interpret muted"><span class="spinner"></span>Working out what to auction…</div>';
     else if (ui.ambiguous) custom = '<div class="interpret"><p>' + esc(ui.ambiguous.question) + '</p><div class="choices">' + ui.ambiguous.options.map(function (o, i) {
       return '<button data-option="' + i + '">' + esc(o.label) + '</button>'; }).join('') + '</div></div>';
-    else if (ui.custom) custom = '<div class="custom-pick"><button class="theme" data-theme="' + esc(ui.custom.id) + '" aria-pressed="' + (ui.themeId === ui.custom.id) + '"><span class="em">' + esc(ui.custom.emoji) + '</span><b>' + esc(ui.custom.title) + '</b><small>Bid for your ' + esc(startWord(ui.custom).toLowerCase()) + ' first' +
-      (ui.custom.starts && ui.custom.starts.length ? '. First up: ' + esc(ui.custom.starts.slice(0, 4).join(', ')) + '…' : '') + '</small><span class="examples">Up for auction: ' + esc((ui.custom.examples || []).slice(0, 6).join(', ')) + '…</span></button></div>';
+    else if (ui.custom) custom = '<div class="custom-pick"><button class="theme" data-theme="' + esc(ui.custom.id) + '" aria-pressed="' + (ui.themeId === ui.custom.id) + '"><span class="em">' + esc(ui.custom.emoji) + '</span><b>' + esc(ui.custom.title) + '</b><small>' + startCopy(ui.custom) + '</small><span class="examples">Up for auction: ' + esc((ui.custom.examples || []).slice(0, 6).join(', ')) + '…</span></button></div>';
     if (ui.askError) custom += '<div class="error">' + esc(ui.askError) + '</div>';
     var counts = [0, 2, 3, 4, 5, 6].map(function (c) {
       var pressed = c === 0 ? ui.cpu : !ui.cpu && ui.players === c;
@@ -105,7 +127,7 @@
       '<div class="content">' + tabs + '<h1>Build the best anything.</h1><p class="lede">Same budget for everyone. Bid on one item at a time, and watch each creation take shape.</p>' +
       '<div class="eyebrow">Your name</div><input class="field" id="name" maxlength="16" autocomplete="given-name" placeholder="Your name" value="' + esc(ui.name) + '">' +
       '<div class="names">' + ui.names.slice(0, 4).map(function (nm) { return '<button data-name="' + esc(nm) + '" aria-pressed="' + (nm === ui.name) + '">' + esc(nm) + '</button>'; }).join('') + '</div>' +
-      '<div class="eyebrow">What are you building?</div><div class="themes">' + presetTiles + '</div>' +
+      '<div class="eyebrow">What are you building?</div><div class="themes">' + presetTiles + '</div><button class="secondary library-open" data-library>Browse all ' + ui.presets.length + ' ideas</button>' +
       '<form class="ask" id="ask"><input class="field" id="topic" maxlength="80" placeholder="Or type anything, e.g. Dream bedroom" value="' + esc(ui.customTopic) + '" autocomplete="off"><button aria-label="Use this theme"' + (ui.asking ? ' disabled' : '') + '>→</button></form>' + custom +
       '<div class="eyebrow">Players</div><div class="seg">' + counts + '</div>' +
       (ui.cpu ? '' : '<label class="check"><input type="checkbox" id="private"' + (ui.listed ? '' : ' checked') + '><span>Private game: friends join with the room code instead of finding it under Join</span></label>') +
@@ -119,6 +141,7 @@
   }
   function homeClick(e) {
     var b = e.target.closest('button'); if (!b) return;
+    if (b.hasAttribute('data-library')) return openLibrary();
     if (b.dataset.theme) { ui.themeId = b.dataset.theme; if (ui.themeId !== (ui.custom && ui.custom.id)) store.set('dn-theme', ui.themeId); ensureCount(); }
     else if (b.dataset.name) { ui.name = b.dataset.name; }
     else if (b.dataset.players) { var c = +b.dataset.players; ui.cpu = c === 0; if (c) ui.players = c; store.set('dn-players', ui.players); store.set('dn-cpu', ui.cpu); ensureCount(); }
@@ -363,7 +386,7 @@
   }
   function inventory(i) {
     var p = room.players[i], t = room.theme;
-    return '<div class="inv"><b>' + esc(hasStarts(t) ? lotName(p.base) || 'No ' + startWord(t).toLowerCase() + ' yet' : t.base.name) + '</b>' + p.won.filter(function (x) { return x !== p.base; }).map(function (x) { return '<span>+ ' + esc(lotName(x)) + '</span>'; }).join('') + '</div>';
+    return '<div class="inv"><b>' + esc(hasStarts(t) ? lotName(p.base) || 'No ' + startWord(t).toLowerCase() + ' yet' : t.base.name) + '</b>' + ((t.essentials || []).length ? '<span>Included: ' + esc(t.essentials.join(', ')) + '</span>' : '') + p.won.filter(function (x) { return x !== p.base; }).map(function (x) { return '<span>+ ' + esc(lotName(x)) + '</span>'; }).join('') + '</div>';
   }
   function worldStatus(i) {
     var p = room.players[i], w = room.worlds[i] || {};
@@ -485,7 +508,7 @@
         var amt = base + s, ok = amt <= p.budget && !sending;
         return '<button data-bid="' + amt + '" class="' + (i === 0 ? 'main' : '') + '"' + (ok ? '' : ' disabled') + ' aria-label="Bid ' + money(amt) + '"><b class="num">' + money(amt) + '</b><small>+' + money(s) + '</small></button>';
       }).join('') + '</div><div class="dock-row"><form class="custom" id="customForm"><span>£</span><input id="customBid" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="4" autocomplete="off" placeholder="Amount" aria-label="Custom bid amount"><button' + (sending ? ' disabled' : '') + '>Bid</button></form>' +
-        (a.leader === null ? '<div class="opening">You open the bidding</div>' : '<button class="pass" data-pass' + (sending ? ' disabled' : '') + '>Pass</button>') + '</div>';
+        (a.giveTo !== null && a.giveTo !== undefined ? '<button class="pass" data-pass' + (sending ? ' disabled' : '') + '>Give to ' + esc(room.players[a.giveTo].name) + '</button>' : a.leader === null ? '<div class="opening">You open the bidding</div>' : '<button class="pass" data-pass' + (sending ? ' disabled' : '') + '>Pass</button>') + '</div>';
     } else {
       var turn = a.turn !== null ? room.players[a.turn] : null, msg, sub;
       if (!eligibleMe()) { msg = notMine(); sub = room.lots[room.lot].kind === 'base' ? 'Everyone gets exactly one' : p.won.length >= room.maxWins ? 'Watch the others fill theirs' : 'The others still need items to finish'; }
@@ -558,16 +581,17 @@
     var items = p.won.map(function (x) {
       var h = room.history.filter(function (e) { return e.lot === x; })[0];
       var dud = room.lots[x] && room.lots[x].rev;
-      return '<li class="' + (x === p.base ? 'basei' : dud ? 'dudi' : '') + '"><span>' + esc(lotName(x)) + '</span><span class="num">' + (dud ? 'Stuck with it' : h && h.price ? money(h.price) : 'Free') + '</span></li>';
+      return '<li class="' + (x === p.base ? 'basei' : dud ? 'dudi' : '') + '"><span class="item-name">' + (room.lots[x] && room.lots[x].img === 'ready' ? '<img alt="" data-src="' + esc(imgUrl(room.lots[x].key)) + '">' : '') + '<span>' + esc(lotName(x)) + '</span></span><span class="num">' + (dud ? 'Stuck with it' : h && h.price ? money(h.price) : 'Free') + '</span></li>';
     }).join('');
     // What they paid to dodge duds that went to someone else.
     items += room.history.filter(function (h) { return h.paid && h.paid[i] > 0; }).map(function (h) {
       return '<li class="dodge"><span>Dodged ' + esc(lotName(h.lot)) + '</span><span class="num">' + money(h.paid[i]) + '</span></li>';
     }).join('');
-    var showImg = w.key && w.state !== 'none';
-    var status = w.state === 'updating' || w.state === 'retrying' ? worldStatus(i) : '';
+    var showImg = w.key && w.state !== 'none' && w.v >= p.won.length;
+    var incomplete = w.key && w.state !== 'none' && w.v < p.won.length;
+    var status = w.state === 'updating' || w.state === 'retrying' ? worldStatus(i) : incomplete ? 'Scene incomplete · all your purchases are shown below' : '';
     return '<div class="entry" style="--c:' + p.color + '" data-entry="' + i + '"><div class="canvas">' + (showImg ? '<img alt="' + esc(p.name) + '’s ' + esc(t.noun) + '" data-src="' + esc(imgUrl(w.key)) + '">' : inventory(i)) +
-      (status && showImg ? '<div class="status">' + esc(status) + '</div>' : '') + '</div>' +
+      (status && showImg ? '<div class="status">' + esc(status) + '</div>' : '') + '</div>' + (status && !showImg ? '<div class="picture-note">' + esc(status) + '</div>' : '') +
       '<h2><span class="dot"></span>' + esc(p.name) + (i === me() ? ' <span class="muted" style="font-weight:500;font-size:14px">you</span>' : '') + '</h2><div class="spend num">Spent ' + money(spent) + ' · ' + money(p.budget) + ' left</div>' +
       '<ul>' + (!hasStarts(t) ? '<li class="basei"><span>' + esc(t.base.name) + '</span><span>Start</span></li>' : '') + (items || '<li><span class="muted">Nothing won</span><span></span></li>') + '</ul></div>';
   }
@@ -595,6 +619,8 @@
     var img = sheet.querySelector('img[data-src]'); if (img) showImage(img, img.dataset.src);
   }
   document.getElementById('sheet').addEventListener('click', function (e) {
+    var choice = e.target.closest('[data-library-theme]');
+    if (choice) { ui.themeId=choice.dataset.libraryTheme; ui.customTopic=''; ui.lastAsked=''; ui.custom=null; store.set('dn-theme',ui.themeId); ensureCount(); document.getElementById('sheet').hidden=true; render(); return; }
     if (e.target.id === 'sheet' || e.target.closest('[data-close]')) document.getElementById('sheet').hidden = true;
   });
 
