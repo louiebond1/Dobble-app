@@ -444,14 +444,25 @@ const CF_ACCOUNT = env('CF_ACCOUNT_ID', ''), CF_TOKEN = env('CF_API_TOKEN', '');
 const CF_MODEL = env('DRAFT_CF_MODEL', '@cf/black-forest-labs/flux-2-klein-4b');
 const imagesOn = () => Boolean((CF_ACCOUNT && CF_TOKEN) || Bun.env.OPENAI_API_KEY);
 async function cloudflareImage(prompt: string, refs: Uint8Array[]): Promise<Uint8Array> {
-  const body = new FormData();
-  body.append('prompt', prompt); body.append('width', '1024'); body.append('height', '1024');
-  refs.slice(0, 4).forEach((b, i) => body.append('input_image_' + i, new Blob([b as BlobPart], { type: 'image/jpeg' }), 'ref' + i + '.jpg'));
-  const res = await fetch(`${env('CF_API_BASE', 'https://api.cloudflare.com/client/v4')}/accounts/${CF_ACCOUNT}/ai/run/${CF_MODEL}`, { method: 'POST', headers: { Authorization: 'Bearer ' + CF_TOKEN }, body, signal: AbortSignal.timeout(120000) });
-  if (!res.ok) throw Error('Cloudflare image ' + res.status + ' ' + (await res.text()).slice(0, 200));
-  const d = await res.json() as any; const b64 = d.result?.image;
-  if (!b64) throw Error('Empty image');
-  return Uint8Array.from(Buffer.from(b64, 'base64'));
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const body = new FormData();
+    // A flagged output gets one fresh attempt with neutral photographic wording. Keep the subject, scale and placement.
+    const wording = attempt ? 'Realistic photograph of the described scene. ' + prompt.replace(STYLE, 'Natural daylight, sharp detail, realistic proportions, an unlabelled photograph.') : prompt;
+    body.append('prompt', wording); body.append('width', '1024'); body.append('height', '1024');
+    refs.slice(0, 4).forEach((b, i) => body.append('input_image_' + i, new Blob([b as BlobPart], { type: 'image/jpeg' }), 'ref' + i + '.jpg'));
+    const res = await fetch(`${env('CF_API_BASE', 'https://api.cloudflare.com/client/v4')}/accounts/${CF_ACCOUNT}/ai/run/${CF_MODEL}`, { method: 'POST', headers: { Authorization: 'Bearer ' + CF_TOKEN }, body, signal: AbortSignal.timeout(120000) });
+    if (!res.ok) {
+      const error = await res.text();
+      let flagged = false;
+      try { flagged = JSON.parse(error).errors?.some((e: any) => Number(e.code) === 3030); } catch {}
+      if (!attempt && flagged) continue;
+      throw Error('Cloudflare image ' + res.status + ' ' + error.slice(0, 200));
+    }
+    const d = await res.json() as any; const b64 = d.result?.image;
+    if (!b64) throw Error('Empty image');
+    return Uint8Array.from(Buffer.from(b64, 'base64'));
+  }
+  throw Error('Cloudflare image failed');
 }
 // Hard daily cap on pictures made (DRAFT_DAILY_PICTURES), across games and prefill. The count lives in the picture
 // library, so the server sleeping or restarting does not reset it. Past the cap, games carry on with item lists.

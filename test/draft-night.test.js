@@ -24,6 +24,7 @@ function sandbox({ key = 'test-key', ai, image, cf, rev = '0', batch = '1', fall
     if (url.endsWith('/draft-night-themes.json')) return Response.json(THEMES);
     calls.push({ url, opts });
     if (url.includes('/ai/run/')) {
+      if (cf.flagged && (!cf.once || calls.filter(c => c.url.includes('/ai/run/')).length === 1)) return Response.json({ errors: [{ code: 3030, message: 'output flagged' }] }, { status: 400 });
       if (cf.fail) return new Response('{"errors":[{"code":4006,"message":"daily free allocation used up"}]}', { status: 429 });
       return Response.json({ result: { image: Buffer.from('cf' + calls.length).toString('base64') }, success: true });
     }
@@ -38,7 +39,7 @@ function sandbox({ key = 'test-key', ai, image, cf, rev = '0', batch = '1', fall
   const vars = { DRAFT_REVERSE_SHARE: rev, DRAFT_WORLD_BATCH: batch, ...(bucket ? { ART_BUCKET: 'art', ART_KEY_ID: 'id', ART_SECRET: 's', ART_ENDPOINT: 'https://store.test' } : {}), ...(admin ? { DRAFT_ADMIN_KEY: admin } : {}), ...(cap ? { DRAFT_DAILY_PICTURES: String(cap) } : {}), ...(fallback ? { DRAFT_ALLOW_PAID_FALLBACK: '1' } : {}), ...(key ? { OPENAI_API_KEY: key } : {}), ...(cf ? { CF_ACCOUNT_ID: 'acc123', CF_API_TOKEN: 'cf-token' } : {}) };
   const S3Client = class { file(k) { return { exists: async () => { if (broken) throw Error('down'); return bucket.has(k); }, arrayBuffer: async () => bucket.get(k).buffer, text: async () => { if (!bucket.has(k)) throw Error('NoSuchKey'); return new TextDecoder().decode(bucket.get(k)); }, write: async (b) => { if (broken) throw Error('down'); bucket.set(k, typeof b === 'string' ? new TextEncoder().encode(b) : new Uint8Array(b)); }, presign: () => 'https://store.test/' + k + '?sig=1' }; } };
   const ctx = { TextEncoder, Bun: { env: vars, S3Client, serve(o) { handler = o.fetch; } }, Response, Request, URL, FormData, Blob, Buffer, crypto, AbortSignal, fetch: fakeFetch, console: { error() {} }, setTimeout: (f, ms) => { const h = setTimeout(f, Math.min(ms, 5)); h.unref(); return h; }, clearTimeout };
-  vm.runInNewContext(stripTypeScriptTypes(source) + '\nglobalThis.qa={rooms,images,setClock(f){clock=f},worldPrompt,lotPrompt,presetFor,tick,fill,ready:loadPresets(),PRESETS,themes};', ctx);
+  vm.runInNewContext(stripTypeScriptTypes(source) + '\nglobalThis.qa={rooms,images,setClock(f){clock=f},worldPrompt,lotPrompt,presetFor,tick,fill,makeImage,ready:loadPresets(),PRESETS,themes};', ctx);
   ctx.qa.setClock(() => t);
   const call = async (p, data) => {
     await ctx.qa.ready;
@@ -687,7 +688,7 @@ test('random games with reverse auctions for 2 to 6 players always finish with e
     const r = room();
     assert.equal(r.lots.length, count);
     const adds = r.lots.filter(l => l.kind === 'add').length;
-    assert.ok(r.lots.filter(l => l.rev).length <= Math.min(8, adds), `duds are additions (${count} lots, ${n} players)`);
+    assert.ok(r.lots.filter(l => l.rev).length <= Math.min(r.theme.bad.length, adds), `duds are additions (${count} lots, ${n} players)`);
     assert.ok(r.lots.every(l => !(l.kind === 'base' && l.rev)), 'starting options are never reverse auctions');
     await playOut(env, g, r.budget);
     revealed += r.history.filter(h => h.paid).length;
@@ -829,7 +830,8 @@ test('reverse auction: only players who can still take the lot bid; one possible
 });
 
 test('reverse auction: the CPU places its own secret bids', async () => {
-  const env = sandbox({ key: '', rev: '0.5' });
+  // Force duds here: this tests CPU bidding, rather than whether a random deck contains a dud.
+  const env = sandbox({ key: '', rev: '1' });
   const g = await setup(env, { theme: 'garage', names: ['Solo'], cpu: true, budget: 40 });
   const r = g.room();
   let moves = 0, cpuBids = 0;
@@ -895,6 +897,10 @@ test('pictures are edited two wins at a time by default, and every win is in the
   }
 });
 
+const pictureTotal = id => {
+  const t = THEMES.themes.find(t => t.id === id);
+  return 1 + t.bases.length + t.items.length + t.bad.length;
+};
 const pics = bucket => [...bucket.keys()].filter(k => k.startsWith('art/')).length;
 test('picture library: the first game stores starting and item pictures, later games reuse them without paying again', async () => {
   const bucket = new Map();
@@ -915,7 +921,7 @@ test('picture library: the first game stores starting and item pictures, later g
   const admin = sandbox({ key: '', cf: {}, bucket, admin: 'k' });
   await admin.call('/api/prefill', { key: 'k', themes: ['burger'], max: 1000 });
   for (let i = 0; i < 60 && admin.qa.fill.running; i++) await flush();
-  assert.equal(pics(bucket), 49);
+  assert.equal(pics(bucket), pictureTotal('burger'));
   for (let run = 0; run < 3; run++) {
     const again = sandbox({ key: '', cf: {}, bucket });
     const g = await setup(again, { theme: 'burger', names: ['C', 'D'] });
@@ -961,11 +967,11 @@ test('picture library prefill: admin only, fills each preset once, stops at the 
   same([env.qa.fill.made, pics(bucket)], [5, 5]);
   await env.call('/api/prefill', { key: 'sekret', themes: ['burger'], max: 1000 });
   for (let i = 0; i < 40 && env.qa.fill.running; i++) await flush();
-  same([env.qa.fill.made, env.qa.fill.had, pics(bucket)], [44, 5, 49], 'empty bun + 8 burgers + 32 toppings + 8 duds');
+  same([env.qa.fill.made, env.qa.fill.had, pics(bucket)], [pictureTotal('burger') - 5, 5, pictureTotal('burger')], 'empty scene + every base, addition and dud in the themes file');
   // A second version of everything, and nothing is made twice.
   await env.call('/api/prefill', { key: 'sekret', themes: ['burger'], variants: 2 });
   for (let i = 0; i < 80 && env.qa.fill.running; i++) await flush();
-  same([env.qa.fill.had, pics(bucket)], [49, 89], 'max 40 per run by default');
+  same([env.qa.fill.had, pics(bucket)], [pictureTotal('burger'), pictureTotal('burger') + 40], 'max 40 per run by default');
   // Cloudflare's allowance runs out: the run stops and reports why.
   const broke = sandbox({ key: '', cf: { fail: true }, bucket: new Map(), admin: 'sekret' });
   await broke.call('/api/prefill', { key: 'sekret', themes: ['pizza'] });
@@ -973,6 +979,24 @@ test('picture library prefill: admin only, fills each preset once, stops at the 
   same([broke.qa.fill.made, broke.qa.fill.failed], [0, 1]);
   assert.match(broke.qa.fill.error, /daily free allocation/);
   assert.equal((await broke.call('/api/prefill?key=sekret')).body.failed, 1);
+});
+
+test('flagged Cloudflare output gets exactly one reworded retry and no paid fallback', async () => {
+  const prompt = 'A camper van parked beside a country cottage. Photorealistic, natural light, crisp detail, consistent colour grading. No text, captions, labels, logos, watermarks or people.';
+  const ok = sandbox({ key: '', cf: { flagged: true, once: true }, bucket: new Map(), cap: 1 });
+  await ok.qa.makeImage(prompt, [], 'low');
+  assert.equal(ok.calls.filter(c => c.url.includes('/ai/run/')).length, 2);
+  const wording = ok.calls[1].opts.body.get('prompt');
+  assert.notEqual(wording, prompt);
+  assert.ok(wording.includes('camper van parked beside a country cottage'), 'keeps the actual subject and placement');
+  assert.equal(ok.calls.filter(c => c.url.includes('/images/')).length, 0);
+  await assert.rejects(ok.qa.makeImage(prompt, [], 'low'), /Daily picture limit/);
+  const refused = sandbox({ key: '', cf: { flagged: true }, bucket: new Map(), cap: 1 });
+  await assert.rejects(refused.qa.makeImage(prompt, [], 'low'), /3030/);
+  assert.equal(refused.calls.filter(c => c.url.includes('/ai/run/')).length, 2, 'a repeated refusal stops');
+  assert.equal(refused.calls.filter(c => c.url.includes('/images/')).length, 0);
+  refused.calls.length = 0;
+  await assert.rejects(refused.qa.makeImage(prompt, [], 'low'), /3030/, 'failed pictures refund their cap slot');
 });
 
 test('daily picture cap: stops at the limit, survives a restart, resets the next day, and explains itself', async () => {

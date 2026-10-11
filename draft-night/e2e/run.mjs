@@ -28,11 +28,11 @@ process.on('exit', () => procs.forEach(p => p.kill()));
 for (const sig of ['SIGINT', 'SIGTERM']) process.on(sig, () => process.exit(1));
 
 await run('node', [path.join(here, 'mock-openai.mjs'), '4010'], { MOCK_DELAY: '900' }, 'mock openai');
-await run('bun', ['draft-night/server.ts'], { PORT: '3999', OPENAI_API_KEY: 'mock', OPENAI_BASE_URL: 'http://127.0.0.1:4010/v1', DRAFT_SOLD_MS: '1300', DRAFT_UNSOLD_MS: '900', DRAFT_TURN_MS: '25000', DRAFT_CPU_MS: '500', DRAFT_REVERSE_SHARE: '0.4' }, null);
 await run('node', ['server.js'], { PORT: '3100' }, 'listening');
+await run('bun', ['draft-night/server.ts'], { PORT: '3999', DRAFT_THEMES_URL: 'http://127.0.0.1:3100/draft-night-themes.json', OPENAI_API_KEY: 'mock', OPENAI_BASE_URL: 'http://127.0.0.1:4010/v1', DRAFT_SOLD_MS: '1300', DRAFT_UNSOLD_MS: '900', DRAFT_TURN_MS: '25000', DRAFT_CPU_MS: '500', DRAFT_REVERSE_SHARE: '0.4' }, null);
 const URL0 = 'http://127.0.0.1:3100/draft-night.html?api=' + encodeURIComponent('http://127.0.0.1:3999');
 
-const browser = await chromium.launch();
+const browser = await chromium.launch({ executablePath: process.env.CHROME || undefined });
 const results = [];
 async function phone(name, viewport = { width: 390, height: 844 }) {
   const ctx = await browser.newContext({ viewport, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
