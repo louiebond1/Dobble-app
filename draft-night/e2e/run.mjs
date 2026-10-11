@@ -142,18 +142,38 @@ async function scenario(name, fn) {
   catch (e) { results.push(['FAIL', name, e.message.split('\n')[0]]); console.error(e); }
 }
 
+await scenario('M-library-navigation',async()=>{
+ const a=await phone('Louie',{width:320,height:568});
+ await a.click('[data-library]');assert.equal(await a.locator('[data-library-preview]').count(),250);
+ const close=a.locator('[data-close]'),before=await close.boundingBox();
+ await a.locator('#libraryResults').evaluate(el=>el.scrollTop=4000);await a.waitForTimeout(300);
+ const after=await close.boundingBox();assert.ok(Math.abs(before.y-after.y)<1);assert.ok(after.y>=0&&after.y+after.height<=568);
+ await shot(a,'M1-scrolled-close-visible.png');await close.click();assert.equal(await a.locator('#sheet').isVisible(),false);
+ assert.equal(await a.evaluate(()=>document.body.classList.contains('library-active')),false);
+ await a.click('[data-library]');await a.click('[data-library-genre="Work & hobbies"]');
+ assert.ok(await a.locator('[data-library-preview]').count()<40);await a.fill('#librarySearch','office');assert.equal(await a.locator('[data-library-preview]').count(),8);
+ await a.click('[data-library-preview="office"]');assert.match(await a.textContent('.library-preview'),/Basic work computer/);
+ assert.ok(await close.isVisible());await a.click('[data-library-back]');assert.equal(await a.locator('[data-library-preview]').count(),8);
+ await a.fill('#librarySearch','nothing-matches-this');assert.ok(await a.locator('[data-library-reset]').isVisible());await a.click('[data-library-reset]');assert.equal(await a.locator('[data-library-preview]').count(),250);
+ await a.keyboard.press('Escape');assert.equal(await a.locator('#sheet').isVisible(),false);
+ await a.click('[data-library]');await a.click('[data-library-genre="Food & drink"]');await shot(a,'M2-food-genre.png');
+ await a.keyboard.press('Tab');assert.ok(await a.evaluate(()=>document.getElementById('sheet').contains(document.activeElement)));
+ await a.keyboard.press('Escape');
+});
+
 await scenario('L-curated-bedroom', async () => {
   const a=await phone('Louie'),b=await phone('Ariel');
   await a.click('[data-library]');
   await a.fill('#librarySearch','bedroom');
-  assert.ok(await a.locator('[data-library-theme]').count()>=8);
-  assert.match(await a.textContent('[data-library-theme="bedroom"]'),/80 possible additions/);
-  assert.match(await a.textContent('[data-library-theme="bedroom"]'),/Basic clothes storage/);
-  assert.match(await a.textContent('[data-library-theme="bedroom"]'),/Possible upgrades: Four-poster Bed/);
+  assert.ok(await a.locator('[data-library-preview]').count()>=8);
   await a.waitForTimeout(300);
   assert.ok(await a.locator('#librarySearch').isVisible());
-  assert.ok(await a.locator('#librarySearch').evaluate(el=>el.getBoundingClientRect().top)>=0);
   await shot(a,'L1-library.png');
+  await a.click('[data-library-preview="bedroom"]');
+  assert.match(await a.textContent('.library-preview'),/80 possible additions/);
+  assert.match(await a.textContent('.library-preview'),/Basic clothes storage/);
+  assert.match(await a.textContent('.library-preview'),/Four-poster Bed/);
+  await shot(a,'L1b-preview.png');
   await a.click('[data-library-theme="bedroom"]');
   assert.match(await a.textContent('[data-theme="bedroom"]'),/Essentials included: Basic bed/);
   await a.click('[data-players="2"]');await a.click('[data-budget="100"]');await a.click('#create');

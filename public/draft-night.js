@@ -84,23 +84,57 @@
   function startCopy(t) {
     return hasStarts(t) ? 'Bid for your ' + esc(startWord(t).toLowerCase()) + ' first' : 'Essentials included' + (t.essentials && t.essentials.length ? ': ' + esc(t.essentials.join(', ')) : '. Start with additions');
   }
-  function openLibrary() {
+  function closeSheet() {
     var sheet = document.getElementById('sheet');
-    sheet.innerHTML = '<div class="sheet-body" role="dialog" aria-modal="true" aria-label="Game library"><div class="grab"></div><div class="library-head"><h2>Pick your game</h2><button class="link" data-close>Close</button></div><input class="field" id="librarySearch" type="search" placeholder="Search '+ ui.presets.length +' ideas" aria-label="Search game ideas"><div id="libraryResults"></div></div>';
+    var library = sheet.classList.contains('library-overlay');
+    sheet.hidden = true; sheet.classList.remove('library-overlay');
+    document.body.classList.remove('library-active');
+    if (library) { var trigger = document.querySelector('[data-library]'); if (trigger) trigger.focus({ preventScroll: true }); }
+  }
+  function libraryGenre(p) {
+    var name = (p.title + ' ' + p.id).toLowerCase();
+    if (/bedroom|living.room|lounge|kitchen|bathroom/.test(name)) return 'Home & rooms';
+    if (/space|moon|mars|asteroid|lunar/.test(name)) return 'Sci-fi';
+    if (/airport|yacht|supercar|hotel|resort|garage/.test(name)) return 'Travel & cars';
+    if (/gym|sports|golf/.test(name)) return 'Sport & fitness';
+    if (/pancake|burger|pizza|breakfast|dessert|restaurant|cafe|bakery| bar\b/.test(name)) return 'Food & drink';
+    if (/theme.park|water.park|zoo|aquarium|festival|museum|cinema|arcade/.test(name)) return 'Attractions';
+    if (/office|studio|gaming|bookshop/.test(name)) return 'Work & hobbies';
+    if (/island|city|garden|campsite/.test(name) && !/bedroom|kitchen|bathroom|lounge/.test(name)) return 'Worlds & outdoors';
+    return 'Home & rooms';
+  }
+  function openLibrary() {
+    var sheet = document.getElementById('sheet'), genre = 'All', selected = null;
+    var genres = ['All','Home & rooms','Food & drink','Worlds & outdoors','Attractions','Travel & cars','Sport & fitness','Work & hobbies','Sci-fi'];
+    sheet.classList.add('library-overlay'); document.body.classList.add('library-active');
+    sheet.innerHTML = '<section class="library-dialog" role="dialog" aria-modal="true" aria-labelledby="libraryTitle"><header class="library-controls"><div class="library-head"><div><h2 id="libraryTitle">Game library</h2><p class="muted">Find your next draft · '+ui.presets.length+' games</p></div><button class="library-close" data-close aria-label="Close game library">Close <span aria-hidden="true">×</span></button></div><input class="field" id="librarySearch" type="search" placeholder="Search games or ideas" aria-label="Search game ideas"><nav class="library-genres" aria-label="Game genres">'+genres.map(function(g) { return '<button data-library-genre="'+esc(g)+'" aria-pressed="'+(g==='All')+'">'+esc(g)+'</button>'; }).join('')+'</nav></header><div class="library-scroll" id="libraryResults"></div></section>';
     sheet.hidden = false;
-    var input = sheet.querySelector('#librarySearch');
+    var input = sheet.querySelector('#librarySearch'), results = sheet.querySelector('#libraryResults');
     function draw() {
+      selected = null;
       var q = input.value.toLowerCase().trim();
-      var matches = ui.presets.filter(function(p) { return (p.title + ' ' + (p.category || '') + ' ' + (p.essentials || []).join(' ') + ' ' + (p.examples || []).join(' ') + ' ' + (p.starts || []).join(' ')).toLowerCase().includes(q); });
+      var matches = ui.presets.filter(function(p) { return (genre==='All' || libraryGenre(p)===genre) && (p.title+' '+libraryGenre(p)+' '+(p.essentials || []).join(' ')+' '+(p.examples || []).join(' ')+' '+(p.starts || []).join(' ')).toLowerCase().includes(q); });
       if (q) matches.sort(function(a,b) { return Number(!a.title.toLowerCase().includes(q)) - Number(!b.title.toLowerCase().includes(q)); });
-      sheet.querySelector('#libraryResults').innerHTML = '<p class="muted">'+matches.length+' ideas</p><div class="library-list">' + matches.map(function(p) {
-        var essentials = p.essentials || [], examples = p.examples || [];
-        var included = hasStarts(p) ? (essentials.length ? 'Every starter includes: ' + esc(essentials.join(', ')) : '') : startCopy(p);
-        return '<button class="theme" data-library-theme="'+esc(p.id)+'"><span class="library-title"><span class="em">'+esc(p.emoji)+'</span><b>'+esc(p.title)+'</b></span><small>'+esc(p.itemCount || 75)+' possible additions · '+(hasStarts(p) ? 'Starting auction' : 'Essentials free')+'</small>' + (included ? '<small class="library-included">'+included+'</small>' : '') + (hasStarts(p) ? '<small>Starting choices: '+esc((p.starts || []).slice(0,3).join(', '))+'</small>' : '') + '<small class="library-examples">Possible upgrades: '+esc(examples.slice(0,4).join(', '))+'</small><span class="library-choose">Choose this game</span></button>';
-      }).join('') + '</div>' + (matches.length ? '' : '<p>No matching games. Try a place, room or food such as island, kitchen or pizza.</p>');
-      sheet.querySelector('.sheet-body').scrollTop = 0;
+      sheet.querySelectorAll('[data-library-genre]').forEach(function(button) { button.setAttribute('aria-pressed',String(button.dataset.libraryGenre===genre)); });
+      results.innerHTML = '<div class="library-section"><b>'+esc(q ? 'Search results' : genre==='All' ? 'All games' : genre)+'</b><span>'+matches.length+' games</span></div><div class="library-grid">'+matches.map(function(p) {
+        return '<button class="library-tile" data-library-preview="'+esc(p.id)+'" aria-label="Preview '+esc(p.title)+'"><span class="library-cover" aria-hidden="true">'+esc(p.emoji)+'</span><b>'+esc(p.title)+'</b><small>'+esc(p.itemCount || 75)+' choices · '+(hasStarts(p) ? 'Pick a starter' : 'Ready to build')+'</small></button>';
+      }).join('')+'</div>'+(!matches.length ? '<div class="library-empty"><b>No games found</b><p>Try another search or genre.</p><button class="secondary" data-library-reset>Show all games</button></div>' : '');
+      results.scrollTop = 0;
     }
-    input.addEventListener('input',draw); draw(); input.focus({ preventScroll: true });
+    function preview(id) {
+      var p = ui.presets.find(function(x) { return x.id===id; }); if (!p) return;
+      selected = p;
+      results.innerHTML = '<article class="library-preview"><button class="link" data-library-back>‹ Back to games</button><div class="library-preview-title"><span aria-hidden="true">'+esc(p.emoji)+'</span><h3>'+esc(p.title)+'</h3></div><p class="muted">'+esc(libraryGenre(p))+' · '+esc(p.itemCount || 75)+' possible additions</p><div class="library-preview-section"><h4>'+ (hasStarts(p) ? 'Choose your starter first' : 'Included from the start')+'</h4><p>'+ (hasStarts(p) ? esc((p.starts || []).join(', ')) : (p.essentials || []).length ? esc(p.essentials.join(', ')) : 'Your setting is ready. Start drafting additions straight away.')+'</p>'+ (hasStarts(p) && (p.essentials || []).length ? '<p>Every starter includes: '+esc(p.essentials.join(', '))+'</p>' : '')+'</div><div class="library-preview-section"><h4>What could come up</h4><div class="library-samples">'+(p.examples || []).map(function(name) { return '<span>'+esc(name)+'</span>'; }).join('')+'</div><p class="muted small">A different selection each game. Upgrades replace matching basics.</p></div><button class="primary" data-library-theme="'+esc(p.id)+'">Choose '+esc(p.title)+'</button></article>';
+      results.scrollTop = 0; results.querySelector('[data-library-back]').focus({ preventScroll: true });
+    }
+    sheet.libraryClick = function(e) {
+      var b = e.target.closest('button'); if (!b) return;
+      if (b.hasAttribute('data-library-genre')) { genre=b.dataset.libraryGenre; draw(); }
+      else if (b.hasAttribute('data-library-preview')) preview(b.dataset.libraryPreview);
+      else if (b.hasAttribute('data-library-back')) { var id=selected && selected.id; draw(); var tile=results.querySelector('[data-library-preview="'+id+'"]'); if(tile)tile.focus({preventScroll:true}); }
+      else if (b.hasAttribute('data-library-reset')) { genre='All'; input.value=''; draw(); }
+    };
+    input.addEventListener('input',draw); draw(); sheet.querySelector('[data-close]').focus({ preventScroll: true });
   }
   function renderHome() {
     var t = theme(), n = seats(), total = auctionTotal(), max = t.maxPlayers || 6;
@@ -620,8 +654,21 @@
   }
   document.getElementById('sheet').addEventListener('click', function (e) {
     var choice = e.target.closest('[data-library-theme]');
-    if (choice) { ui.themeId=choice.dataset.libraryTheme; ui.customTopic=''; ui.lastAsked=''; ui.custom=null; store.set('dn-theme',ui.themeId); ensureCount(); document.getElementById('sheet').hidden=true; render(); return; }
-    if (e.target.id === 'sheet' || e.target.closest('[data-close]')) document.getElementById('sheet').hidden = true;
+    if (choice) { ui.themeId=choice.dataset.libraryTheme; ui.customTopic=''; ui.lastAsked=''; ui.custom=null; store.set('dn-theme',ui.themeId); ensureCount(); closeSheet(); render(); return; }
+    var sheet=document.getElementById('sheet');
+    if (e.target.id === 'sheet' || e.target.closest('[data-close]')) { closeSheet(); return; }
+    if (sheet.classList.contains('library-overlay') && sheet.libraryClick) sheet.libraryClick(e);
+  });
+
+  document.addEventListener('keydown', function(e) {
+    var sheet=document.getElementById('sheet');if(sheet.hidden)return;
+    if(e.key==='Escape'){e.preventDefault();closeSheet();return;}
+    if(e.key==='Tab' && sheet.classList.contains('library-overlay')){
+      var focusable=Array.from(sheet.querySelectorAll('button,input')).filter(function(el){return !el.disabled && el.getClientRects().length;});
+      var first=focusable[0],last=focusable[focusable.length-1];
+      if(e.shiftKey && document.activeElement===first){e.preventDefault();last.focus();}
+      else if(!e.shiftKey && document.activeElement===last){e.preventDefault();first.focus();}
+    }
   });
 
   // ---------- routing & events ----------
