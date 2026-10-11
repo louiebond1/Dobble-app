@@ -295,3 +295,11 @@ h1 { font: 650 32px/1.08 var(--display); letter-spacing: -0.025em; margin: 12px 
   .homes { display: none; }
 }
 @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+
+.entry li .item-name { display:flex; align-items:center; gap:7px; min-width:0; color:inherit; }
+.entry li .item-name img { width:32px; height:32px; object-fit:cover; border-radius:6px; flex:none; }
+.picture-note { color:var(--muted); font-size:12px; margin-top:7px; }
+
+.entry li .item-name { flex:1; }
+.entry li .item-name > span { min-width:0; overflow-wrap:anywhere; color:inherit; }
+.entry li > .num { flex-shrink:0; max-width:42%; text-align:right; }
