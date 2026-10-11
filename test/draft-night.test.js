@@ -64,7 +64,14 @@ async function setup(env, { theme = 'house', names = ['Ariel', 'Louie'], budget 
     const r = room();
     return env.call('/api/action', { code, player: p, token: seats[p].token, type, lot: r.lot, seen: r.auction.bid, ...extra });
   };
-  await flush(); // pictures are prepared in the lobby before the host can start
+  // Storage hashing can take longer on Railway than locally; wait for the actual readiness condition.
+  let prepared;
+  for (let i = 0; i < 200; i++) {
+    prepared = (await state()).prep;
+    if (!prepared.enabled || prepared.ready + prepared.failed === prepared.total) break;
+    await flush();
+  }
+  assert.ok(!prepared.enabled || prepared.ready + prepared.failed === prepared.total, 'mock pictures finish preparing');
   const s = await act(0, 'start');
   assert.equal(s.status, 200, JSON.stringify(s.body));
   // Keep every human "present" so the away rule does not fire while the test clock jumps.
