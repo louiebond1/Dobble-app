@@ -485,7 +485,7 @@
         var amt = base + s, ok = amt <= p.budget && !sending;
         return '<button data-bid="' + amt + '" class="' + (i === 0 ? 'main' : '') + '"' + (ok ? '' : ' disabled') + ' aria-label="Bid ' + money(amt) + '"><b class="num">' + money(amt) + '</b><small>+' + money(s) + '</small></button>';
       }).join('') + '</div><div class="dock-row"><form class="custom" id="customForm"><span>£</span><input id="customBid" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="4" autocomplete="off" placeholder="Amount" aria-label="Custom bid amount"><button' + (sending ? ' disabled' : '') + '>Bid</button></form>' +
-        (a.leader === null ? '<div class="opening">You open the bidding</div>' : '<button class="pass" data-pass' + (sending ? ' disabled' : '') + '>Pass</button>') + '</div>';
+        (a.giveTo !== null && a.giveTo !== undefined ? '<button class="pass" data-pass' + (sending ? ' disabled' : '') + '>Give to ' + esc(room.players[a.giveTo].name) + '</button>' : a.leader === null ? '<div class="opening">You open the bidding</div>' : '<button class="pass" data-pass' + (sending ? ' disabled' : '') + '>Pass</button>') + '</div>';
     } else {
       var turn = a.turn !== null ? room.players[a.turn] : null, msg, sub;
       if (!eligibleMe()) { msg = notMine(); sub = room.lots[room.lot].kind === 'base' ? 'Everyone gets exactly one' : p.won.length >= room.maxWins ? 'Watch the others fill theirs' : 'The others still need items to finish'; }
@@ -558,16 +558,17 @@
     var items = p.won.map(function (x) {
       var h = room.history.filter(function (e) { return e.lot === x; })[0];
       var dud = room.lots[x] && room.lots[x].rev;
-      return '<li class="' + (x === p.base ? 'basei' : dud ? 'dudi' : '') + '"><span>' + esc(lotName(x)) + '</span><span class="num">' + (dud ? 'Stuck with it' : h && h.price ? money(h.price) : 'Free') + '</span></li>';
+      return '<li class="' + (x === p.base ? 'basei' : dud ? 'dudi' : '') + '"><span class="item-name">' + (room.lots[x] && room.lots[x].img === 'ready' ? '<img alt="" data-src="' + esc(imgUrl(room.lots[x].key)) + '">' : '') + '<span>' + esc(lotName(x)) + '</span></span><span class="num">' + (dud ? 'Stuck with it' : h && h.price ? money(h.price) : 'Free') + '</span></li>';
     }).join('');
     // What they paid to dodge duds that went to someone else.
     items += room.history.filter(function (h) { return h.paid && h.paid[i] > 0; }).map(function (h) {
       return '<li class="dodge"><span>Dodged ' + esc(lotName(h.lot)) + '</span><span class="num">' + money(h.paid[i]) + '</span></li>';
     }).join('');
-    var showImg = w.key && w.state !== 'none';
-    var status = w.state === 'updating' || w.state === 'retrying' ? worldStatus(i) : '';
+    var showImg = w.key && w.state !== 'none' && w.v >= p.won.length;
+    var incomplete = w.key && w.state !== 'none' && w.v < p.won.length;
+    var status = w.state === 'updating' || w.state === 'retrying' ? worldStatus(i) : incomplete ? 'Scene incomplete · all your purchases are shown below' : '';
     return '<div class="entry" style="--c:' + p.color + '" data-entry="' + i + '"><div class="canvas">' + (showImg ? '<img alt="' + esc(p.name) + '’s ' + esc(t.noun) + '" data-src="' + esc(imgUrl(w.key)) + '">' : inventory(i)) +
-      (status && showImg ? '<div class="status">' + esc(status) + '</div>' : '') + '</div>' +
+      (status && showImg ? '<div class="status">' + esc(status) + '</div>' : '') + '</div>' + (status && !showImg ? '<div class="picture-note">' + esc(status) + '</div>' : '') +
       '<h2><span class="dot"></span>' + esc(p.name) + (i === me() ? ' <span class="muted" style="font-weight:500;font-size:14px">you</span>' : '') + '</h2><div class="spend num">Spent ' + money(spent) + ' · ' + money(p.budget) + ' left</div>' +
       '<ul>' + (!hasStarts(t) ? '<li class="basei"><span>' + esc(t.base.name) + '</span><span>Start</span></li>' : '') + (items || '<li><span class="muted">Nothing won</span><span></span></li>') + '</ul></div>';
   }
