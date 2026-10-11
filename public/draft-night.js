@@ -621,17 +621,20 @@
     items += room.history.filter(function (h) { return h.paid && h.paid[i] > 0; }).map(function (h) {
       return '<li class="dodge"><span>Dodged ' + esc(lotName(h.lot)) + '</span><span class="num">' + money(h.paid[i]) + '</span></li>';
     }).join('');
-    var showImg = w.key && w.state !== 'none' && w.v >= p.won.length;
-    var incomplete = w.key && w.state !== 'none' && w.v < p.won.length;
-    var status = w.state === 'updating' || w.state === 'retrying' ? worldStatus(i) : incomplete ? 'Scene incomplete · all your purchases are shown below' : '';
-    return '<div class="entry" style="--c:' + p.color + '" data-entry="' + i + '"><div class="canvas">' + (showImg ? '<img alt="' + esc(p.name) + '’s ' + esc(t.noun) + '" data-src="' + esc(imgUrl(w.key)) + '">' : inventory(i)) +
-      (status && showImg ? '<div class="status">' + esc(status) + '</div>' : '') + '</div>' + (status && !showImg ? '<div class="picture-note">' + esc(status) + '</div>' : '') +
+    // Keep the last accepted photo when a later render fails; never present it as the full inventory.
+    var showImg = !!w.key && w.state !== 'none' && w.v >= 0;
+    var incomplete = showImg && w.v < p.won.length;
+    var pending = w.state === 'updating' || w.state === 'retrying';
+    var status = incomplete ? 'Photo preview · ' + (pending ? 'making your final photo' : 'final photo unavailable') + '. All your purchases are listed below.' : pending ? worldStatus(i) : '';
+    var alt = (incomplete ? 'Latest saved photo of ' : '') + p.name + '’s ' + t.noun;
+    return '<div class="entry" style="--c:' + p.color + '" data-entry="' + i + '"><div class="canvas">' + (showImg ? '<img alt="' + esc(alt) + '" data-src="' + esc(imgUrl(w.key)) + '">' : inventory(i)) +
+      '</div>' + (status ? '<div class="picture-note">' + esc(status) + '</div>' : '') +
       '<h2><span class="dot"></span>' + esc(p.name) + (i === me() ? ' <span class="muted" style="font-weight:500;font-size:14px">you</span>' : '') + '</h2><div class="spend num">Spent ' + money(spent) + ' · ' + money(p.budget) + ' left</div>' +
       '<ul>' + (!hasStarts(t) ? '<li class="basei"><span>' + esc(t.base.name) + '</span><span>Start</span></li>' : '') + (items || '<li><span class="muted">Nothing won</span><span></span></li>') + '</ul></div>';
   }
   function renderFinal() {
     var many = room.players.length > 2, t = room.theme;
-    var key = room.players.map(function (p, i) { var w = room.worlds[i] || {}; return w.key + w.state; }).join('|') + room.verdict;
+    var key = room.players.map(function (p, i) { var w = room.worlds[i] || {}; return w.key + w.state + w.v + p.won.length; }).join('|') + room.verdict;
     if (built && app.__final === key) return;
     var scroll = $('#compare') ? $('#compare').scrollLeft : 0;
     app.__final = key; built = true;
