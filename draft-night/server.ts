@@ -8,10 +8,11 @@ const GAME_COST_MICROS = 58_000; // $0.058, conservatively below 7p including 20
 function newCost(used = 0): Cost { return { used, limit: GAME_COST_MICROS }; }
 function reserve(c: Cost | undefined, micros: number) { if (!c) return; if (c.used + micros > c.limit) throw Error('Game AI budget reached'); c.used += micros; }
 
-type Item = { name: string; blurb: string; visual: string; pic?: string };
+type Item = { id?: string; name: string; blurb: string; visual: string; pic?: string; weight?: number; group?: string; groupLimit?: number; replaces?: string; requires?: string[] };
+type Essential = { id: string; name: string; visual: string };
 type Mode = 'property' | 'build' | 'collection';
 // bases: the starting options auctioned first (one per player). base: what everyone holds before winning one.
-type Theme = { id: string; title: string; emoji: string; mode: Mode; noun: string; label: string; startLabel: string; base: Item | null; scene: string; spatial?: boolean; setupCost?: number; bases: Item[]; items: Item[]; bad: Item[]; created: number };
+type Theme = { id: string; title: string; emoji: string; mode: Mode; noun: string; label: string; startLabel: string; base: Item | null; scene: string; spatial?: boolean; startMode?: 'included' | 'auction'; category?: string; aliases?: string[]; essentials?: Essential[]; setupCost?: number; bases: Item[]; items: Item[]; bad: Item[]; created: number };
 // rev: a reverse auction for a dud (players bid in secret to avoid it). key: its picture.
 type Lot = Item & { kind: 'base' | 'add'; rev?: boolean; key: string };
 type Player = { name: string; color: string; budget: number; won: number[]; base: number | null; cpu: boolean; seen: number; device: string };
@@ -49,14 +50,43 @@ const parse = (s: string): Item[] => s.trim().split('\n').map(l => { const [name
 const THEMES_URL = env('DRAFT_THEMES_URL', new URL('/draft-night-themes.json', CLIENT_URL).href);
 const PRESETS: Theme[] = [];
 let presetsReady: Promise<void> | null = null;
+function hydrateCatalogue(d: any): Theme[] {
+  const lines = (xs: any[]) => xs.map(x => typeof x === 'string' ? parse(x)[0] : { ...x });
+  return d.themes.map((raw: any) => {
+    const pool = raw.pool ? d.pools?.[raw.pool] : raw;
+    if (!pool) throw Error('Missing item pool: ' + raw.id);
+    const essentials: Essential[] = raw.essentials || [];
+    const include = (x: Item) => ({ ...x, visual: x.visual + (essentials.length ? '. Included essentials, each present exactly once: ' + essentials.map(e => e.visual).join('; ') : '') });
+    const t = { ...raw, essentials, base: raw.base && (raw.startMode === 'included' ? include(raw.base) : {...raw.base}), bases: lines(raw.bases || []).map(include), items: lines(pool.items || []), bad: lines(pool.bad || []), created: 0 };
+    if (t.startMode === 'included') t.bases = [];
+    if (!t.base || !t.id || t.items.length < 10 || new Set(t.items.map((x: Item) => x.name.toLowerCase())).size !== t.items.length) throw Error('Invalid catalogue theme: ' + t.id);
+    for (const it of t.items) {
+      if (!it.name || !it.visual || (it.weight !== undefined && (!Number.isFinite(it.weight) || it.weight <= 0))) throw Error('Invalid catalogue item: ' + t.id);
+      if (it.replaces && !essentials.some(e => e.id === it.replaces)) throw Error('Replacement has no included essential: ' + it.name);
+      if (it.requires?.some((id: string) => !essentials.some(e => e.id === id))) throw Error('Missing item prerequisite: ' + it.name);
+    }
+    if (weightedDeck(t).length < 30) throw Error('Insufficient compatible auctions: ' + t.id);
+    return t;
+  });
+}
+// Exponential races give a weighted draw without replacement. Explicit alternative caps prevent repetitive auctions.
+function weightedDeck(t: Theme): Item[] {
+  const groups = new Map<string, number>();
+  return t.items.map(x => ({ x, order: -Math.log(Math.max(Number.MIN_VALUE, Math.random())) / (x.weight || 1) })).sort((a,b) => a.order-b.order).map(e => e.x).filter(x => {
+    if (!x.group) return true;
+    const n = groups.get(x.group) || 0;
+    if (n >= (x.groupLimit || 1)) return false;
+    groups.set(x.group, n+1); return true;
+  });
+}
 function loadPresets(): Promise<void> {
   return presetsReady ??= (async () => {
     for (let i = 0; ; i++) {
       try {
         const r = await fetch(THEMES_URL, { signal: AbortSignal.timeout(15000) });
         if (!r.ok) throw Error('Themes ' + r.status);
-        const d = await r.json() as any, lines = (x: string[]) => parse(x.join('\n'));
-        PRESETS.splice(0, PRESETS.length, ...d.themes.map((t: any) => ({ ...t, bases: lines(t.bases), items: lines(t.items), bad: lines(t.bad), created: 0 })));
+        const d = await r.json() as any;
+        PRESETS.splice(0, PRESETS.length, ...hydrateCatalogue(d));
         return;
       } catch (e) {
         console.error('Loading themes failed', String(e));
@@ -70,7 +100,7 @@ const ALIASES: Record<string, string> = { house: 'house', home: 'house', 'dream 
 function presetFor(topic: string) {
   const t = topic.toLowerCase().replace(/[^a-z ]/g, ' ').replace(/\b(the|my|a|an|our|best|ultimate|perfect|dream|build|your|of)\b/g, ' ').replace(/\s+/g, ' ').trim();
   const id = ALIASES[t] || ALIASES[topic.toLowerCase().trim()];
-  return PRESETS.find(p => p.id === id) || null;
+  return PRESETS.find(p => p.id === id || p.id === t || p.title.toLowerCase() === topic.toLowerCase().trim() || p.aliases?.some(a => a.toLowerCase() === t || a.toLowerCase() === topic.toLowerCase().trim())) || null;
 }
 
 // Cache identical starting scenes and item art between games, with in-flight deduplication.
@@ -139,7 +169,7 @@ function artUrl(k: string) {
 // Prefill: makes every preset theme's library pictures ahead of time, one at a time behind live games, and stops at the
 // first failure (such as Cloudflare's daily allowance running out) so it can simply be run again later.
 const fill = { running: false, made: 0, had: 0, failed: 0, left: 0, error: '' };
-async function prefill(ids: string[], variants: number, max: number) {
+function cacheJobs(ids: string[]) {
   const jobs: Array<{ prompt: string; quality: string; side: number }> = [];
   for (const t of PRESETS.filter(x => !ids.length || ids.includes(x.id))) {
     const fake = { theme: t } as Room;
@@ -147,10 +177,14 @@ async function prefill(ids: string[], variants: number, max: number) {
     for (const it of t.bases) jobs.push({ prompt: lotPrompt(fake, it, 'base'), quality: WORLD_Q, side: 1024 });
     for (const it of [...t.items, ...t.bad]) jobs.push({ prompt: lotPrompt(fake, it, 'add'), quality: ITEM_Q, side: 512 });
   }
-  Object.assign(fill, { running: true, made: 0, had: 0, failed: 0, left: jobs.length * variants, error: '' });
+  return [...new Map(jobs.map(j => [j.quality + ":" + j.prompt, j])).values()];
+}
+async function prefill(ids: string[], variants: number, max: number) {
+  const unique = cacheJobs(ids);
+  Object.assign(fill, { running: true, made: 0, had: 0, failed: 0, left: unique.length * variants, error: '' });
   try {
     // Round v makes sure each picture has at least v + 1 stored versions, whichever slots games already filled.
-    for (let v = 0; v < variants; v++) for (const j of jobs) {
+    for (let v = 0; v < variants; v++) for (const j of unique) {
       fill.left--;
       const name = await artName(j.prompt, j.quality), have: number[] = [];
       for (let i = 0; i < VARIANTS; i++) if (await isStored(name + '-' + i + '.jpg')) have.push(i);
@@ -415,6 +449,13 @@ function basePrompt(r: Room) {
   return `${t.scene}. Subject: ${t.base!.visual}. Show it plain and unembellished, exactly as described, with clear space around and on it so additions can be placed later. Square framing. ${STYLE}`;
 }
 const LUXURIES = ['swimming pool', 'hot tub', 'supercar', 'tennis court', 'helicopter', 'extra storeys', 'larger garden or extra land', 'outbuildings'];
+function essentialRules(r: Room, p: number, to: number): string {
+  const owned = r.players[p].won.slice(0,to).map(i => r.lots[i]);
+  return (r.theme.essentials || []).map(e => {
+    const replacement = owned.find(x => x.replaces === e.id);
+    return replacement ? 'Purchased ' + replacement.name + ' REPLACES the included ' + e.name + '. Show the upgrade in its original role, exactly once; do not also draw the basic version.' : 'The included ' + e.name + ' MUST remain visible: ' + e.visual + '.';
+  }).join(' ');
+}
 function worldPrompt(r: Room, p: number, from: number, to: number, withRef = false) {
   const t = r.theme, pl = r.players[p];
   const acq = pl.won.map(i => r.lots[i]);
@@ -423,7 +464,7 @@ function worldPrompt(r: Room, p: number, from: number, to: number, withRef = fal
   const already: Lot[] = [];
   const fresh = acq.slice(0, to).filter(x => x.kind === 'add');
   const baseName = hasBases(t) ? (acq[0]?.name || t.noun) : t.base!.name;
-  const lines = fresh.map(x => `- ${x.name}: ${x.visual}.`).join('\n');
+  const lines = fresh.map(x => `- ${x.name}: ${x.visual}.`).join('\n') + '\nEssential and replacement rules: ' + essentialRules(r,p,to);
   const keep = already.length ? `It already contains these purchased items, which must stay exactly as they are: ${already.map(x => x.name).join(', ')}.` : 'Nothing has been added to it yet.';
   let forbid = 'Do not add anything else that is not listed.';
   if (t.spatial) {
@@ -435,7 +476,7 @@ function worldPrompt(r: Room, p: number, from: number, to: number, withRef = fal
     forbid = `Show each new item at its true real-world size next to the house; it must not cover, overlap or replace any part of the house. Do not enlarge the house or its plot and do not change its architecture. Do not add: ${missing.join(', ')}, or any other feature that is not listed above.`;
   } else if (t.mode === 'build') forbid = `Do not add any other toppings, ingredients, accessories or objects. Keep the ${t.noun} the same size and shape.`;
   else forbid = `The complete collection contains exactly ${fresh.length} purchased additions. Show EVERY listed addition as a separate, recognisable item, including every vehicle; do not merge, substitute or omit any. Arrange the collection side by side or in distinct rows appropriate to the subject, with enough space and widen the view as needed to show every member. Keep the original setting, style and lighting. Vehicles must all be full-size with plausible proportions, never miniature or toy-sized. If the garage is small, use its forecourt or extend the visible parking area in the same architectural style rather than shrinking, overlapping or hiding cars. Do not invent additional items.`;
-  if (collection) return `Use this original starting photograph of ${baseName} as the architectural reference. Original base description: ${acq[0]?.visual}. Rebuild the complete collection from this inventory, not from an earlier partial picture:\n${lines}\n${forbid} ${STYLE}`;
+  if (collection) return `Use this original starting photograph of ${baseName} as the architectural reference. Original base description: ${hasBases(t) ? acq[0]?.visual : t.base?.visual}. Rebuild the complete collection from this inventory, not from an earlier partial picture:\n${lines}\n${forbid} ${STYLE}`;
   return `Use this ORIGINAL CLEAN STARTING photograph of a ${t.mode === 'property' ? baseName.toLowerCase() : t.noun} (${baseName}). Preserve the original base identity, camera, setting and lighting. Original base description: ${hasBases(t) ? acq[0]?.visual : t.base?.visual}. Rebuild from the complete inventory below. Every listed purchase, including duds, must be visible. Do not invent related ingredients: maple syrup does not imply pancakes, and an empty plate stays an empty plate unless food was purchased. No unlisted foods, cars or attractions. ${keep}\nAdd ONLY the following purchased item${fresh.length > 1 ? 's' : ''}, each clearly recognisable and naturally placed:\n${lines}\n${forbid} ${withRef ? 'The second image is a reference photo of the purchased item: reproduce that item, not its background.' : ''} ${STYLE}`.trim();
 }
 async function openaiImage(prompt: string, refs: Uint8Array[], quality: string): Promise<Uint8Array> {
@@ -550,7 +591,7 @@ async function compose(r: Room, prompt: string) {
 async function checkCollection(r: Room, p: number, target: number, image: Uint8Array) {
   const owned = r.players[p].won.slice(0, target).map(i => r.lots[i]).filter(x => x.kind === 'add');
   const schema = S({ complete: { type: 'boolean' }, missing: { type: 'array', items: { type: 'string' } }, extras: { type: 'array', items: { type: 'string' } }, reason: { type: 'string' } });
-  return openaiJSON('Check this game creation photograph against the original base and exact purchased inventory. Each listed purchase must be separately visible and recognisable at a plausible real-world size. The original base and its explicitly described components are allowed: a butter dish or napkin described in the original base is never an extra. extras lists only new objects absent from BOTH the original base and purchased inventory. Reject invented extras and duplicate vehicles, including pancakes that were never purchased. Match each actual vehicle to exactly one purchased model: the visible vehicle count must equal the purchased vehicle count; another similar sports car is not a valid substitute. List extra or duplicate objects in extras. Every forced dud must also be present. Count the vehicles or collection members carefully: merged cars, toy-sized cars and obscured cars do not count. Do not accept a picture merely because it is attractive. Return complete=false when any purchase is missing, substituted or distorted; missing lists its inventory name and reason explains the defect. Do not require text labels or exact colours unless specified.', `Creation: ${r.theme.noun}\nOriginal base: ${r.lots[r.players[p].won[0]]?.visual || r.theme.base?.visual}\nPurchased inventory:\n${owned.map(x => x.name + ': ' + x.visual).join('\n')}`, schema, 500, 45000, image, r.cost, 'gpt-4.1');
+  return openaiJSON('Check this game creation photograph against the original base and exact purchased inventory. Each listed purchase must be separately visible and recognisable at a plausible real-world size. A purchased replacement legitimately replaces the basic essential; require the upgraded version exactly once, not both versions. All other mandatory essentials must remain visible. The original base and its explicitly described components are allowed: a butter dish or napkin described in the original base is never an extra. extras lists only new objects absent from BOTH the original base and purchased inventory. Reject invented extras and duplicate vehicles, including pancakes that were never purchased. Match each actual vehicle to exactly one purchased model: the visible vehicle count must equal the purchased vehicle count; another similar sports car is not a valid substitute. List extra or duplicate objects in extras. Every forced dud must also be present. Count the vehicles or collection members carefully: merged cars, toy-sized cars and obscured cars do not count. Do not accept a picture merely because it is attractive. Return complete=false when any purchase is missing, substituted or distorted; missing lists its inventory name and reason explains the defect. Do not require text labels or exact colours unless specified.', `Creation: ${r.theme.noun}\nOriginal base: ${hasBases(r.theme) ? r.lots[r.players[p].won[0]]?.visual : r.theme.base?.visual}\nRequired essentials and legitimate replacements: ${essentialRules(r,p,target)}\nPurchased inventory:\n${owned.map(x => x.name + ': ' + x.visual).join('\n')}`, schema, 500, 45000, image, r.cost, 'gpt-4.1');
 }
 // OpenAI answers 429 insufficient_quota when the account has no credit; retrying cannot help.
 const CREDIT_MSG = 'Pictures are unavailable: the OpenAI account behind Draft Night has run out of credit. Add credit at platform.openai.com → Billing.';
@@ -689,10 +730,11 @@ const THEME_SCHEMA = S({
   status: { type: 'string', enum: ['ok', 'ambiguous'] }, question: str,
   options: { type: 'array', items: S({ label: str, topic: str }) },
   title: str, emoji: str, kind: { type: 'string', enum: ['build', 'collection'] }, scope: { type: 'string', enum: ['object', 'environment'] }, noun: str, label: str,
+  start_mode: { type:'string', enum:['included','auction'] }, essentials: { type:'array', items:S({id:str,name:str,visual:str}) },
   base_name: str, base_blurb: str, base_visual: str, scene: str, start_label: str,
   bases: { type: 'array', items: S({ name: str, blurb: str, visual: str }) },
-  items: { type: 'array', items: S({ name: str, blurb: str, visual: str }) },
-  bad_items: { type: 'array', items: S({ name: str, blurb: str, visual: str }) },
+  items: { type: 'array', items: S({ name: str, blurb: str, visual: str, weight:{type:'integer',minimum:1,maximum:10}, replaces:{type:['string','null']} }) },
+  bad_items: { type: 'array', items: S({ name: str, blurb: str, visual: str, weight:{type:'integer',minimum:1,maximum:10}, replaces:{type:['string','null']} }) },
 });
 const THEME_SYSTEM = `You set up rounds of Draft Night, a party auction game. Players type a subject; every player starts with the same plain BASE and wins items at auction that visibly change their own version of it. Images of each player's creation are generated from your descriptions, so everything must be concrete and photographable.
 
@@ -711,7 +753,8 @@ When ok:
 - For scope "environment", kind is "build" and scene is a consistent wide oblique aerial drone photograph of the actual whole place, with space for several large developments. Never a tabletop, tray, diorama, model, printed photograph, mood board or collage. Each visual states footprint and placement on the land; starting options contain no unpurchased developments.
 - kind "build": each player improves ONE object (a pancake stack, a burger, a car, a bedroom, a garden). kind "collection": each player assembles separate things inside one shared container scene (a garage of cars, a football squad on a pitch, a holiday suitcase).
 - base_name/base_blurb/base_visual: what everyone holds before the first round, e.g. "Empty bun" for burgers or "Empty plate" for pancakes.
-- bases: exactly 8 distinct STARTING OPTIONS that players bid on first (each player wins exactly one), e.g. burgers: Beef Burger, Cheeseburger, Chicken Burger, Veggie Plant Burger; pancakes: Buttermilk Pancakes, Belgian Waffle, French Crêpes; supercars: a garage style. Each visual describes the whole plain starting thing in the scene with nothing added (max 25 words). start_label: one word for these lots (e.g. "Burger", "Base", "Garage"). Never a house unless the subject is about houses.
+- Starting policy: use start_mode "included" for rooms, venues, setups, environments and collections. These games start directly with additions. Put indispensable functional components in essentials and base_visual: a bedroom includes a basic bed; a garage has TWO separate vehicle entrances; a kitchen includes a cooker and sink; a yacht includes a hull and helm. They are included free, not won or randomly omitted. Set bases=[] in included mode. An upgrade may set replaces to the exact essential id (e.g. four-poster bed replaces "bed"), otherwise replaces=null. Each item weight is 1-10: common desirable choices higher, extravagant novelties lower.
+- Use start_mode "auction" only when choosing a fundamental starting object is genuinely part of the game, e.g. house type, burger patty or pancake/waffle. In that case bases: exactly 8 distinct STARTING OPTIONS that players bid on first (each player wins exactly one), e.g. burgers: Beef Burger, Cheeseburger, Chicken Burger, Veggie Plant Burger; pancakes: Buttermilk Pancakes, Belgian Waffle, French Crêpes; supercars: a garage style. Each visual describes the whole plain starting thing in the scene with nothing added (max 25 words). start_label: one word for these lots (e.g. "Burger", "Base", "Garage"). Never a house unless the subject is about houses.
 - scene: one sentence on camera angle, surface/setting and lighting so the whole base and every addition is visible.
 - noun: 1-3 words for what each player builds (e.g. "pancake stack", "garage"). label: one word for an auction lot (e.g. "Topping", "Upgrade", "Car", "Signing").
 - items: exactly N distinct additions (not starting options), real, instantly recognisable things that make sense for THIS subject and can be seen in the picture. Use plain common names people know ("Nutella", "Maple Syrup", "Carbon-Fibre Wheels", "Rooftop Pool"). Mix desirable and cheaper options; one or two may be funny-but-plausible (e.g. "Bacon" on pancakes). Never include unrelated objects, characters, mascots, plush toys, fantasy concepts or buildings unrelated to the subject. Named people are only allowed for a relevant roster or collection as described above.
@@ -726,26 +769,30 @@ async function interpret(topic: string, n: number, confirmed: boolean): Promise<
   // A second pass judges the proposed auctions as a game, rather than accepting keyword associations.
   out = await openaiJSON(THEME_SYSTEM, `Subject: ${JSON.stringify(topic)}\nN = ${n}\nThe players have already confirmed this meaning, so status must be "ok".\nReview and improve this proposed game: ${JSON.stringify(out)}\nReplace weak, repetitive, mundane or wrong-scale auctions. Check the ENTIRE starting subject is shown and every purchase changes the intended creation. For a football squad, ALL regular lots must be distinct named footballers, never equipment, generic positions or referees. For a zoo, show the actual animals in each habitat description. Return the complete corrected theme using the schema.`, THEME_SCHEMA, 3000, 45000, undefined, cost);
   const seen = new Set<string>();
-  const items: Item[] = (Array.isArray(out.items) ? out.items : []).map((x: any) => ({ name: String(x.name || '').trim().slice(0, 32), blurb: String(x.blurb || '').trim().slice(0, 60), visual: String(x.visual || '').trim().slice(0, 200) }))
+  const items: Item[] = (Array.isArray(out.items) ? out.items : []).map((x: any) => ({ name: String(x.name || '').trim().slice(0, 32), blurb: String(x.blurb || '').trim().slice(0, 60), visual: String(x.visual || '').trim().slice(0, 240), weight: clampN(Number(x.weight) || 5,1,10), replaces: x.replaces || undefined, group: x.replaces ? 'upgrade-' + x.replaces : undefined, groupLimit: x.replaces ? 1 : undefined }))
     .filter((x: Item) => x.name && x.visual && !seen.has(x.name.toLowerCase()) && seen.add(x.name.toLowerCase()));
   const clean = (x: any): Item => ({ name: String(x.name || '').trim().slice(0, 32), blurb: String(x.blurb || '').trim().slice(0, 60), visual: String(x.visual || '').trim().slice(0, 220) });
-  const bases = (Array.isArray(out.bases) ? out.bases : []).map(clean).filter((x: Item) => x.name && x.visual && !seen.has(x.name.toLowerCase()) && seen.add(x.name.toLowerCase()));
+  const included = out.start_mode === 'included';
+  const essentials: Essential[] = (Array.isArray(out.essentials) ? out.essentials : []).map((x: any) => ({ id: String(x.id).slice(0,32), name: String(x.name).slice(0,48), visual: String(x.visual).slice(0,220) }));
+  const bases = (included ? [] : Array.isArray(out.bases) ? out.bases : []).map(clean).filter((x: Item) => x.name && x.visual && !seen.has(x.name.toLowerCase()) && seen.add(x.name.toLowerCase()));
   const bad = (Array.isArray(out.bad_items) ? out.bad_items : []).map(clean).filter((x: Item) => x.name && x.visual && !seen.has(x.name.toLowerCase()) && seen.add(x.name.toLowerCase())).slice(0, 10);
-  if (items.length < LOTS_PER_PLAYER * 2 || bases.length < 2) throw Error('Could not build that theme. Try describing it a little more.');
+  if (items.length < LOTS_PER_PLAYER * 2 || (!included && bases.length < 2) || items.some(x => x.replaces && !essentials.some(e => e.id === x.replaces))) throw Error('Could not build that theme. Try describing it a little more.');
   // An item with the same name as a preset item borrows that item's picture description, so its picture comes from the library.
-  const known = new Map(PRESETS.flatMap(p => [...p.items, ...p.bad]).map(x => [x.name.toLowerCase(), x.visual] as const));
+  const known = new Map(PRESETS.flatMap(p => [...p.items, ...p.bad]).map(x => [x.name.toLowerCase(), x.pic || x.visual] as const));
   for (const x of [...items, ...bad]) { const v = known.get(x.name.toLowerCase()); if (v) x.pic = v; }
   const t: Theme = {
     id: crypto.randomUUID().slice(0, 8), title: String(out.title || topic).slice(0, 28), emoji: String(out.emoji || '✨').slice(0, 4),
-    setupCost: cost.used, mode: out.scope === 'environment' ? 'build' : out.kind === 'collection' ? 'collection' : 'build', spatial: out.scope === 'environment', noun: String(out.noun || topic).slice(0, 24).toLowerCase(), label: String(out.label || 'Lot').slice(0, 14),
+    essentials, startMode: included ? 'included' : 'auction', setupCost: cost.used, mode: out.scope === 'environment' ? 'build' : out.kind === 'collection' ? 'collection' : 'build', spatial: out.scope === 'environment', noun: String(out.noun || topic).slice(0, 24).toLowerCase(), label: String(out.label || 'Lot').slice(0, 14),
     base: { name: String(out.base_name || 'Nothing yet').slice(0, 32), blurb: String(out.base_blurb || '').slice(0, 60), visual: String(out.base_visual || '').slice(0, 240) },
     startLabel: String(out.start_label || 'Base').slice(0, 14), scene: String(out.scene || 'Clear, evenly lit photograph showing the whole subject').slice(0, 240), bases, items, bad, created: clock(),
   };
+  const addEssentials = (x: Item) => { if (essentials.length) x.visual += '. Included essentials, each once: ' + essentials.map(e => e.visual).join('; '); };
+  if (included && t.base) addEssentials(t.base); t.bases.forEach(addEssentials);
   themes.set(t.id, t);
   return { status: 'ok', theme: themeSummary(t) };
 }
 function themeSummary(t: Theme) {
-  return { id: t.id, title: t.title, emoji: t.emoji, mode: t.mode, noun: t.noun, label: t.label, startLabel: t.startLabel, hasBases: hasBases(t), base: t.base && { name: t.base.name, blurb: t.base.blurb }, maxPlayers: Math.min(MAX_PLAYERS, hasBases(t) ? Math.min(t.bases.length, Math.floor(t.items.length / 4)) : Math.floor(t.items.length / 5)), starts: t.bases.slice(0, 8).map(x => x.name), examples: t.items.slice(0, 8).map(x => x.name), duds: t.bad.length > 0 };
+  return { id: t.id, title: t.title, emoji: t.emoji, mode: t.mode, noun: t.noun, label: t.label, startLabel: t.startLabel, category: t.category || 'Custom', essentials: (t.essentials || []).map(e => e.name), itemCount: t.items.length, startMode: hasBases(t) ? 'auction' : 'included', hasBases: hasBases(t), base: t.base && { name: t.base.name, blurb: t.base.blurb }, maxPlayers: Math.min(MAX_PLAYERS, hasBases(t) ? Math.min(t.bases.length, Math.floor(t.items.length / 4)) : Math.floor(t.items.length / 5)), starts: t.bases.slice(0, 8).map(x => x.name), examples: t.items.slice(0, 8).map(x => x.name), duds: t.bad.length > 0 };
 }
 async function judge(r: Room) {
   if (!Bun.env.OPENAI_API_KEY) return;
@@ -842,6 +889,11 @@ async function handle(req: Request): Promise<Response> {
     return data ? new Response(data as BodyInit, { headers: { ...CORS, 'Content-Type': 'image/jpeg', 'Cache-Control': 'private, max-age=21600, immutable' } }) : new Response('Not ready', { status: 404, headers: CORS });
   }
   // Prefill the picture library (admin only): POST { key, themes?: ['house'], variants?: 1, max?: 40 }; GET ?key= for progress.
+  if (u.pathname === '/api/cache-plan') {
+    if (!Bun.env.DRAFT_ADMIN_KEY || String(body.key || u.searchParams.get('key') || '') !== Bun.env.DRAFT_ADMIN_KEY) return fail('Forbidden',403);
+    const jobs=cacheJobs([]);
+    return reply({themes:PRESETS.length,choices:PRESETS.reduce((n,t)=>n+t.items.length,0),uniqueAssets:jobs.length,startingScenes:jobs.filter(j=>j.side===1024).length,thumbnails:jobs.filter(j=>j.side===512).length});
+  }
   if (u.pathname === '/api/prefill') {
     const admin = env('DRAFT_ADMIN_KEY', '');
     if (!admin || (body.key || u.searchParams.get('key')) !== admin) return fail('Not found', 404);
@@ -867,7 +919,7 @@ async function handle(req: Request): Promise<Response> {
     const r: Room = {
       cost: newCost(theme.setupCost || 0), code: newCode(), rev: 1, created: clock(), status: 'lobby', theme, budget: clamp(Math.round(Number(body.budget) || 100), 5, 1000),
       capacity: cpu ? 2 : clamp(Math.round(Number(body.capacity) || 2), 2, maxP), auctionCount: 0, cpu, players: [], tokens: [], listed: !cpu && body.listed !== false, notice: '',
-      deckBases: shuffle(theme.bases), deckAdds: shuffle(theme.items), deckBad: shuffle(theme.bad), lots: [], lot: 0,
+      deckBases: shuffle(theme.bases), deckAdds: weightedDeck(theme), deckBad: shuffle(theme.bad), lots: [], lot: 0,
       auction: { bid: 0, leader: null, turn: null, passed: [], phase: 'bidding', deadline: 0, log: [], result: null, rev: false, elig: [], sealed: [] },
       revK: 0, revFor: 0, history: [], lotImg: {}, art: {}, baseImg: 'none', imageError: '', worlds: [], verdict: null,
     };

@@ -1,5 +1,6 @@
 // Run on the existing draft-night-verifier Railway Function, which already holds DRAFT_ADMIN_KEY.
-// Fills one variant of the six preset pools, up to 300 new pictures per run. Stops at any failure.
+// Fills one stored variant of the deduplicated catalogue, up to 300 new pictures per run.
+// Daily picture and Cloudflare dollar limits remain enforced by the API. Stops at any failure; rerun later to resume.
 const api = 'https://draft-night-web-production.up.railway.app';
 const key = Bun.env.DRAFT_ADMIN_KEY;
 const log = (label: string, value: unknown) => console.log('[preset-fill]', label, JSON.stringify(value));
@@ -14,9 +15,9 @@ async function progress() {
   if (!res.ok) throw Error('Prefill status HTTP ' + res.status);
   return await res.json() as { running: boolean; made: number; had: number; failed: number; left: number; error: string };
 }
-async function verifyReplay() {
+async function verifyReplay(theme: string) {
   const before = await health(), started = Date.now();
-  const res = await fetch(api + '/api/create', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ theme: 'house', name: 'Library check', capacity: 2, listed: false }) });
+  const res = await fetch(api + '/api/create', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ theme, name: 'Library check', capacity: 2, listed: false }) });
   if (!res.ok) throw Error('Cached lobby HTTP ' + res.status);
   const game = await res.json() as { code: string; token: string };
   try {
@@ -27,7 +28,8 @@ async function verifyReplay() {
       if (state.prep.failed) throw Error('A cached lobby picture failed');
       if (state.prep.ready === state.prep.total) {
         const after = await health();
-        log('cached-lobby', { readyMs: Date.now() - started, pictures: state.prep.total, dailyMadeBefore: before.pictures.made, dailyMadeAfter: after.pictures.made, noNewPicturesDuringCheck: before.pictures.made === after.pictures.made });
+        if (before.pictures.made !== after.pictures.made) throw Error('Cache verification generated a new picture');
+        log('cached-lobby', { theme, readyMs: Date.now() - started, pictures: state.prep.total, dailyMadeBefore: before.pictures.made, dailyMadeAfter: after.pictures.made, noNewPicturesDuringCheck: before.pictures.made === after.pictures.made });
         return;
       }
       await Bun.sleep(250);
@@ -40,10 +42,16 @@ async function verifyReplay() {
 
 try {
   await health();
-  // The six current pools contain 581 assets. A third pass verifies that nothing remains to generate.
-  for (let run = 1; run <= 3; run++) {
+  const planRes = await fetch(api + '/api/cache-plan?key=' + encodeURIComponent(key));
+  if (!planRes.ok) throw Error('Cache plan HTTP ' + planRes.status);
+  const plan = await planRes.json() as { themes: number; uniqueAssets: number };
+  if (plan.themes !== 250) throw Error('Deploy the 250-theme client catalogue before starting prefill');
+  log('plan', plan);
+  // One final pass proves all distinct prompts exist; related themes share their item thumbnails.
+  const passes = Math.ceil(plan.uniqueAssets / 300) + 1;
+  for (let run = 1; run <= passes; run++) {
     const existing = await progress();
-    if (existing.failed) throw Error(existing.error || 'An earlier fill failed; inspect it before restarting');
+    if (existing.failed) log('retry-after-operator-restart', { error: existing.error });
     if (existing.running) { log('resumed', { run, ...existing }); }
     else {
       const res = await fetch(api + '/api/prefill', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key, variants: 1, max: 300 }) });
@@ -58,12 +66,16 @@ try {
       if (state.failed) throw Error(state.error || 'Prefill failed');
       if (!state.running) {
         await health();
-        if (state.made === 0) { await verifyReplay(); log('complete', { assets: state.had }); process.exit(0); }
+        if (state.made === 0) {
+          if (state.had !== plan.uniqueAssets) throw Error('Stored coverage does not match the cache plan');
+          for (const theme of ['house', 'bedroom', 'island']) await verifyReplay(theme);
+          log('complete', { assets: state.had, themes: plan.themes }); process.exit(0);
+        }
         break;
       }
       if (Date.now() >= deadline) throw Error('Prefill still running after 12 hours; check its status before restarting');
       await Bun.sleep(5000);
     }
   }
-  throw Error('More assets remain after three runs; check before continuing');
+  throw Error('More assets remain after the planned passes; inspect coverage before continuing');
 } catch (error) { log('error', String(error)); process.exitCode = 1; }

@@ -303,3 +303,9 @@ h1 { font: 650 32px/1.08 var(--display); letter-spacing: -0.025em; margin: 12px 
 .entry li .item-name { flex:1; }
 .entry li .item-name > span { min-width:0; overflow-wrap:anywhere; color:inherit; }
 .entry li > .num { flex-shrink:0; max-width:42%; text-align:right; }
+
+.library-open { margin:8px 0 12px; }
+.library-head { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:12px; }
+.library-head h2 { margin:0; font-size:22px; }
+.library-list { display:grid; grid-template-columns:1fr 1fr; gap:8px; padding-bottom:16px; }
+.library-list .theme { min-width:0; }

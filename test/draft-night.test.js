@@ -42,7 +42,7 @@ function sandbox({ key = 'test-key', ai, image, cf, rev = '0', batch = '1', fall
   const vars = { DRAFT_REVERSE_SHARE: rev, DRAFT_WORLD_BATCH: batch, ...(bucket ? { ART_BUCKET: 'art', ART_KEY_ID: 'id', ART_SECRET: 's', ART_ENDPOINT: 'https://store.test' } : {}), ...(admin ? { DRAFT_ADMIN_KEY: admin } : {}), ...(cap ? { DRAFT_DAILY_PICTURES: String(cap) } : {}), DRAFT_DAILY_OPENAI_FALLBACKS: String(fallbackCap), DRAFT_ALLOW_PAID_FALLBACK: fallback === false ? '0' : '1', ...(key ? { OPENAI_API_KEY: key } : {}), ...(cf ? { CF_ACCOUNT_ID: 'acc123', CF_API_TOKEN: 'cf-token' } : {}) };
   const S3Client = class { file(k) { return { exists: async () => { if (broken) throw Error('down'); return bucket.has(k); }, arrayBuffer: async () => bucket.get(k).buffer, text: async () => { if (!bucket.has(k)) throw Error('NoSuchKey'); return new TextDecoder().decode(bucket.get(k)); }, write: async (b) => { if (broken) throw Error('down'); bucket.set(k, typeof b === 'string' ? new TextEncoder().encode(b) : new Uint8Array(b)); }, presign: () => 'https://store.test/' + k + '?sig=1' }; } };
   const ctx = { TextEncoder, Bun: { env: vars, S3Client, serve(o) { handler = o.fetch; } }, Response, Request, URL, FormData, Blob, Buffer, crypto, AbortSignal, fetch: fakeFetch, console: { error() {} }, setTimeout: (f, ms) => { const h = setTimeout(f, Math.min(ms, 5)); h.unref(); return h; }, clearTimeout };
-  vm.runInNewContext(stripTypeScriptTypes(source) + '\nglobalThis.qa={rooms,images,setClock(f){clock=f},worldPrompt,lotPrompt,presetFor,tick,fill,makeImage,ensureWorld,openaiJSON,newCost,ready:loadPresets(),PRESETS,themes};', ctx);
+  vm.runInNewContext(stripTypeScriptTypes(source) + '\nglobalThis.qa={rooms,images,setClock(f){clock=f},worldPrompt,lotPrompt,presetFor,tick,fill,makeImage,ensureWorld,openaiJSON,newCost,weightedDeck,hydrateCatalogue,essentialRules,cacheJobs,ready:loadPresets(),PRESETS,themes};', ctx);
   ctx.qa.setClock(() => t);
   const call = async (p, data) => {
     await ctx.qa.ready;
@@ -91,6 +91,88 @@ function checkInvariants(r, budget) {
     if (r.theme.mode === 'property') assert.ok(p.won.filter(i => r.lots[i].kind === 'base').length <= 1, 'at most one house');
   }
 }
+
+test('all 250 curated ideas have 75–100 distinct compatible choices and valid essentials',async()=>{
+  const env=sandbox({key:''});await env.qa.ready;
+  assert.equal(env.qa.PRESETS.length,250);
+  assert.equal(new Set(env.qa.PRESETS.map(t=>t.id)).size,250);
+  for(const t of env.qa.PRESETS){
+    assert.ok(t.items.length>=75&&t.items.length<=100,t.id);
+    assert.equal(new Set(t.items.map(x=>x.name)).size,t.items.length,t.id);
+    assert.ok(env.qa.weightedDeck(t).length>=30,t.id+' supports six players');
+    for(const e of t.essentials||[]) for(const base of t.startMode==='included'?[t.base]:t.bases) assert.ok(base.visual.includes(e.visual),t.id+' includes '+e.name);
+    if(t.startMode==='included') assert.equal(t.bases.length,0,t.id);
+  }
+  for(const topic of ['bedroom','dream bedroom','desert island','lazy river','bathroom','kitchen']){
+    if(topic==='lazy river')continue;
+    assert.ok(env.qa.presetFor(topic),topic);
+  }
+  const result=await env.call('/api/theme',{topic:'Dream bedroom'});
+  assert.equal(result.body.theme.id,'bedroom');assert.equal(result.body.theme.hasBases,false);
+  same(result.body.theme.essentials,['Basic bed']);assert.equal(env.calls.length,0,'library lookup needs no AI');
+});
+
+test('related ideas share art jobs and cache planning never generates images',async()=>{
+ const env=sandbox({key:'',admin:'sekret'});await env.qa.ready;
+ const plan=await env.call('/api/cache-plan?key=sekret');
+ assert.equal(plan.status,200);assert.equal(plan.body.themes,250);assert.equal(plan.body.choices,19971);
+ assert.ok(plan.body.uniqueAssets<5000,'shared pools avoid 20,000 duplicate image requests');
+ assert.ok(plan.body.startingScenes>=250);assert.equal(env.calls.length,0);
+ const one=env.qa.cacheJobs(['bedroom']).length;
+ const both=env.qa.cacheJobs(['bedroom','loft-bedroom']).length;
+ assert.equal(both,one+1,'only the new included room requires extra art');
+ assert.equal((await env.call('/api/cache-plan')).status,403);
+});
+
+test('every library theme finishes balanced games for two and six players',async()=>{
+  const env=sandbox({key:'',rev:'0.25'});await env.qa.ready;
+  for(const theme of env.qa.PRESETS)for(const n of [2,6]){
+    const g=await setup(env,{theme:theme.id,names:Array.from({length:n},(_,i)=>'P'+i),budget:15});const r=g.room();
+    for(let i=0;i<240&&r.status==='playing';i++){
+      g.touch();env.advance(r.auction.phase==='sold'?3000:31000);g.touch();await env.call('/api/room?code='+g.code);
+    }
+    assert.equal(r.status,'finished',theme.id+' '+n+' players');
+    assert.equal(r.history.length,n*5);for(const p of r.players)assert.equal(p.won.length,5);
+    checkInvariants(r,15);
+    assert.equal(r.lots.filter(l=>l.kind==='base').length,theme.startMode==='included'?0:n);
+  }
+});
+
+test('bedroom starts with a free bed and a four-poster replaces it without a base auction',async()=>{
+  const env=sandbox({key:''});const g=await setup(env,{theme:'bedroom'}),r=g.room();
+  assert.ok(r.lots.every(l=>l.kind==='add'));assert.equal(r.players[0].base,null);
+  assert.match(r.theme.base.visual,/one plain double bed/);
+  assert.equal(r.players[0].budget,100,'included essential costs nothing');
+  const upgrade=r.theme.items.find(x=>x.name==='Four-poster Bed');assert.equal(upgrade.replaces,'bed');
+  assert.equal(upgrade.group,'bed-upgrade');
+  r.lots[0]={...upgrade,kind:'add'};r.players[0].won=[0];
+  const prompt=env.qa.worldPrompt(r,0,0,1);
+  assert.match(prompt,/Four-poster Bed REPLACES the included Basic bed/);
+  assert.match(prompt,/do not also draw the basic version/);
+  r.players[1].won=[];assert.match(env.qa.essentialRules(r,1,0),/Basic bed MUST remain/);
+  const state=await g.state();same(state.theme.essentials,['Basic bed']);
+});
+
+test('weights favour common items, rare choices still occur and alternatives never repeat',async()=>{
+  const env=sandbox({key:''});await env.qa.ready;
+  let common=0,rare=0;
+  const fake={items:[{name:'Common',weight:10},{name:'Rare',weight:1}]};
+  for(let i=0;i<4000;i++){const d=env.qa.weightedDeck(fake);if(d[0].name==='Common')common++;else rare++;}
+  assert.ok(common>rare*5&&rare>100,{common,rare});
+  const bedroom=env.qa.presetFor('bedroom');
+  for(let i=0;i<500;i++){
+    const d=env.qa.weightedDeck(bedroom);
+    assert.ok(d.filter(x=>x.group==='bed-upgrade').length<=1);
+    assert.equal(new Set(d.map(x=>x.name)).size,d.length);
+  }
+});
+
+test('invalid prerequisites and replacements fail catalogue loading instead of reaching a game',async()=>{
+ const env=sandbox({key:''});await env.qa.ready;
+ const base={id:'invalid',base:{name:'Room',visual:'empty room'},bases:[],items:Array.from({length:75},(_,i)=>({name:'Item '+i,visual:'item '+i})),bad:[]};
+ assert.throws(()=>env.qa.hydrateCatalogue({themes:[{...base,items:[{name:'Four-poster',visual:'bed',replaces:'bed'},...base.items.slice(1)]}]}),/Replacement has no included essential/);
+ assert.throws(()=>env.qa.hydrateCatalogue({themes:[{...base,items:[{name:'Bedding',visual:'bedding',requires:['bed']},...base.items.slice(1)]}]}),/Missing item prerequisite/);
+});
 
 test('Scenario A: two-player property game, one house each, ten lots, purchases go to the right player', async () => {
   const env = sandbox();
@@ -235,7 +317,7 @@ test('custom outdoor creation retains environment scale through base auctions an
     return { status: 'ok', title: 'Dream Island', emoji: '🏝️', scope: 'environment', kind: 'collection', noun: 'tropical island', label: 'Development', start_label: 'Island', base_name: 'Bare Island', base_visual: 'an undeveloped tropical island surrounded by ocean', scene: 'Wide oblique aerial view of a whole island in daylight', bases: Array.from({ length: 8 }, (_, i) => ({ name: 'Lagoon Island ' + i, visual: 'whole undeveloped island with a lagoon and open land', blurb: 'Room for your dream developments' })), items: Array.from({ length: n }, (_, i) => ({ name: ['Motorway', 'Beach Resort', 'Theme Park', 'Lazy River'][i % 4] + ' ' + i, visual: 'full-size development occupying inland terrain beside the lagoon', blurb: 'Transforms your island' })), bad_items: [] };
   };
   const env = sandbox({ ai });
-  const t = await env.call('/api/theme', { topic: 'desert island', players: 2 });
+  const t = await env.call('/api/theme', { topic: 'My private tropical archipelago', players: 2 });
   assert.equal(t.status, 200);
   const g = await setup(env, { theme: t.body.theme.id });
   const r = g.room();
@@ -548,7 +630,8 @@ test('auth and joining rules', async () => {
   assert.equal((await env.call('/api/action', { code: made.code, player: 1, token: j.token, type: 'start' })).status, 400, 'only host starts');
   assert.equal((await env.call('/api/create', { theme: 'nonsense', name: 'X' })).status, 400);
   const pre = await env.call('/api/presets');
-  same(pre.body.presets.map(p => p.id), ['house', 'pancakes', 'burger', 'pizza', 'gaming', 'garage']);
+  assert.equal(pre.body.presets.length,250);
+  same(pre.body.presets.slice(0,6).map(p => p.id), ['house','pancakes','burger','pizza','gaming','garage']);
 });
 
 test('pictures come from Cloudflare when it is set up: lot pictures, then edits of the previous picture', async () => {
@@ -996,7 +1079,7 @@ test('duds: typed themes get them from the AI, pictures are prepared in the lobb
     return { status: 'ok', question: '', options: [], title: 'Garden', emoji: '🌻', kind: 'build', noun: 'garden', label: 'Feature', base_name: 'Bare lawn', base_blurb: '', base_visual: 'a bare lawn', scene: 'Garden photo', start_label: 'Garden', bases: Array.from({ length: 8 }, (_, i) => ({ name: 'Garden ' + i, blurb: 'x', visual: 'garden ' + i })), items: Array.from({ length: n }, (_, i) => ({ name: 'Feature ' + i, blurb: 'x', visual: 'feature ' + i + ' in the garden' })), bad_items: Array.from({ length: 8 }, (_, i) => ({ name: 'Dud ' + i, blurb: 'x', visual: 'dud ' + i + ' in the garden' })) };
   };
   const env = sandbox({ ai, rev: '1' });
-  const t = (await env.call('/api/theme', { topic: 'My garden', players: 2 })).body;
+  const t = (await env.call('/api/theme', { topic: 'Custom orchard estate', players: 2 })).body;
   const made = (await env.call('/api/create', { theme: t.theme.id, name: 'A', capacity: 2, auctionCount: 12 })).body;
   const j = (await env.call('/api/join', { code: made.code, name: 'B' })).body;
   const room = env.qa.rooms.get(made.code);
