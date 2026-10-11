@@ -366,10 +366,6 @@ function presetFor(topic: string) {
   return PRESETS.find(p => p.id === id) || null;
 }
 
-// ---------- State ----------
-const rooms = new Map<string, Room>();
-const themes = new Map<string, Theme>();
-const images = new Map<string, Uint8Array>();
 // Cache identical starting scenes and item art between games, with in-flight deduplication.
 // Cache is instance-local; persistent object storage can be attached later.
 const sharedArt = new Map<string, Uint8Array>();
@@ -389,6 +385,10 @@ async function reusableArt(prompt: string, quality: string): Promise<Uint8Array>
 }
 const WORLD_BATCH = Math.max(1, Number(env('DRAFT_WORLD_BATCH','2')) || 2);
 
+// ---------- State ----------
+const rooms = new Map<string, Room>();
+const themes = new Map<string, Theme>();
+const images = new Map<string, Uint8Array>();
 const timers = new Map<string, any>();
 const retries = new Map<string, number>();
 
@@ -734,10 +734,10 @@ async function ensureWorld(r: Room, p: number) {
   if (w.v < 0 && r.baseImg === 'ready') { w.v = 0; bump(r); }
   if (property && pl.base !== null && w.v < 1 && r.lotImg['lot' + pl.base] === 'ready') { w.v = 1; bump(r); }
   const target = pl.won.length;
+  if (w.v < (property ? 1 : 0) || w.v >= target) { if (w.v >= target) w.state = 'ready'; return; }
   // Batch consecutive wins into one edit; the owned-item list is still updated immediately.
   const completed = r.status === 'finished' || target >= quota(r).hi;
   if (target > w.v && !completed && target - w.v < WORLD_BATCH) { w.state = 'ready'; return; }
-  if (w.v < (property ? 1 : 0) || w.v >= target) { if (w.v >= target) w.state = 'ready'; return; }
   w.busy = true; w.state = 'updating'; bump(r);
   const from = w.v;
   enqueue(-1, async () => {
