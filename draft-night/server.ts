@@ -21,7 +21,7 @@ type Entry = { p: number; a: number | null; why?: string };
 type Auction = { bid: number; leader: number | null; turn: number | null; passed: boolean[]; phase: 'bidding' | 'sealed' | 'sold' | 'unsold'; deadline: number; log: Entry[]; result: { winner: number | null; price: number; note: string; bids?: Entry[] } | null; rev: boolean; elig: boolean[]; sealed: Array<number | null> };
 type World = { v: number; state: string; busy: boolean; tries: number; error?: string };
 type Room = {
-  cost: Cost; code: string; rev: number; created: number; auctionCount: number; listed: boolean; notice: string; sig?: string; status: 'lobby' | 'playing' | 'finished'; theme: Theme; budget: number; capacity: number; cpu: boolean;
+  cost: Cost; code: string; rev: number; created: number; auctionCount: number; listed: boolean; notice: string; sig?: string; status: 'lobby' | 'playing' | 'finished'; theme: Theme; budget: number; capacity: number; cpu: boolean; badItems: boolean;
   players: Player[]; tokens: string[]; deckBases: Item[]; deckAdds: Item[]; deckBad: Item[]; lots: Lot[]; lot: number; auction: Auction;
   revK: number; revFor: number; history: Array<{ lot: number; winner: number | null; price: number; paid?: number[] }>; lotImg: Record<string, string>; art: Record<string, string>; baseImg: string; imageError: string; worlds: World[]; verdict: string | null;
 };
@@ -388,6 +388,7 @@ function schedule(r: Room) {
 // Each addition has a 1 in 8 chance (DRAFT_REVERSE_SHARE) of being a dud, so some games have none and some two or more.
 // Decided once per addition and remembered, so the lobby's picture prefetch and the game agree. Starting options never are.
 function revCount(r: Room, adds: number) {
+  if (!r.badItems) return 0;
   for (; r.revFor < adds; r.revFor++) if (Math.random() < REV_SHARE) r.revK++;
   return Math.min(r.deckBad.length, r.revK);
 }
@@ -840,7 +841,7 @@ function prep(r: Room) {
 function view(r: Room, me = -1) {
   const a = r.auction;
   return {
-    cost: r.cost, me, listed: r.listed, notice: r.notice, code: r.code, rev: r.rev, now: clock(), status: r.status, budget: r.budget, capacity: r.capacity, auctionCount: r.auctionCount, maxWins: quota(r).hi, minWins: quota(r).lo, cpu: r.cpu,
+    cost: r.cost, me, listed: r.listed, notice: r.notice, code: r.code, rev: r.rev, now: clock(), status: r.status, budget: r.budget, capacity: r.capacity, auctionCount: r.auctionCount, badItems: r.badItems, maxWins: quota(r).hi, minWins: quota(r).lo, cpu: r.cpu,
     theme: { ...themeSummary(r.theme), examples: undefined, starts: undefined },
     players: r.players.map((p, i) => ({ name: p.name, color: p.color, budget: p.budget, won: p.won, base: p.base, cpu: p.cpu, away: !p.cpu && (r.status === 'playing' ? away(r, i) : clock() - p.seen > AWAY_MS) })),
     // Only lots that have already come up are sent, so nobody can peek at what is next.
@@ -943,7 +944,7 @@ async function handle(req: Request): Promise<Response> {
     const maxP = themeSummary(theme).maxPlayers;
     const r: Room = {
       cost: newCost(theme.setupCost || 0), code: newCode(), rev: 1, created: clock(), status: 'lobby', theme, budget: clamp(Math.round(Number(body.budget) || 100), 5, 1000),
-      capacity: cpu ? 2 : clamp(Math.round(Number(body.capacity) || 2), 2, maxP), auctionCount: 0, cpu, players: [], tokens: [], listed: !cpu && body.listed !== false, notice: '',
+      capacity: cpu ? 2 : clamp(Math.round(Number(body.capacity) || 2), 2, maxP), auctionCount: 0, cpu, badItems: body.badItems === true, players: [], tokens: [], listed: !cpu && body.listed !== false, notice: '',
       deckBases: shuffle(theme.bases), deckAdds: weightedDeck(theme), deckBad: shuffle(theme.bad), lots: [], lot: 0,
       auction: { bid: 0, leader: null, turn: null, passed: [], phase: 'bidding', deadline: 0, log: [], result: null, rev: false, elig: [], sealed: [] },
       revK: 0, revFor: 0, history: [], lotImg: {}, art: {}, baseImg: 'none', imageError: '', worlds: [], verdict: null,
