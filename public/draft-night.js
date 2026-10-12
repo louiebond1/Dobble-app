@@ -27,7 +27,7 @@
     names: store.get('dn-names', ['Louie', 'Ariel']),
     themeId: store.get('dn-theme', 'house'),
     custom: null, customTopic: '', asking: false, ambiguous: null, askError: '',
-    auctionCount: store.get('dn-auction-count', 0), players: store.get('dn-players', 2), cpu: store.get('dn-cpu', false), budget: store.get('dn-budget', 100),
+    auctionCount: store.get('dn-auction-count', 0), players: store.get('dn-players', 2), cpu: store.get('dn-cpu', false), budget: store.get('dn-budget', 100), badItems: false,
     busy: false, error: '', joinCode: (params.get('room') || '').toUpperCase().slice(0, 4),
     tab: 'create', open: null, openErr: false, editName: false, joining: '', listed: store.get('dn-listed', true)
   };
@@ -172,7 +172,8 @@
       '<div class="eyebrow">Players</div><div class="seg">' + counts + '</div>' +
       (ui.cpu ? '' : '<label class="check"><input type="checkbox" id="private"' + (ui.listed ? '' : ' checked') + '><span>Private game: friends join with the room code instead of finding it under Join</span></label>') +
       '<div class="eyebrow">Total auctions</div><div class="seg">' + [0, 12, 16, 20, 24, 30].map(function (c) { return '<button data-auctions="' + c + '" aria-pressed="' + (ui.auctionCount === c) + '">' + (c === 0 ? 'Auto (' + (n * 5) + ')' : c) + '</button>'; }).join('') + '</div>' +
-      '<div class="hint">Everyone ends with auctions ÷ players items, e.g. 12 auctions for 2 players is 6 each. About 1 in 8 is a dud you bid to avoid.</div>' +
+      '<div class="hint">Everyone ends with auctions ÷ players items, e.g. 12 auctions for 2 players is 6 each. All auctions are for useful items unless you switch on bad items.</div>' +
+      '<label class="check"><input type="checkbox" id="badItems"' + (ui.badItems ? ' checked' : '') + '><span>Include bad items (reverse auctions)</span></label>' +
       '<div class="eyebrow">Budget each</div><div class="seg">' + BUDGETS.map(function (b) { return '<button data-budget="' + b + '" aria-pressed="' + (ui.budget === b) + '">' + money(b) + '</button>'; }).join('') + '</div>' +
       '<label class="budget-other"><span>Or any amount £</span><input id="budgetOther" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="4" autocomplete="off" placeholder="e.g. 30" value="' + (BUDGETS.indexOf(ui.budget) < 0 ? ui.budget : '') + '"></label>' +
       (ui.error ? '<div class="error">' + esc(ui.error) + '</div>' : '') + '</div>' +
@@ -230,7 +231,7 @@
     var name = rememberName();
     if (!name) { ui.error = 'Add your name first.'; render(); $('#name').focus(); return; }
     ui.busy = true; ui.error = ''; render();
-    api('/api/create', { theme: theme().id, name: name, capacity: seats(), auctionCount: auctionTotal(), budget: ui.budget, cpu: ui.cpu, device: device, listed: ui.listed }).then(function (d) {
+    api('/api/create', { theme: theme().id, name: name, capacity: seats(), auctionCount: auctionTotal(), budget: ui.budget, cpu: ui.cpu, badItems: ui.badItems, device: device, listed: ui.listed }).then(function (d) {
       ui.busy = false;
       if (!d.code) { ui.error = d.error || 'Could not create a room.'; return render(); }
       enter(d);
@@ -378,7 +379,7 @@
     var link = location.origin + location.pathname + '?room=' + room.code;
     app.innerHTML = '<div class="screen"><div class="bar"><button class="link" data-leave>‹ Leave</button><span class="wordmark">Draft Night</span><span style="width:48px"></span></div><div class="content">' +
       (room.listed || room.cpu ? '' : '<div class="eyebrow" style="margin-top:12px">Room code</div><div class="code num">' + esc(room.code) + '</div><p class="muted" style="margin:0">Private game. Friends tap Join game, then Join with room code.</p>') +
-      '<div class="eyebrow"' + (room.listed || room.cpu ? ' style="margin-top:12px"' : '') + '>Tonight</div><div class="brief"><span class="em">' + esc(t.emoji) + '</span><div><b>' + esc(t.title) + '</b><p>' + brief + '</p>' + (t.duds ? '<p>Every so often a lot is a dud: bid in secret to avoid it. The lowest bid gets it free and everyone else pays what they bid.</p>' : '') + '<p>' + (room.auctionCount || n * 5) + ' auctions · ' + shareText() + ' per player · ' + money(room.budget) + ' each</p></div></div>' +
+      '<div class="eyebrow"' + (room.listed || room.cpu ? ' style="margin-top:12px"' : '') + '>Tonight</div><div class="brief"><span class="em">' + esc(t.emoji) + '</span><div><b>' + esc(t.title) + '</b><p>' + brief + '</p>' + (room.badItems && t.duds ? '<p>Every so often a lot is a dud: bid in secret to avoid it. The lowest bid gets it free and everyone else pays what they bid.</p>' : '') + '<p>' + (room.auctionCount || n * 5) + ' auctions · ' + shareText() + ' per player · ' + money(room.budget) + ' each</p></div></div>' +
       '<div class="eyebrow split"><span>Players</span><span>' + n + ' of ' + room.capacity + ' joined</span></div><ul class="roster">' + slots + '</ul>' +
       (room.notice ? '<p class="notice">' + esc(room.notice) + '</p>' : '') +
       (room.listed && !room.cpu ? '<p class="muted small">' + (n < room.capacity ? 'Friends open Draft Night and tap Join game to take a seat. ' : '') + 'Room code <span class="num">' + esc(room.code) + '</span> · <button class="link inline" data-share="' + esc(link) + '">Share invite</button></p>' : '') + '</div>' +
@@ -744,6 +745,7 @@
     if (e.target.id === 'private') { ui.listed = !e.target.checked; store.set('dn-listed', ui.listed); }
   });
   app.addEventListener('input', function (e) {
+    if (e.target.id === 'badItems') ui.badItems = e.target.checked;
     if (e.target.id === 'name') ui.name = e.target.value;
     if (e.target.id === 'budgetOther') { var v = parseInt(e.target.value, 10); if (v >= 5 && v <= 1000) { ui.budget = v; store.set('dn-budget', v); document.querySelectorAll('[data-budget]').forEach(function (x) { x.setAttribute('aria-pressed', String(+x.dataset.budget === v)); }); } }
     if (e.target.id === 'topic') { ui.customTopic = e.target.value; var c = $('#create'); if (c && !ui.busy && !ui.asking && !ui.ambiguous) c.textContent = pendingTopic() ? 'Use “' + pendingTopic().slice(0, 24) + '”' : (ui.cpu ? 'Play ' + theme().title + ' vs CPU' : 'Create ' + theme().title + ' room'); }
