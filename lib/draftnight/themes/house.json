@@ -1,5 +1,10 @@
 {
-  "id": "house", "title": "Dream House", "emoji": "🏡", "mode": "builder", "archetype": "plot", "noun": "home",
+  "id": "house",
+  "title": "Dream House",
+  "emoji": "🏡",
+  "mode": "builder",
+  "archetype": "plot",
+  "noun": "home",
   "intro": "Win a home, then build the dream property around it. Upgrades to the house itself come up every round.",
   "bases": [
     "Country Cottage | Stone walls, slate roof, climbing roses",
@@ -24,71 +29,111 @@
     "Smart Home Glass | Floor-to-ceiling glazing everywhere | 1 | glazing"
   ],
   "categories": [
-    { "id": "water", "name": "Water", "slot": "back-garden", "emoji": "🏊", "items": [
-      "Infinity Pool | Edge-to-sky swimming | 3",
-      "Lagoon Pool | Rock edges and a little waterfall | 3",
-      "Family Pool | Big blue rectangle with loungers | 2",
-      "Lap Pool | Lengths every morning | 2",
-      "Natural Swimming Pond | Reeds, deck and clear water | 2",
-      "Hot Tub Deck | Bubbles under the stars | 1",
-      "Plunge Pool & Sauna | Hot, then very cold | 2",
-      "Koi Pond & Bridge | Calm water and a red bridge | 1",
-      "Splash Pad | Fountains for the kids | 1"
-    ]},
-    { "id": "garden", "name": "Garden", "slot": "left-garden", "emoji": "🌳", "items": [
-      "Walled Kitchen Garden | Veg beds and fruit trees | 2",
-      "English Rose Garden | Arches heaving with roses | 2",
-      "Japanese Garden | Raked gravel, maples, lanterns | 3",
-      "Orchard | Rows of apple and pear trees | 2",
-      "Wildflower Meadow | Bees, poppies, long grass | 1",
-      "Hedge Maze | Get lost at home | 3",
-      "Greenhouse | Tomatoes all year round | 1",
-      "Olive Grove Terrace | Mediterranean shade | 2",
-      "Treehouse | A proper house in the oak | 2"
-    ]},
-    { "id": "outdoor", "name": "Outdoor living", "slot": "patio", "emoji": "🔥", "items": [
-      "Outdoor Kitchen | Grill, pizza oven and bar | 3",
-      "Fire-pit Lounge | Sunken seating round the flames | 2",
-      "Pergola Dining | Long table under the vines | 2",
-      "Garden Bar | Your own outdoor pub | 2",
-      "Pizza Oven Patio | Wood-fired Fridays | 1",
-      "Hammock Grove | Swing between the trees | 1",
-      "Outdoor Cinema | Big screen on the lawn | 3",
-      "Barbecue Terrace | Classic grill and benches | 1",
-      "Glass Summer House | Sit outside in any weather | 2"
-    ]},
-    { "id": "sport", "name": "Sport & play", "slot": "far-lawn", "emoji": "🎾", "items": [
-      "Tennis Court | Your own centre court | 3",
-      "Padel Court | The game everyone's playing | 2",
-      "Basketball Court | Full-size hoops | 2",
-      "Five-a-side Pitch | Floodlit astroturf | 2",
-      "Putting Green | Sink one before dinner | 1",
-      "Adventure Playground | Climbing frames and zip wire | 1",
-      "Skate Bowl | Concrete curves | 2",
-      "Horse Paddock & Stable | Two ponies and a stable | 3",
-      "Croquet Lawn | Very civilised | 1"
-    ]},
-    { "id": "buildings", "name": "Outbuildings", "slot": "right-garden", "emoji": "🏠", "items": [
-      "Guest Cottage | Somewhere for the in-laws | 2",
-      "Garden Office | Commute: thirty seconds | 1",
-      "Home Gym Pavilion | Glass-walled workout room | 2",
-      "Art Studio | North light and big tables | 1",
-      "Games Barn | Pool table, darts and arcade | 2",
-      "Pool House | Showers, bar and changing | 2",
-      "Wine Cellar Folly | Stone vault in the garden | 2",
-      "Music Studio | Soundproofed and ready | 2",
-      "Spa Pavilion | Steam room and treatment beds | 3"
-    ]},
-    { "id": "arrival", "name": "Driveway", "slot": "front-drive", "emoji": "🚗", "items": [
-      "Sweeping Gravel Drive | Crunch all the way up | 1",
-      "Electric Gates | Grand iron gates | 2",
-      "Triple Garage | Room for three cars | 2",
-      "Classic Car | A gleaming vintage convertible | 2",
-      "Supercar | Low, loud and on the drive | 3",
-      "Tree-lined Avenue | Arrive like royalty | 2",
-      "Turning Circle & Fountain | Very grand entrance | 3",
-      "EV Carport | Solar roof and chargers | 1",
-      "Motorhome | Holidays start on the drive | 1"
-    ]}
-  ]
+    {
+      "id": "water",
+      "name": "Water",
+      "slot": "back-garden",
+      "emoji": "🏊",
+      "items": [
+        "Infinity Pool | Edge-to-sky swimming | 3",
+        "Lagoon Pool | Rock edges and a little waterfall | 3",
+        "Family Pool | Big blue rectangle with loungers | 2",
+        "Lap Pool | Lengths every morning | 2",
+        "Natural Swimming Pond | Reeds, deck and clear water | 2",
+        "Hot Tub Deck | Bubbles under the stars | 1",
+        "Plunge Pool & Sauna | Hot, then very cold | 2",
+        "Koi Pond & Bridge | Calm water and a red bridge | 1",
+        "Splash Pad | Fountains for the kids | 1"
+      ]
+    },
+    {
+      "id": "garden",
+      "name": "Garden",
+      "slot": "left-garden",
+      "emoji": "🌳",
+      "items": [
+        "Walled Kitchen Garden | Veg beds and fruit trees | 2",
+        "English Rose Garden | Arches heaving with roses | 2",
+        "Japanese Garden | Raked gravel, maples, lanterns | 3",
+        "Orchard | Rows of apple and pear trees | 2",
+        "Wildflower Meadow | Bees, poppies, long grass | 1",
+        "Hedge Maze | Get lost at home | 3",
+        "Greenhouse | Tomatoes all year round | 1",
+        "Olive Grove Terrace | Mediterranean shade | 2",
+        "Treehouse | A proper house in the oak | 2"
+      ]
+    },
+    {
+      "id": "outdoor",
+      "name": "Outdoor living",
+      "slot": "patio",
+      "emoji": "🔥",
+      "items": [
+        "Outdoor Kitchen | Grill, pizza oven and bar | 3",
+        "Fire-pit Lounge | Sunken seating round the flames | 2",
+        "Pergola Dining | Long table under the vines | 2",
+        "Garden Bar | Your own outdoor pub | 2",
+        "Pizza Oven Patio | Wood-fired Fridays | 1",
+        "Hammock Grove | Swing between the trees | 1",
+        "Outdoor Cinema | Big screen on the lawn | 3",
+        "Barbecue Terrace | Classic grill and benches | 1",
+        "Glass Summer House | Sit outside in any weather | 2"
+      ]
+    },
+    {
+      "id": "sport",
+      "name": "Sport & play",
+      "slot": "far-lawn",
+      "emoji": "🎾",
+      "items": [
+        "Tennis Court | Your own centre court | 3",
+        "Padel Court | The game everyone's playing | 2",
+        "Basketball Court | Full-size hoops | 2",
+        "Five-a-side Pitch | Floodlit astroturf | 2",
+        "Putting Green | Sink one before dinner | 1",
+        "Adventure Playground | Climbing frames and zip wire | 1",
+        "Skate Bowl | Concrete curves | 2",
+        "Horse Paddock & Stable | Two ponies and a stable | 3",
+        "Croquet Lawn | Very civilised | 1"
+      ]
+    },
+    {
+      "id": "buildings",
+      "name": "Outbuildings",
+      "slot": "right-garden",
+      "emoji": "🏠",
+      "items": [
+        "Guest Cottage | Somewhere for the in-laws | 2",
+        "Garden Office | Commute: thirty seconds | 1",
+        "Home Gym Pavilion | Glass-walled workout room | 2",
+        "Art Studio | North light and big tables | 1",
+        "Games Barn | Pool table, darts and arcade | 2",
+        "Pool House | Showers, bar and changing | 2",
+        "Wine Cellar Folly | Stone vault in the garden | 2",
+        "Music Studio | Soundproofed and ready | 2",
+        "Spa Pavilion | Steam room and treatment beds | 3"
+      ]
+    },
+    {
+      "id": "arrival",
+      "name": "Driveway",
+      "slot": "front-drive",
+      "emoji": "🚗",
+      "items": [
+        "Sweeping Gravel Drive | Crunch all the way up | 1",
+        "Electric Gates | Grand iron gates | 2",
+        "Triple Garage | Room for three cars | 2",
+        "Classic Car | A gleaming vintage convertible | 2",
+        "Supercar | Low, loud and on the drive | 3",
+        "Tree-lined Avenue | Arrive like royalty | 2",
+        "Turning Circle & Fountain | Very grand entrance | 3",
+        "EV Carport | Solar roof and chargers | 1",
+        "Motorhome | Holidays start on the drive | 1"
+      ]
+    }
+  ],
+  "looks": {
+    "Tree-lined Avenue": "a long straight gravel driveway lined with tall trees on both sides",
+    "Games Barn": "a timber barn with its big doors open, a pool table and two arcade machines inside, plain walls"
+  }
 }

@@ -1,5 +1,10 @@
 {
-  "id": "bedroom", "title": "Dream Bedroom", "emoji": "🛏️", "mode": "builder", "archetype": "room", "noun": "bedroom",
+  "id": "bedroom",
+  "title": "Dream Bedroom",
+  "emoji": "🛏️",
+  "mode": "builder",
+  "archetype": "room",
+  "noun": "bedroom",
   "intro": "Everyone starts with the same plain bedroom and a basic bed. Each round fills a different part of the room.",
   "base": "Plain Bedroom | Neutral walls, a window and a basic double bed",
   "upgrades": [
@@ -13,65 +18,107 @@
     "Skylight | Stars above the bed | 1 | ceiling"
   ],
   "categories": [
-    { "id": "bed", "name": "The bed", "slot": "centre-floor", "emoji": "🛏️", "replaces": "bed", "items": [
-      "Four-poster Bed | Carved posts and drapes | 3",
-      "Super King Bed | Room for a starfish | 2",
-      "Canopy Bed | Floaty fabric overhead | 2",
-      "Floating Bed | Hidden legs, glowing underneath | 3",
-      "Round Bed | Very retro, very big | 2",
-      "Sleigh Bed | Curved wooden ends | 1",
-      "Upholstered Velvet Bed | Tall padded headboard | 1",
-      "Hanging Bed | Suspended on ropes | 3"
-    ]},
-    { "id": "storage", "name": "Storage", "slot": "left-wall", "emoji": "👗", "items": [
-      "Walk-in Wardrobe | A dressing room of your own | 3",
-      "Mirrored Wardrobe Wall | Floor-to-ceiling mirrors | 2",
-      "Dressing Table | Lights and a big mirror | 1",
-      "Oak Wardrobe | Solid and classic | 1",
-      "Shoe Wall | Every pair on display | 2",
-      "Built-in Bookshelves | A whole wall of books | 2",
-      "Chest of Drawers | Painted and pretty | 1",
-      "Hidden Wardrobe Door | Secret room behind the panels | 3"
-    ]},
-    { "id": "lounge", "name": "Chill corner", "slot": "left-floor", "emoji": "🛋️", "items": [
-      "Reading Nook | Window seat and cushions | 2",
-      "Hanging Egg Chair | Swing and read | 2",
-      "Velvet Chaise Longue | Lounge like royalty | 2",
-      "Beanbag Pile | Sink in | 1",
-      "Leather Armchair | With a footstool | 1",
-      "Indoor Hammock | Sway to sleep | 2",
-      "Mini Library Ladder | Rolling ladder to the top shelf | 3",
-      "Fireplace & Armchairs | A real fire on cold nights | 3"
-    ]},
-    { "id": "tech", "name": "Tech & fun", "slot": "right-wall", "emoji": "🎮", "items": [
-      "Gaming Setup | Triple monitors and a racing chair | 3",
-      "Wall-mounted Cinema Screen | Movies from bed | 3",
-      "Vinyl Record Wall | Turntable and a record collection | 2",
-      "Smart Lighting Strip | Every colour you want | 1",
-      "Desk & Ultrawide Monitor | Work from bed, almost | 1",
-      "Retro Arcade Cabinet | Pac-Man in the bedroom | 2",
-      "Projector & Speakers | Big picture, big sound | 2",
-      "Aquarium Wall | Tropical fish tank built in | 3"
-    ]},
-    { "id": "decor", "name": "Decor", "slot": "back-wall", "emoji": "🖼️", "items": [
-      "Gallery Wall | Framed art and photos | 1",
-      "Chandelier | Crystal and dramatic | 3",
-      "Indoor Plants Jungle | Monsteras everywhere | 2",
-      "Neon Sign | Glowing statement words | 1",
-      "Starry Ceiling | Fibre-optic night sky | 3",
-      "Giant Floor Mirror | Gold arched frame | 1",
-      "Persian Rug | Rich colours underfoot | 2",
-      "Living Moss Wall | A soft green wall | 2"
-    ]},
-    { "id": "luxury", "name": "Luxury extras", "slot": "right-floor", "emoji": "💎", "items": [
-      "Freestanding Copper Bath | In the bedroom itself | 3",
-      "Mini Fridge & Snack Bar | Midnight feasts | 1",
-      "Massage Chair | Full-body bliss | 2",
-      "Coffee Machine Station | Barista mornings | 1",
-      "Indoor Swing | Hanging from the beams | 2",
-      "Slide to the Kitchen | Breakfast, fast | 3",
-      "Cat Climbing Wall | Shelves for the cat | 1",
-      "Peloton Corner | Spin before breakfast | 2"
-    ]}
-  ]
+    {
+      "id": "bed",
+      "name": "The bed",
+      "slot": "centre-floor",
+      "emoji": "🛏️",
+      "replaces": "bed",
+      "items": [
+        "Four-poster Bed | Carved posts and drapes | 3",
+        "Super King Bed | Room for a starfish | 2",
+        "Canopy Bed | Floaty fabric overhead | 2",
+        "Floating Bed | Hidden legs, glowing underneath | 3",
+        "Round Bed | Very retro, very big | 2",
+        "Sleigh Bed | Curved wooden ends | 1",
+        "Upholstered Velvet Bed | Tall padded headboard | 1",
+        "Hanging Bed | Suspended on ropes | 3"
+      ]
+    },
+    {
+      "id": "storage",
+      "name": "Storage",
+      "slot": "left-wall",
+      "emoji": "👗",
+      "items": [
+        "Walk-in Wardrobe | A dressing room of your own | 3",
+        "Mirrored Wardrobe Wall | Floor-to-ceiling mirrors | 2",
+        "Dressing Table | Lights and a big mirror | 1",
+        "Oak Wardrobe | Solid and classic | 1",
+        "Shoe Wall | Every pair on display | 2",
+        "Built-in Bookshelves | A whole wall of books | 2",
+        "Chest of Drawers | Painted and pretty | 1",
+        "Hidden Wardrobe Door | Secret room behind the panels | 3"
+      ]
+    },
+    {
+      "id": "lounge",
+      "name": "Chill corner",
+      "slot": "left-floor",
+      "emoji": "🛋️",
+      "items": [
+        "Reading Nook | Window seat and cushions | 2",
+        "Hanging Egg Chair | Swing and read | 2",
+        "Velvet Chaise Longue | Lounge like royalty | 2",
+        "Beanbag Pile | Sink in | 1",
+        "Leather Armchair | With a footstool | 1",
+        "Indoor Hammock | Sway to sleep | 2",
+        "Mini Library Ladder | Rolling ladder to the top shelf | 3",
+        "Fireplace & Armchairs | A real fire on cold nights | 3"
+      ]
+    },
+    {
+      "id": "tech",
+      "name": "Tech & fun",
+      "slot": "right-wall",
+      "emoji": "🎮",
+      "items": [
+        "Gaming Setup | Triple monitors and a racing chair | 3",
+        "Wall-mounted Cinema Screen | Movies from bed | 3",
+        "Vinyl Record Wall | Turntable and a record collection | 2",
+        "Smart Lighting Strip | Every colour you want | 1",
+        "Desk & Ultrawide Monitor | Work from bed, almost | 1",
+        "Retro Arcade Cabinet | Pac-Man in the bedroom | 2",
+        "Projector & Speakers | Big picture, big sound | 2",
+        "Aquarium Wall | Tropical fish tank built in | 3"
+      ]
+    },
+    {
+      "id": "decor",
+      "name": "Decor",
+      "slot": "back-wall",
+      "emoji": "🖼️",
+      "items": [
+        "Gallery Wall | Framed art and photos | 1",
+        "Chandelier | Crystal and dramatic | 3",
+        "Indoor Plants Jungle | Monsteras everywhere | 2",
+        "Neon Sign | Glowing statement words | 1",
+        "Starry Ceiling | Fibre-optic night sky | 3",
+        "Giant Floor Mirror | Gold arched frame | 1",
+        "Persian Rug | Rich colours underfoot | 2",
+        "Living Moss Wall | A soft green wall | 2"
+      ]
+    },
+    {
+      "id": "luxury",
+      "name": "Luxury extras",
+      "slot": "right-floor",
+      "emoji": "💎",
+      "items": [
+        "Freestanding Copper Bath | In the bedroom itself | 3",
+        "Mini Fridge & Snack Bar | Midnight feasts | 1",
+        "Massage Chair | Full-body bliss | 2",
+        "Coffee Machine Station | Barista mornings | 1",
+        "Indoor Swing | Hanging from the beams | 2",
+        "Slide to the Kitchen | Breakfast, fast | 3",
+        "Cat Climbing Wall | Shelves for the cat | 1",
+        "Peloton Corner | Spin before breakfast | 2"
+      ]
+    }
+  ],
+  "looks": {
+    "Neon Sign": "a glowing pink neon heart shape on the wall above the bed",
+    "Wall-mounted Cinema Screen": "a very large wall-mounted television above a low media unit, its screen showing a calm mountain landscape",
+    "Retro Arcade Cabinet": "a tall wooden retro arcade cabinet with a joystick and buttons, its screen glowing with a colourful abstract pattern"
+  }
 }

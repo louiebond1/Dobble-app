@@ -1,5 +1,10 @@
 {
-  "id": "island", "title": "Dream Island", "emoji": "🏝️", "mode": "builder", "archetype": "site", "noun": "island",
+  "id": "island",
+  "title": "Dream Island",
+  "emoji": "🏝️",
+  "mode": "builder",
+  "archetype": "site",
+  "noun": "island",
   "intro": "Everyone starts with the same untouched tropical island. Each round develops a whole new part of it.",
   "base": "Untouched Island | Wild beaches, jungle and open land",
   "upgrades": [
@@ -13,65 +18,107 @@
     "Pink Sand Beach | A rare pink beach | 1 | beach"
   ],
   "categories": [
-    { "id": "stay", "name": "Places to stay", "slot": "parcel", "emoji": "🏨", "items": [
-      "Overwater Villas | Bungalows on stilts in the lagoon | 3",
-      "Beach Resort | Pools, palms and sea views | 2",
-      "Treehouse Hotel | Rooms in the jungle canopy | 2",
-      "Clifftop Villas | Infinity pools above the sea | 3",
-      "Glamping Domes | Stargazing domes on the hill | 1",
-      "Royal Palace Hotel | Grand palace on the beach | 3",
-      "Beach Huts | Colourful huts on the sand | 1",
-      "Eco Lodge | Timber lodges in the forest | 1"
-    ]},
-    { "id": "transport", "name": "Getting there", "slot": "parcel", "emoji": "✈️", "items": [
-      "International Airport | Runway and terminal | 3",
-      "Superyacht Marina | Berths for the big boats | 3",
-      "Seaplane Dock | Land right on the water | 2",
-      "Cable Car | Up to the island's peak | 2",
-      "Helipad Resort | Arrive by helicopter | 2",
-      "Ferry Port | Daily boats to the mainland | 1",
-      "Island Railway | A little coastal train | 1",
-      "Bridge to the Mainland | A long elegant bridge | 3"
-    ]},
-    { "id": "thrills", "name": "Thrills", "slot": "parcel", "emoji": "🎢", "items": [
-      "Theme Park | Rollercoasters and rides | 3",
-      "Water Park | Slides and wave pools | 3",
-      "Go-kart Track | Twisting island circuit | 1",
-      "Zip-line Canopy | Fly through the jungle | 1",
-      "Dive Centre & Wreck | Explore a sunken ship | 2",
-      "Surf School Beach | Perfect rolling waves | 1",
-      "Golf Course | Eighteen holes by the sea | 2",
-      "Formula Street Circuit | Race round the island | 3"
-    ]},
-    { "id": "nature", "name": "Nature", "slot": "parcel", "emoji": "🌿", "items": [
-      "Jungle Waterfall | A tall waterfall and plunge pool | 2",
-      "Turtle Sanctuary | Protected nesting beach | 1",
-      "Botanical Gardens | Exotic plants and glasshouses | 2",
-      "Rainforest Reserve | Untouched jungle trails | 1",
-      "Dolphin Bay | Wild dolphins every morning | 3",
-      "Flamingo Salt Lakes | Pink flocks on the flats | 2",
-      "Hot Springs | Steaming natural pools | 2",
-      "Hidden Cove | A secret beach in the cliffs | 1"
-    ]},
-    { "id": "night", "name": "Food & nightlife", "slot": "parcel", "emoji": "🍹", "items": [
-      "Beach Club | Daybeds, DJ and cocktails | 2",
-      "Harbour Restaurants | Seafood on the waterfront | 1",
-      "Floating Bar | A bar out on the water | 2",
-      "Night Market | Street food under lanterns | 1",
-      "Casino | Glittering and grand | 3",
-      "Open-air Cinema | Films on the beach | 1",
-      "Festival Stage | Headliners on the sand | 3",
-      "Rooftop Sky Bar | Cocktails above the island | 2"
-    ]},
-    { "id": "landmarks", "name": "Landmarks", "slot": "parcel", "emoji": "🗼", "items": [
-      "Observation Tower | Views of the whole island | 2",
-      "Giant Ferris Wheel | On the end of the pier | 2",
-      "Pleasure Pier | Arcades and rides out to sea | 2",
-      "Mountain Temple | Ancient temple on the peak | 3",
-      "Clifftop Castle | A castle above the waves | 3",
-      "Harbour Town | Colourful houses round a harbour | 1",
-      "Stadium | A football stadium by the sea | 2",
-      "Space Launch Pad | Rocket launches from the beach | 3"
-    ]}
-  ]
+    {
+      "id": "stay",
+      "name": "Places to stay",
+      "slot": "parcel",
+      "emoji": "🏨",
+      "items": [
+        "Overwater Villas | Bungalows on stilts in the lagoon | 3",
+        "Beach Resort | Pools, palms and sea views | 2",
+        "Treehouse Hotel | Rooms in the jungle canopy | 2",
+        "Clifftop Villas | Infinity pools above the sea | 3",
+        "Glamping Domes | Stargazing domes on the hill | 1",
+        "Royal Palace Hotel | Grand palace on the beach | 3",
+        "Beach Huts | Colourful huts on the sand | 1",
+        "Eco Lodge | Timber lodges in the forest | 1"
+      ]
+    },
+    {
+      "id": "transport",
+      "name": "Getting there",
+      "slot": "parcel",
+      "emoji": "✈️",
+      "items": [
+        "International Airport | Runway and terminal | 3",
+        "Superyacht Marina | Berths for the big boats | 3",
+        "Seaplane Dock | Land right on the water | 2",
+        "Cable Car | Up to the island's peak | 2",
+        "Helipad Resort | Arrive by helicopter | 2",
+        "Ferry Port | Daily boats to the mainland | 1",
+        "Island Railway | A little coastal train | 1",
+        "Bridge to the Mainland | A long elegant bridge | 3"
+      ]
+    },
+    {
+      "id": "thrills",
+      "name": "Thrills",
+      "slot": "parcel",
+      "emoji": "🎢",
+      "items": [
+        "Theme Park | Rollercoasters and rides | 3",
+        "Water Park | Slides and wave pools | 3",
+        "Go-kart Track | Twisting island circuit | 1",
+        "Zip-line Canopy | Fly through the jungle | 1",
+        "Dive Centre & Wreck | Explore a sunken ship | 2",
+        "Surf School Beach | Perfect rolling waves | 1",
+        "Golf Course | Eighteen holes by the sea | 2",
+        "Formula Street Circuit | Race round the island | 3"
+      ]
+    },
+    {
+      "id": "nature",
+      "name": "Nature",
+      "slot": "parcel",
+      "emoji": "🌿",
+      "items": [
+        "Jungle Waterfall | A tall waterfall and plunge pool | 2",
+        "Turtle Sanctuary | Protected nesting beach | 1",
+        "Botanical Gardens | Exotic plants and glasshouses | 2",
+        "Rainforest Reserve | Untouched jungle trails | 1",
+        "Dolphin Bay | Wild dolphins every morning | 3",
+        "Flamingo Salt Lakes | Pink flocks on the flats | 2",
+        "Hot Springs | Steaming natural pools | 2",
+        "Hidden Cove | A secret beach in the cliffs | 1"
+      ]
+    },
+    {
+      "id": "night",
+      "name": "Food & nightlife",
+      "slot": "parcel",
+      "emoji": "🍹",
+      "items": [
+        "Beach Club | Daybeds, DJ and cocktails | 2",
+        "Harbour Restaurants | Seafood on the waterfront | 1",
+        "Floating Bar | A bar out on the water | 2",
+        "Night Market | Street food under lanterns | 1",
+        "Casino | Glittering and grand | 3",
+        "Open-air Cinema | Films on the beach | 1",
+        "Festival Stage | Headliners on the sand | 3",
+        "Rooftop Sky Bar | Cocktails above the island | 2"
+      ]
+    },
+    {
+      "id": "landmarks",
+      "name": "Landmarks",
+      "slot": "parcel",
+      "emoji": "🗼",
+      "items": [
+        "Observation Tower | Views of the whole island | 2",
+        "Giant Ferris Wheel | On the end of the pier | 2",
+        "Pleasure Pier | Arcades and rides out to sea | 2",
+        "Mountain Temple | Ancient temple on the peak | 3",
+        "Clifftop Castle | A castle above the waves | 3",
+        "Harbour Town | Colourful houses round a harbour | 1",
+        "Stadium | A football stadium by the sea | 2",
+        "Space Launch Pad | Rocket launches from the beach | 3"
+      ]
+    }
+  ],
+  "looks": {
+    "Extra Island": "a smaller green sister island just off the coast, linked by a white sandbar",
+    "Turtle Sanctuary": "a quiet beach with sea turtles on the sand and roped-off nesting areas",
+    "Island Railway": "a small coastal railway with a little train running along the shoreline",
+    "Zip-line Canopy": "zip line cables running over the jungle canopy between treetop platforms"
+  }
 }

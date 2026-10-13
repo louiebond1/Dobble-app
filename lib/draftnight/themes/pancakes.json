@@ -67,7 +67,7 @@
       "slot": "sprinkle",
       "emoji": "🥜",
       "items": [
-        "Crushed Oreos | Cookies-and-cream crunch | 2",
+        "Cookies & Cream Crumble | Crushed chocolate cookie crunch | 2",
         "Chocolate Chips | Little pockets of joy | 1",
         "Toasted Pecans | Buttery and nutty | 2",
         "Honeycomb Pieces | Shattering golden crunch | 3",
@@ -132,8 +132,16 @@
   ],
   "looks": {
     "Nutella": "a thick glossy swirl of chocolate hazelnut spread",
-    "Crushed Oreos": "crushed black chocolate sandwich cookies with white cream filling",
     "Lotus Biscoff Spread": "a drizzle of smooth caramelised spiced biscuit spread",
-    "Crumbled Biscoff": "crumbled golden caramelised spiced biscuits"
+    "Crumbled Biscoff": "crumbled golden caramelised spiced biscuits",
+    "Buckwheat Stack": "a stack of three dark brown speckled buckwheat pancakes",
+    "Lemon Ricotta Stack": "a stack of three fluffy pale golden pancakes with fresh lemon slices beside them",
+    "Golden Butter Crown": "a stack of golden pancakes topped with a melting square pat of butter",
+    "Flat White": "a white ceramic cup of flat white coffee with a leaf of latte art, on a saucer",
+    "Sparkler": "a lit sparkler fizzing with golden sparks, standing upright in a small pot of sugar",
+    "Honey": "runny golden honey with a wooden honey dipper resting in it",
+    "Golden Syrup": "golden pouring syrup in a small glass jug",
+    "Lemon Zest": "fine curls of bright yellow lemon zest beside half a lemon",
+    "Cookies & Cream Crumble": "crumbled dark chocolate biscuits with flecks of white cream"
   }
 }

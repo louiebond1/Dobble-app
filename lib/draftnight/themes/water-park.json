@@ -1,5 +1,10 @@
 {
-  "id": "water-park", "title": "Dream Water Park", "emoji": "🌊", "mode": "builder", "archetype": "site", "noun": "water park",
+  "id": "water-park",
+  "title": "Dream Water Park",
+  "emoji": "🌊",
+  "mode": "builder",
+  "archetype": "site",
+  "noun": "water park",
   "intro": "Everyone starts with the same park grounds. Each round adds a whole new attraction zone.",
   "base": "Water Park Grounds | Entrance, changing rooms and a starter pool",
   "upgrades": [
@@ -13,65 +18,109 @@
     "Grand Entrance Wave | A giant wave-shaped gateway | 1 | gateway"
   ],
   "categories": [
-    { "id": "slides", "name": "Big slides", "slot": "parcel", "emoji": "🛝", "items": [
-      "Slide Tower | Six slides from one huge tower | 3",
-      "Vertical Drop Slide | Trapdoor and freefall | 3",
-      "Loop Slide | Full upside-down loop | 3",
-      "Racing Mat Slides | Eight lanes, race your mates | 2",
-      "Tube Slide | Twisty enclosed tubes | 1",
-      "Body Slide | Open flume, pure speed | 1",
-      "Funnel Slide | Giant tornado funnel | 2",
-      "Bowl Slide | Spin round and drop through | 2"
-    ]},
-    { "id": "pools", "name": "Pools", "slot": "parcel", "emoji": "🏊", "items": [
-      "Giant Wave Pool | Metre-high waves | 3",
-      "Surf Machine | Endless rideable wave | 3",
-      "Lagoon Pool | Sandy edge and palm island | 2",
-      "Activity Pool | Rope swings and floating pads | 1",
-      "Infinity Edge Pool | Overlooks the whole park | 2",
-      "Diving Pool | Boards and platforms | 1",
-      "Swim-up Bar Pool | Drinks served right in the pool | 2",
-      "Hot Spring Pools | Warm terraced pools | 1"
-    ]},
-    { "id": "family", "name": "Family zone", "slot": "parcel", "emoji": "👨‍👩‍👧", "items": [
-      "Pirate Ship Splash Zone | Water cannons and tipping bucket | 3",
-      "Toddler Lagoon | Shallow water and mini slides | 1",
-      "Family Raft Slide | Six-person rafts | 2",
-      "Splash Fortress | Five storeys of soaking | 2",
-      "Water Playground | Fountains, jets and sprays | 1",
-      "Mini Lazy River | Gentle loop for little ones | 1",
-      "Turtle Beach | Shallow sandy paddling area | 1",
-      "Kids' Racer Slides | Little racing lanes | 2"
-    ]},
-    { "id": "thrill", "name": "Thrill rides", "slot": "parcel", "emoji": "🎢", "items": [
-      "Water Coaster | Uphill blasts and big drops | 3",
-      "Half-pipe Raft Ride | Swing up the wall | 2",
-      "Abyss Drop | Pitch-black tunnel drop | 3",
-      "Speed Boat Slide | Boat-shaped fast slide | 2",
-      "Cliff Jump Rocks | Leap into a deep pool | 2",
-      "Zip-line over Water | Fly across the park | 1",
-      "Skyrocket Slide | Steepest slide in the world | 3",
-      "Aqua Loop Twin | Two loop slides side by side | 2"
-    ]},
-    { "id": "river", "name": "Rivers & rapids", "slot": "parcel", "emoji": "🛶", "items": [
-      "Lazy River | A long gentle loop | 1",
-      "Adventure River | Waterfalls, caves and currents | 3",
-      "White-water Rapids | Rafts through the rapids | 3",
-      "Jungle River | Tunnels under tropical trees | 2",
-      "Tidal River | Waves that push you along | 2",
-      "Canyon Rafting | Through tall rocky walls | 2",
-      "Hot Tub River | A warm gentle loop | 1",
-      "Twin Rivers | Two rivers that cross over | 2"
-    ]},
-    { "id": "relax", "name": "Relax & refuel", "slot": "parcel", "emoji": "🌴", "items": [
-      "Beach Club | Sunbeds, DJ and cocktails | 2",
-      "Food Court | Pizza, burgers and ice cream | 1",
-      "Spa Terrace | Massage and hot tubs | 2",
-      "Treehouse Restaurant | Dine in the palms | 3",
-      "Sun Deck Lawn | Loungers and parasols | 1",
-      "Floating Cabanas | Private pods on the water | 3",
-      "Smoothie Shack | Fruit bar on the sand | 1",
-      "Rooftop Bar | Overlooks every slide | 2"
-    ]}
-  ]
+    {
+      "id": "slides",
+      "name": "Big slides",
+      "slot": "parcel",
+      "emoji": "🛝",
+      "items": [
+        "Slide Tower | Six slides from one huge tower | 3",
+        "Vertical Drop Slide | Trapdoor and freefall | 3",
+        "Loop Slide | Full upside-down loop | 3",
+        "Racing Mat Slides | Eight lanes, race your mates | 2",
+        "Tube Slide | Twisty enclosed tubes | 1",
+        "Body Slide | Open flume, pure speed | 1",
+        "Funnel Slide | Giant tornado funnel | 2",
+        "Bowl Slide | Spin round and drop through | 2"
+      ]
+    },
+    {
+      "id": "pools",
+      "name": "Pools",
+      "slot": "parcel",
+      "emoji": "🏊",
+      "items": [
+        "Giant Wave Pool | Metre-high waves | 3",
+        "Surf Machine | Endless rideable wave | 3",
+        "Lagoon Pool | Sandy edge and palm island | 2",
+        "Activity Pool | Rope swings and floating pads | 1",
+        "Infinity Edge Pool | Overlooks the whole park | 2",
+        "Diving Pool | Boards and platforms | 1",
+        "Swim-up Bar Pool | Drinks served right in the pool | 2",
+        "Hot Spring Pools | Warm terraced pools | 1"
+      ]
+    },
+    {
+      "id": "family",
+      "name": "Family zone",
+      "slot": "parcel",
+      "emoji": "👨‍👩‍👧",
+      "items": [
+        "Pirate Ship Splash Zone | Water cannons and tipping bucket | 3",
+        "Toddler Lagoon | Shallow water and mini slides | 1",
+        "Family Raft Slide | Six-person rafts | 2",
+        "Splash Fortress | Five storeys of soaking | 2",
+        "Water Playground | Fountains, jets and sprays | 1",
+        "Mini Lazy River | Gentle loop for little ones | 1",
+        "Turtle Beach | Shallow sandy paddling area | 1",
+        "Kids' Racer Slides | Little racing lanes | 2"
+      ]
+    },
+    {
+      "id": "thrill",
+      "name": "Thrill rides",
+      "slot": "parcel",
+      "emoji": "🎢",
+      "items": [
+        "Water Coaster | Uphill blasts and big drops | 3",
+        "Half-pipe Raft Ride | Swing up the wall | 2",
+        "Abyss Drop | Pitch-black tunnel drop | 3",
+        "Speed Boat Slide | Boat-shaped fast slide | 2",
+        "Cliff Jump Rocks | Leap into a deep pool | 2",
+        "Zip-line over Water | Fly across the park | 1",
+        "Skyrocket Slide | Steepest slide in the world | 3",
+        "Aqua Loop Twin | Two loop slides side by side | 2"
+      ]
+    },
+    {
+      "id": "river",
+      "name": "Rivers & rapids",
+      "slot": "parcel",
+      "emoji": "🛶",
+      "items": [
+        "Lazy River | A long gentle loop | 1",
+        "Adventure River | Waterfalls, caves and currents | 3",
+        "White-water Rapids | Rafts through the rapids | 3",
+        "Jungle River | Tunnels under tropical trees | 2",
+        "Tidal River | Waves that push you along | 2",
+        "Canyon Rafting | Through tall rocky walls | 2",
+        "Hot Tub River | A warm gentle loop | 1",
+        "Twin Rivers | Two rivers that cross over | 2"
+      ]
+    },
+    {
+      "id": "relax",
+      "name": "Relax & refuel",
+      "slot": "parcel",
+      "emoji": "🌴",
+      "items": [
+        "Beach Club | Sunbeds, DJ and cocktails | 2",
+        "Food Court | Pizza, burgers and ice cream | 1",
+        "Spa Terrace | Massage and hot tubs | 2",
+        "Treehouse Restaurant | Dine in the palms | 3",
+        "Sun Deck Lawn | Loungers and parasols | 1",
+        "Floating Cabanas | Private pods on the water | 3",
+        "Smoothie Shack | Fruit bar on the sand | 1",
+        "Rooftop Bar | Overlooks every slide | 2"
+      ]
+    }
+  ],
+  "looks": {
+    "Expanded Grounds": "a huge new area of pools, lawns and palm trees stretching into the distance",
+    "Grand Entrance Wave": "a giant sculpted arch shaped like a breaking wave over the entrance gates, smooth white and blue, plain surfaces",
+    "Food Court": "an outdoor food court with colourful kiosks, parasols and picnic tables",
+    "Turtle Beach": "a shallow sandy paddling beach with small fountains and rounded rocks",
+    "Zip-line over Water": "a zip line cable stretching over a large pool with a rider in mid air",
+    "Kids' Racer Slides": "four short side-by-side racing slides in bright colours ending in a shallow pool"
+  }
 }
