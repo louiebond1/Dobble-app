@@ -1,0 +1,92 @@
+{
+  "id": "pancakes", "title": "Pancakes", "emoji": "🥞", "mode": "builder", "archetype": "stack", "noun": "pancake stack",
+  "intro": "Win a stack of pancakes, then pile on the best toppings. Upgrade the stack itself any round.",
+  "bases": [
+    "Buttermilk Stack | Three fluffy golden pancakes",
+    "American Diner Stack | Thick, tall and buttery",
+    "Japanese Soufflé Pancakes | Tall, wobbly and light",
+    "Scotch Pancakes | A neat pile of little drop scones",
+    "Buckwheat Stack | Nutty, rustic and hearty",
+    "Lemon Ricotta Stack | Soft, tangy and delicate",
+    "Banana Pancakes | Sweet banana in the batter",
+    "Oat Pancakes | Wholesome and golden"
+  ],
+  "upgrades": [
+    "Taller Stack | Three more pancakes on top | 3 | height",
+    "Chocolate Batter | Rich cocoa pancakes | 2 | batter",
+    "Red Velvet Batter | Deep red and a hint of cocoa | 2 | batter",
+    "Blueberry Batter | Berries baked inside | 2 | batter",
+    "Golden Butter Crown | A melting butter pat on top | 1 | butter",
+    "Slate Serving Board | Restaurant-style presentation | 1 | plate",
+    "Gold-rim Plate | Fancy china | 1 | plate",
+    "Rainbow Layers | Every pancake a different colour | 3 | batter"
+  ],
+  "categories": [
+    { "id": "sauce", "name": "Sauces", "slot": "drizzle", "emoji": "🍯", "items": [
+      "Maple Syrup | Poured until it drips | 2",
+      "Salted Caramel | Glossy and golden | 3",
+      "Nutella | The chocolate-hazelnut classic | 3",
+      "Hot Fudge | Thick dark chocolate sauce | 2",
+      "Honey | Golden and sticky | 1",
+      "Lotus Biscoff Spread | Spiced caramel drizzle | 2",
+      "Berry Coulis | Bright red and tangy | 1",
+      "White Chocolate Sauce | Sweet and creamy | 2",
+      "Golden Syrup | Proper British pancake day | 1"
+    ]},
+    { "id": "fruit", "name": "Fruit", "slot": "fruit", "emoji": "🍓", "items": [
+      "Fresh Strawberries | Sliced and scattered | 2",
+      "Blueberries | Bursting and fresh | 1",
+      "Caramelised Banana | Golden and sticky | 3",
+      "Raspberries | Tart little jewels | 1",
+      "Mixed Berries | Strawberry, blueberry, raspberry | 3",
+      "Mango Slices | Tropical and juicy | 2",
+      "Cherries | Dark, glossy, stalks on | 2",
+      "Peach Slices | Summer on a plate | 1",
+      "Pomegranate Seeds | Ruby-red sparkle | 1"
+    ]},
+    { "id": "crunch", "name": "Crunch", "slot": "sprinkle", "emoji": "🥜", "items": [
+      "Crushed Oreos | Cookies-and-cream crunch | 2",
+      "Chocolate Chips | Little pockets of joy | 1",
+      "Toasted Pecans | Buttery and nutty | 2",
+      "Honeycomb Pieces | Shattering golden crunch | 3",
+      "Rainbow Sprinkles | Party time | 1",
+      "Crumbled Biscoff | Spiced biscuit crumbs | 2",
+      "Granola Clusters | Toasty oats and honey | 1",
+      "Pistachio Crumb | Green and fancy | 2",
+      "Mini Marshmallows | Soft and fluffy | 1"
+    ]},
+    { "id": "cream", "name": "Creamy tops", "slot": "crown", "emoji": "🍦", "items": [
+      "Whipped Cream | A cloud on top | 1",
+      "Vanilla Ice Cream | A melting scoop | 2",
+      "Clotted Cream | Thick Cornish dollop | 2",
+      "Chocolate Ice Cream | Rich double scoop | 2",
+      "Mascarpone | Silky Italian cream | 2",
+      "Toasted Meringue | Torched golden peaks | 3",
+      "Greek Yogurt | Tangy and thick | 1",
+      "Salted Caramel Gelato | Sweet, salty, melting | 3",
+      "Cream Cheese Frosting | Cheesecake vibes | 2"
+    ]},
+    { "id": "savoury", "name": "On the side", "slot": "side", "emoji": "🥓", "items": [
+      "Crispy Bacon | Sweet meets salty | 3",
+      "Fried Chicken | The famous chicken and pancakes | 3",
+      "Scrambled Eggs | Soft and buttery | 1",
+      "Breakfast Sausages | Little golden bangers | 2",
+      "Grilled Halloumi | Squeaky and salty | 2",
+      "Smoked Salmon | Elegant brunch | 2",
+      "Hash Browns | Crispy potato squares | 1",
+      "Fresh Orange Juice | A tall glass on the side | 1",
+      "Flat White | Coffee on the side | 1"
+    ]},
+    { "id": "flourish", "name": "Finishing touch", "slot": "garnish", "emoji": "✨", "items": [
+      "Icing Sugar Dusting | A snowy finish | 1",
+      "Fresh Mint | A pop of green | 1",
+      "Edible Gold Leaf | Pure showing off | 3",
+      "Edible Flowers | Pretty petals | 2",
+      "Lemon Zest | Bright and fresh | 1",
+      "Cinnamon Sugar | Warm and sweet | 1",
+      "Chocolate Shavings | Curls of dark chocolate | 2",
+      "Toasted Coconut | Golden flakes | 1",
+      "Sparkler | It's a celebration | 3"
+    ]}
+  ]
+}

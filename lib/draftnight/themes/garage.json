@@ -1,0 +1,66 @@
+{
+  "id": "garage", "title": "Dream Garage", "emoji": "🏎️", "mode": "drafter", "archetype": "collection", "noun": "car collection",
+  "intro": "Draft the best car collection. One car from each class, every round.",
+  "categories": [
+    { "id": "hyper", "name": "Hypercars", "slot": "card", "emoji": "🏁", "items": [
+      "Bugatti Chiron | 1,500 horsepower, 260 mph | 3",
+      "Koenigsegg Jesko | Swedish missile | 3",
+      "Pagani Huayra | Rolling sculpture | 3",
+      "McLaren P1 | Hybrid hypercar legend | 2",
+      "Ferrari LaFerrari | V12 hybrid flagship | 3",
+      "Porsche 918 Spyder | Plug-in record breaker | 1",
+      "Rimac Nevera | Electric and absurdly fast | 2",
+      "Aston Martin Valkyrie | Road-legal race car | 2"
+    ]},
+    { "id": "super", "name": "Supercars", "slot": "card", "emoji": "🔥", "items": [
+      "Lamborghini Huracán | Sharp, loud, Italian | 2",
+      "Ferrari 296 GTB | Modern Ferrari magic | 2",
+      "McLaren 750S | Light and ferocious | 2",
+      "Porsche 911 GT3 RS | Track weapon | 3",
+      "Audi R8 V10 | The everyday supercar | 1",
+      "Lamborghini Revuelto | V12 hybrid bull | 3",
+      "Mercedes-AMG GT Black Series | Huge wing, huge noise | 2",
+      "Chevrolet Corvette Z06 | American flat-plane V8 | 1"
+    ]},
+    { "id": "classic", "name": "Classics", "slot": "card", "emoji": "🕰️", "items": [
+      "Ferrari 250 GTO | The most valuable car ever | 3",
+      "Jaguar E-Type | The most beautiful car ever made | 3",
+      "Aston Martin DB5 | Bond's car | 2",
+      "Mercedes 300SL Gullwing | Doors like wings | 3",
+      "Ford GT40 | Le Mans winner | 2",
+      "Lamborghini Miura | The first supercar | 2",
+      "Porsche 356 Speedster | Pure and simple | 1",
+      "Ford Mustang 1967 | Classic muscle | 1"
+    ]},
+    { "id": "offroad", "name": "Off-road", "slot": "card", "emoji": "⛰️", "items": [
+      "Mercedes G-Wagon | Boxy and unstoppable | 2",
+      "Land Rover Defender | Go anywhere | 1",
+      "Ford F-150 Raptor | Desert-jumping pickup | 2",
+      "Rolls-Royce Cullinan | Luxury off the road | 3",
+      "Lamborghini Urus | Supercar SUV | 2",
+      "Jeep Wrangler | Doors off, roof off | 1",
+      "Toyota Land Cruiser | Lasts forever | 1",
+      "Porsche 911 Dakar | Rally-raised 911 | 3"
+    ]},
+    { "id": "electric", "name": "Electric", "slot": "card", "emoji": "⚡", "items": [
+      "Tesla Model S Plaid | Silent rocket | 2",
+      "Porsche Taycan Turbo S | Electric Porsche | 2",
+      "Lotus Evija | 2,000 hp electric | 3",
+      "Lucid Air Sapphire | Luxury electric saloon | 2",
+      "Rolls-Royce Spectre | Electric Rolls | 3",
+      "Audi e-tron GT | Sleek and quick | 1",
+      "Hyundai Ioniq 5 N | Fun electric hatch | 1",
+      "Mercedes EQS | Electric limousine | 1"
+    ]},
+    { "id": "icon", "name": "Icons", "slot": "card", "emoji": "⭐", "items": [
+      "DeLorean DMC-12 | Ready for 88 mph | 2",
+      "Batmobile Tumbler | The Dark Knight's tank | 3",
+      "Mini Cooper Classic | The Italian Job | 1",
+      "VW Camper Van | Endless summer | 1",
+      "Ford Model T | Where it all began | 1",
+      "Lamborghini Countach | The poster car | 3",
+      "Toyota Supra Mk4 | Tuner legend | 2",
+      "Nissan GT-R R34 | Godzilla | 2"
+    ]}
+  ]
+}

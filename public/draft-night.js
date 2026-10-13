@@ -444,11 +444,9 @@
       var el = document.querySelector('[data-world="' + i + '"]'); if (!el) return;
       var w = room.worlds[i] || { v: -1 }, img = el.querySelector('img');
       var noImages = w.state === 'none' || w.state === 'error' || (room.base && (room.base.state === 'none' || room.base.state === 'error') && w.v < 0);
-      // Show only the third-acquisition showcase and final image, not a misleading starter preview.
-      if (w.key && w.v >= 3 && !noImages) showImage(img, imgUrl(w.key));
-      else clearImage(img);
+      if (w.key && !noImages) showImage(img, imgUrl(w.key));
       var hasImg = img.classList.contains('on');
-      patch(el.querySelector('.ph'), hasImg ? '' : noImages ? '' : w.v < 3 ? inventory(i) : placeholder(i));
+      patch(el.querySelector('.ph'), hasImg ? '' : noImages ? '' : placeholder(i));
       var gain = a.phase === 'sold' && a.result && a.result.winner === i && room.lots[room.lot] && room.lots[room.lot].kind === 'add' ? '<div class="gain' + (a.rev ? ' dud' : '') + '">+ ' + esc(room.lots[room.lot].name) + '</div>' : '';
       // Items won since the last picture show straight away as chips; the server folds them into the picture in batches.
       var chipsHtml = hasImg && !noImages ? p.won.slice(Math.max(0, w.v)).filter(function (n) { return n !== p.base && room.lots[n]; }).map(function (n) {
@@ -636,7 +634,7 @@
     var showImg = !!w.key && w.state !== 'none' && w.v >= 0;
     var incomplete = showImg && w.v < p.won.length;
     var pending = w.state === 'updating' || w.state === 'retrying';
-    var status = incomplete ? 'Photo preview · ' + (pending ? 'making your final photo' : (w.error || 'final photo unavailable')) + '. All your purchases are listed below.' : pending ? worldStatus(i) : '';
+    var status = incomplete ? 'Photo preview · ' + (pending ? 'making your final photo' : (w.error || 'final photo unavailable')) + '. All your purchases are listed below.' : pending ? worldStatus(i) : w.note ? w.note + ' All your purchases are listed below.' : '';
     var alt = (incomplete ? 'Latest saved photo of ' : '') + p.name + '’s ' + t.noun;
     return '<div class="entry" style="--c:' + p.color + '" data-entry="' + i + '"><div class="canvas">' + (showImg ? '<img alt="' + esc(alt) + '" data-src="' + esc(imgUrl(w.key)) + '">' : inventory(i)) +
       '</div>' + (status ? '<div class="picture-note">' + esc(status) + '</div>' : '') +

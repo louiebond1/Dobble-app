@@ -55,8 +55,8 @@ function sandbox({ key = 'test-key', ai, image, cf, rev = '0', batch = '1', fall
 const flush = () => new Promise(r => setTimeout(r, 15));
 
 // Creates a room, joins everyone and starts it. Returns helpers bound to that room.
-async function setup(env, { theme = 'house', names = ['Ariel', 'Louie'], budget = 100, cpu = false, auctionCount } = {}) {
-  const made = await env.call('/api/create', { theme, name: names[0], capacity: names.length, budget, cpu, auctionCount });
+async function setup(env, { theme = 'house', names = ['Ariel', 'Louie'], budget = 100, cpu = false, auctionCount, badItems = false } = {}) {
+  const made = await env.call('/api/create', { theme, name: names[0], capacity: names.length, budget, cpu, auctionCount, badItems });
   assert.equal(made.status, 200, JSON.stringify(made.body));
   const seats = [made.body];
   for (const n of names.slice(1)) { if (cpu) break; const j = await env.call('/api/join', { code: made.body.code, name: n }); assert.equal(j.status, 200); seats.push(j.body); }
@@ -742,13 +742,16 @@ test('an incomplete final collection is repaired with bounded stronger generatio
   assert.equal(r.worlds[0].state, 'ready');
 });
 
-test('a final breakfast image with missing sardines or invented pancakes is rejected', async () => {
+test('a final breakfast image with missing sardines or invented pancakes is flagged, repaired once and never lost', async () => {
   const env=sandbox({check:()=>({complete:false,missing:['Sardines'],reason:'Invented pancakes; sardines missing'})});
   const g=await setup(env,{theme:'pancakes'}),r=g.room();
   r.players[0].won=[0,2,4,6,8];r.players[0].base=0;r.worlds[0].v=1;
   await env.qa.ensureWorld(r,0);await flush();await flush();
-  assert.equal(r.worlds[0].v,1,'neither incorrect image is published');
-  assert.equal(r.worlds[0].state,'error');
+  // The checker still rejects it and one repair is tried, but the picture is kept and labelled rather than thrown away.
+  assert.equal(r.worlds[0].v,5,'the best picture is kept');
+  assert.equal(r.worlds[0].state,'ready');
+  assert.match(r.worlds[0].note,/may not show clearly/);
+  assert.equal(env.calls.filter(c=>c.url.endsWith('9b')).length,1,'exactly one stronger repair');
   assert.equal(r.players[0].won.length,5,'all actual purchases remain in inventory');
   const check=env.calls.find(c=>c.url.endsWith('/chat/completions')&&JSON.parse(c.opts.body).response_format.json_schema.name==='creation_check');
   assert.match(JSON.parse(check.opts.body).messages[0].content,/Reject invented extras/);
@@ -922,7 +925,7 @@ test('random games with reverse auctions for 2 to 6 players always finish with e
   let revealed = 0, auto = 0;
   for (const theme of ['house', 'pancakes', 'garage']) for (let n = 2; n <= 6; n++) for (const count of [n * 5, Math.min(30, n * 5 + 1), Math.min(30, n * 4 + 3)]) {
     const env = sandbox({ key: '', rev: '0.2' });
-    const made = (await env.call('/api/create', { theme, name: 'P0', capacity: n, auctionCount: count, budget: [5, 20, 100][n % 3] })).body;
+    const made = (await env.call('/api/create', { theme, name: 'P0', capacity: n, auctionCount: count, budget: [5, 20, 100][n % 3], badItems: true })).body;
     const seats = [made];
     for (let i = 1; i < n; i++) seats.push((await env.call('/api/join', { code: made.code, name: 'P' + i })).body);
     await flush();
@@ -946,7 +949,7 @@ test('each addition is a dud with a 1 in 8 chance: about one per 8 additions, so
   const counts = [];
   for (let run = 0; run < 400; run++) {
     const env = sandbox({ key: '', rev: '0.125' });
-    const made = (await env.call('/api/create', { theme: 'pizza', name: 'A', capacity: 2, auctionCount: 10 })).body;
+    const made = (await env.call('/api/create', { theme: 'pizza', name: 'A', capacity: 2, auctionCount: 10, badItems: true })).body;
     await env.call('/api/join', { code: made.code, name: 'B' });
     await env.call('/api/action', { code: made.code, token: made.token, type: 'start' });
     const r = env.qa.rooms.get(made.code);
@@ -961,7 +964,7 @@ test('each addition is a dud with a 1 in 8 chance: about one per 8 additions, so
 test('two players finish with exactly 5, 6, 8 and 10 items from 10, 12, 16 and 20 auctions, duds included', async () => {
   for (const count of [10, 12, 16, 20]) for (let run = 0; run < 6; run++) {
     const env = sandbox({ key: '', rev: '0.2' });
-    const made = (await env.call('/api/create', { theme: 'house', name: 'Louie', capacity: 2, auctionCount: count, budget: run % 2 ? 5 : 50 })).body;
+    const made = (await env.call('/api/create', { theme: 'house', name: 'Louie', capacity: 2, auctionCount: count, budget: run % 2 ? 5 : 50, badItems: true })).body;
     const j = (await env.call('/api/join', { code: made.code, name: 'Mario' })).body;
     await flush();
     const seats = [made, j], code = made.code, room = () => env.qa.rooms.get(code);
@@ -975,7 +978,7 @@ test('two players finish with exactly 5, 6, 8 and 10 items from 10, 12, 16 and 2
 
 // Starts a 2+ player game whose lot `at` is turned into a reverse auction, and moves on to it.
 async function reverseAt(env, opts, at) {
-  const g = await setup(env, opts);
+  const g = await setup(env, { badItems: true, ...opts });
   const r = g.room();
   r.lots[at] = { ...r.lots[at], rev: true };
   let guard = 0;
@@ -1057,7 +1060,7 @@ test('reverse auction: missing bids count as £0 after 30 seconds, and players w
 
 test('reverse auction: only players who can still take the lot bid; one possible taker gets it with no bidding', async () => {
   const env = sandbox({ key: '' });
-  const g = await setup(env, { theme: 'pancakes', names: ['A', 'B'], budget: 50 });
+  const g = await setup(env, { theme: 'pancakes', names: ['A', 'B'], budget: 50, badItems: true });
   const r = g.room();
   r.lots = r.lots.map((l, i) => i >= 2 ? { ...l, rev: i >= 6 } : l);
   // A wins everything until full (5 of 10): the rest, duds included, can only go to B.
@@ -1077,7 +1080,7 @@ test('reverse auction: only players who can still take the lot bid; one possible
 test('reverse auction: the CPU places its own secret bids', async () => {
   // Force duds here: this tests CPU bidding, rather than whether a random deck contains a dud.
   const env = sandbox({ key: '', rev: '1' });
-  const g = await setup(env, { theme: 'garage', names: ['Solo'], cpu: true, budget: 40 });
+  const g = await setup(env, { theme: 'garage', names: ['Solo'], cpu: true, budget: 40, badItems: true });
   const r = g.room();
   let moves = 0, cpuBids = 0;
   while (r.status === 'playing') {
@@ -1103,7 +1106,7 @@ test('duds: typed themes get them from the AI, pictures are prepared in the lobb
   };
   const env = sandbox({ ai, rev: '1' });
   const t = (await env.call('/api/theme', { topic: 'Custom orchard estate', players: 2 })).body;
-  const made = (await env.call('/api/create', { theme: t.theme.id, name: 'A', capacity: 2, auctionCount: 12 })).body;
+  const made = (await env.call('/api/create', { theme: t.theme.id, name: 'A', capacity: 2, auctionCount: 12, badItems: true })).body;
   const j = (await env.call('/api/join', { code: made.code, name: 'B' })).body;
   const room = env.qa.rooms.get(made.code);
   await flush(); await flush();
@@ -1293,4 +1296,27 @@ test('client script parses and talks to the API', () => {
   const html = fs.readFileSync(path.join(__dirname, '../public/draft-night.html'), 'utf8');
   assert.ok(html.includes('/draft-night.js') && html.includes('/draft-night.css'));
   assert.ok(!html.includes('<iframe'), 'no longer an iframe wrapper');
+});
+
+test('standard games never include duds; thumbnails always name their subject', async () => {
+  for (let i = 0; i < 20; i++) {
+    const env = sandbox({ rev: '1' });
+    const g = await setup(env, { theme: 'house' });
+    assert.ok(g.room().lots.every(l => !l.rev), 'no reverse auctions without the bad items setting');
+  }
+  const env = sandbox(); await env.qa.ready;
+  const prompts = new Set();
+  for (const t of env.qa.PRESETS) for (const it of t.items) {
+    const p = env.qa.lotPrompt({ theme: t }, it, 'add');
+    assert.ok(!/^Clear photograph of an? as /.test(p), t.id + ': ' + it.name + ' keeps its subject');
+    if (!t.spatial) prompts.add(p);
+  }
+  assert.ok(prompts.size > 1000, 'distinct items get distinct thumbnail prompts');
+});
+
+test('custom theme planning is not charged to the game picture budget', async () => {
+  const env = sandbox(); await env.qa.ready;
+  env.qa.themes.set('t1', { ...env.qa.PRESETS.find(t => t.id === 'pancakes'), id: 't1', setupCost: 40000, created: Date.now() });
+  const made = await env.call('/api/create', { theme: 't1', name: 'A', capacity: 2 });
+  assert.equal(made.body.room.cost.used, 0);
 });

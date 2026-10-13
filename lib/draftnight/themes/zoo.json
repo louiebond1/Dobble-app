@@ -1,0 +1,77 @@
+{
+  "id": "zoo", "title": "Dream Zoo", "emoji": "🦒", "mode": "builder", "archetype": "site", "noun": "zoo",
+  "intro": "Everyone starts with the same zoo grounds. Each round fills a whole new area of your park.",
+  "base": "Zoo Grounds | Entrance plaza, visitor centre and main paths",
+  "upgrades": [
+    "Monorail Loop | Glide over every habitat | 3 | transit",
+    "Safari Train | A little train around the park | 2 | transit",
+    "Treetop Walkway | Rope bridges through the canopy | 2 | walkway",
+    "Grand Gateway | A carved stone entrance arch | 1 | gateway",
+    "Central Lake | Boardwalks and pedal boats | 2 | lake",
+    "Skyway Cable Car | Gondolas above the animals | 3 | skyway",
+    "Night Safari Lights | Lantern-lit evening tours | 1 | lighting",
+    "Expanded Grounds | Twice the land | 2 | land"
+  ],
+  "categories": [
+    { "id": "cats", "name": "Big cats", "slot": "parcel", "emoji": "🦁", "items": [
+      "Lion Pride Plains | A pride on golden grassland | 3",
+      "Tiger Forest | Tigers, stream and bamboo | 3",
+      "Snow Leopard Peaks | Rocky mountain enclosure | 2",
+      "Cheetah Run | A long sprint field | 2",
+      "Jaguar Rainforest | Pools and fallen trees | 2",
+      "Leopard Kopje | Rocks and acacia trees | 1",
+      "Lynx Woodland | Pine forest hideaway | 1",
+      "White Lion Valley | A rare white pride | 3"
+    ]},
+    { "id": "savannah", "name": "Savannah", "slot": "parcel", "emoji": "🦓", "items": [
+      "Giraffe Heights | A tall herd and feeding deck | 3",
+      "Elephant Valley | Herd, mud wallow and pool | 3",
+      "Zebra Plains | Stripes as far as you can see | 1",
+      "Rhino Reserve | White rhinos and a waterhole | 3",
+      "Hippo River | Underwater viewing window | 2",
+      "Ostrich Range | Big birds, big eggs | 1",
+      "Meerkat Mound | Sentries on every rock | 1",
+      "Mixed Safari Plain | Giraffe, zebra and antelope together | 2"
+    ]},
+    { "id": "primates", "name": "Primates", "slot": "parcel", "emoji": "🦍", "items": [
+      "Gorilla Kingdom | A silverback family in the forest | 3",
+      "Orangutan Islands | Ropes, trees and moats | 3",
+      "Chimpanzee Hill | Climbing towers and a stream | 2",
+      "Lemur Walk-through | Ring-tails all around you | 2",
+      "Gibbon Treetops | Singing apes on high ropes | 1",
+      "Baboon Rocks | A busy troop on the rocks | 1",
+      "Capuchin Grove | Clever little monkeys | 1",
+      "Snow Monkey Springs | Macaques in a hot pool | 2"
+    ]},
+    { "id": "polar", "name": "Polar & ocean", "slot": "parcel", "emoji": "🐧", "items": [
+      "Penguin Beach | Swimming pool and rocky shore | 2",
+      "Polar Bear Tundra | Deep pool and snowy rocks | 3",
+      "Sea Lion Bay | Splashy shows every hour | 2",
+      "Shark Reef Aquarium | Walk-through tunnel | 3",
+      "Otter Creek | Slides, logs and streams | 1",
+      "Seal Cove | Lazy seals on the rocks | 1",
+      "Arctic Wolf Woods | A pack in the pines | 2",
+      "Flamingo Lagoon | A flock in bright pink | 1"
+    ]},
+    { "id": "rainforest", "name": "Rainforest & reptiles", "slot": "parcel", "emoji": "🦜", "items": [
+      "Tropical Biodome | Giant glass rainforest dome | 3",
+      "Komodo Dragon Island | The world's biggest lizard | 2",
+      "Crocodile Swamp | Mangroves and big crocs | 2",
+      "Red Panda Bamboo Wood | Shy red pandas | 2",
+      "Giant Panda Garden | Black, white and bamboo | 3",
+      "Butterfly House | Thousands of butterflies | 1",
+      "Tortoise Meadow | Giant tortoises | 1",
+      "Parrot Aviary | A walk-in flock of macaws | 1"
+    ]},
+    { "id": "attractions", "name": "Attractions", "slot": "parcel", "emoji": "🎡", "items": [
+      "Safari Jeep Drive | Drive among the herds | 3",
+      "Petting Farm | Goats, sheep and ponies | 1",
+      "Adventure Playground | Animal-themed climbing frames | 1",
+      "Sea Lion Show Arena | Stadium seating by the pool | 2",
+      "Treetop Lodge Hotel | Sleep among the giraffes | 3",
+      "Bird of Prey Arena | Falcons and eagles in flight | 2",
+      "Jungle Restaurant | Dine overlooking the gorillas | 2",
+      "Zip-line Safari | Fly over the plains | 2"
+    ]}
+  ]
+}

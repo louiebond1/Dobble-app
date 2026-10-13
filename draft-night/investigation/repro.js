@@ -7,11 +7,12 @@ const words = k => Array.from({ length: k }, (_, i) => ['golden', 'syrup', 'driz
 const it = i => ({ name: 'Topping number ' + i, blurb: words(6), visual: words(22), weight: 5, replaces: null });
 const planner = N => () => ({ status: 'ok', question: '', options: [], title: 'Dream Waffles', emoji: '🧇', kind: 'build', scope: 'object', noun: 'waffle plate', label: 'Topping', start_mode: 'auction', essentials: [], base_name: 'Empty plate', base_blurb: words(5), base_visual: words(15), scene: words(25), start_label: 'Base', bases: Array.from({ length: 8 }, (_, i) => ({ name: 'Base ' + i, blurb: words(6), visual: words(22) })), items: Array.from({ length: N }, (_, i) => it(i)), bad_items: Array.from({ length: 8 }, (_, i) => ({ ...it(100 + i), name: 'Dud ' + i })) });
 const finalOk = r => r.worlds.filter((w, p) => w.v >= r.players[p].won.length && w.state === 'ready').length;
+const flagged = r => r.worlds.filter(w => w.note).length;
 (async () => {
   if (what === 'pictures' || what === 'all') for (const ver of ['live', 'head']) for (const checkFail of [0, 0.5]) for (const theme of ['house', 'pancakes', 'zoo']) for (const n of [2, 3, 4]) {
-    let ok = 0, all = 0, cost = 0;
-    for (let g = 0; g < G; g++) { const r = await play(sandbox(vers[ver], { checkFailFirst: checkFail }), { theme, n }); ok += finalOk(r); all += n; cost += r.cost.used; }
-    console.log(`pictures ${ver} vision-reject=${checkFail} ${theme} ${n}p: complete final pictures ${ok}/${all}, mean game AI spend $${(cost / G / 1e6).toFixed(4)} of $0.058`);
+    let ok = 0, all = 0, cost = 0, fl = 0;
+    for (let g = 0; g < G; g++) { const r = await play(sandbox(vers[ver], { checkFailFirst: checkFail }), { theme, n }); ok += finalOk(r); fl += flagged(r); all += n; cost += r.cost.used; }
+    console.log(`pictures ${ver} vision-reject=${checkFail} ${theme} ${n}p: final pictures shown ${ok}/${all} (${fl} labelled as possibly incomplete), mean game AI spend $${(cost / G / 1e6).toFixed(4)} of $0.058`);
   }
   if (what === 'custom' || what === 'all') for (const ver of ['live', 'head']) for (const n of [2, 4, 6]) {
     const N = Math.min(6, Math.max(4, n)) * 5 + 4; let ok = 0, all = 0, setup = 0, comp = 0;

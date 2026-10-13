@@ -3425,6 +3425,9 @@ app.get('/api/dates/history', (req, res) => {
   res.json({ entries: datesLog.slice().reverse(), stats: datesStats(), categories: DATE_CATEGORIES });
 });
 
+// Draft Night v2 (market rounds and composited creations). The old Railway-function version stays at /draft-night.html.
+require('./lib/draftnight/routes').draftNight(app);
+
 app.use(express.static(path.join(__dirname, 'public')));
 
 server.listen(PORT, () => {

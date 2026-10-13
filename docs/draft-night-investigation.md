@@ -344,12 +344,14 @@ Automated tests are simulation or unit tests run in CI. Manual tests are a human
 
 ---
 
-## Decisions I need from you
+## Decisions (answered 13 October)
 
-1. **Does the starting base count as one of the five?** For example, in a 3-player house game, is it "1 house + 5 additions" (18 allocations) or "1 house + 4 additions" (15)? Your brief can be read either way, and the code currently does the second.
-2. **Art direction.** Are you open to a stylised isometric look if it is exact and instant, or must it be photoreal? I recommend deciding after the Phase 2 spike.
-3. **Approval to spend** about $5 on the Phase 2 visual spike, and whether to move Cloudflare to the paid plan.
-4. **Catalogue size.** Are you comfortable cutting from 250 templated ideas to about 35 curated themes plus custom themes?
+1. **The base does not count as one of the items.** It can be upgraded throughout the game: every round's market includes one upgrade to the base.
+2. **A stylised look is acceptable** if it is exact and instant.
+3. **Spending approved** for the visual trial (about $5). Cloudflare has already moved to the paid plan.
+4. **Cut the catalogue** to about 35 curated themes plus custom themes.
+
+Progress against the plan is recorded in `docs/draft-night-v2.md`.
 
 ## Reproducing the measurements
 
@@ -361,6 +363,6 @@ node draft-night/investigation/repro.js allocation 6
 node draft-night/investigation/repro.js prompts
 ```
 
-"Live" means commit `2951e95` (what Railway was running on 12 October). "Head" means the working tree. No network or paid calls are made.
+"Live" means commit `2951e95` (what Railway was running on 12 October). "Head" means the working tree. At the time of writing that was the staged code; it is now the live code plus the triage fixes in `docs/draft-night-v2.md`. No network or paid calls are made.
 
 Sources: [Cloudflare Workers AI pricing](https://developers.cloudflare.com/workers-ai/platform/pricing/), [BFL: FLUX.2 negative prompting](https://help.bfl.ai/articles/7734566352-does-flux-2-support-negative-prompting), [third-party image API price comparison (re-check before use)](https://intuitionlabs.ai/articles/ai-image-generation-pricing-google-openai).

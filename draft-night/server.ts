@@ -19,7 +19,7 @@ type Player = { name: string; color: string; budget: number; won: number[]; base
 type Entry = { p: number; a: number | null; why?: string };
 // elig: who may receive this lot. sealed: secret reverse-auction bids, never sent to other players before the reveal.
 type Auction = { bid: number; leader: number | null; turn: number | null; passed: boolean[]; phase: 'bidding' | 'sealed' | 'sold' | 'unsold'; deadline: number; log: Entry[]; result: { winner: number | null; price: number; note: string; bids?: Entry[] } | null; rev: boolean; elig: boolean[]; sealed: Array<number | null> };
-type World = { v: number; state: string; busy: boolean; tries: number; error?: string };
+type World = { v: number; state: string; busy: boolean; tries: number; note?: string };
 type Room = {
   cost: Cost; code: string; rev: number; created: number; auctionCount: number; listed: boolean; notice: string; sig?: string; status: 'lobby' | 'playing' | 'finished'; theme: Theme; budget: number; capacity: number; cpu: boolean; badItems: boolean;
   players: Player[]; tokens: string[]; deckBases: Item[]; deckAdds: Item[]; deckBad: Item[]; lots: Lot[]; lot: number; auction: Auction;
@@ -388,7 +388,7 @@ function schedule(r: Room) {
 // Each addition has a 1 in 8 chance (DRAFT_REVERSE_SHARE) of being a dud, so some games have none and some two or more.
 // Decided once per addition and remembered, so the lobby's picture prefetch and the game agree. Starting options never are.
 function revCount(r: Room, adds: number) {
-  if (!r.badItems) return 0;
+  if (!r.badItems) return 0; // duds are an opt-in mode, never part of the standard game
   for (; r.revFor < adds; r.revFor++) if (Math.random() < REV_SHARE) r.revK++;
   return Math.min(r.deckBad.length, r.revK);
 }
@@ -442,19 +442,15 @@ function lotPrompt(r: Room, it: Item, kind: string) {
   if (t.spatial) return `${t.scene}. ${kind === 'base' ? 'Show the whole undeveloped starting landscape' : 'Show this full-size development in its natural outdoor setting'}: ${it.visual}. Real aerial drone photography, with all land and structures at realistic scale. Depict the actual place itself, never a printed photograph, tabletop, tray, miniature, model or collage. ${kind === 'base' ? 'No resorts, roads or attractions unless explicitly described; leave ample usable land for later purchases.' : 'Only the described development, no other attractions.'} Square framing. ${STYLE}`;
   if (kind === 'base' && t.mode === 'property') return `${t.scene}. The property is ${it.visual}. Show it exactly as described at its true real-world size, with nothing that is not described: no swimming pool, no hot tub, no cars, no extra buildings or grounds unless described. Square framing with the whole property visible. ${STYLE}`;
   if (kind === 'base') return `${t.scene}. Subject: ${it.visual}. Show it exactly as described, plain, with nothing added on or around it, leaving space for additions later. Square framing. ${STYLE}`;
-  return `Clear photograph of the exact auction purchase: ${it.name + '. Visual reference: ' + (it.pic || it.visual).replace(/^a clearly visible /i, 'a ').replace(/ (on|in|beside|across|over|into|outside|by|at|under|above|scattered|draped|layered|piled|replacing|parked|leaning|sitting|standing|strung|fitted|attached|added|clamped|mounted|squeezed)\b.*$/i, '')}. STRICT OBJECT IDENTITY: the auction item is ${it.name}. Depict precisely that object or fixture, matching the specified use and form. For non-food items, absolutely no apples, fruit, food, produce or substitute objects. A pot rack must be an actual hanging or mounted metal cookware rack, not a piece of fruit. A double oven must show an actual two-compartment oven, not a fruit. If uncertain, render the labelled object literally rather than choosing an unrelated stock image. Render one recognisable purchased item as a single isolated subject, centred and filling most of the frame, on a plain softly lit warm-grey background. Square framing. ${STYLE}`;
-}
-// Catalogue-wide spatial visual direction. This is a planning layer, not a purchased item.
-const VISUAL_GUIDES: Record<string,string> = {"zoo":"High drone view of an entire expansive zoo campus, with generous grounds, visible boundaries, pathways and separated habitat parcels. Each species has its own realistically sized secure habitat with suitable climate and terrain. Large new habitats claim new parcels; transport paths connect them. Never cram multiple species into one pen. Widen aerial framing if needed.","island":"High aerial of the entire island including coastline and sea. New resorts, airports, roads and attractions are real full-scale developments in separate geographic zones; connect infrastructure sensibly and preserve bays, beaches and landform. Widen frame for growth.","city":"Regional high aerial of a realistic urban district network. Homes and streets connect; stadiums, airports, parks and transport systems occupy appropriately sized plots. Expansion adds districts without destroying roads. Preserve river, coast or mountain geography.","theme-park":"Large aerial masterplan with entrance, pedestrian circulation, expansion parcels and separate full-size ride footprints. Coasters need extensive tracks and safe clearances. New attractions occupy distinct zones; connect walkways; widen shot for major expansion.","water-park":"Broad overhead aerial of pools and slide towers with separate, safety-spaced attractions, walkways and water systems. Pools and slides are full-scale. Adding a giant slide complex extends park boundaries rather than shrinking other attractions.","garden":"Medium elevated overhead of the entire garden with plot boundaries and clear zones. Start modest; pergolas, pools and courts must fit their true footprint. If a major expansion is acquired, extend grounds and widen framing, retaining old features.","house":"Elevated three-quarter drone of exact purchased house type and full plot. Keep original architecture for additions; only a specifically purchased replacement or mansion upgrade may transform the principal building and increase land. Retain prior compatible additions, move them sensibly and widen shot.","bedroom":"Wide corner interior photograph showing the complete bedroom. Keep bed and storage functional. Replace basic furniture when upgraded; physically rearrange furniture for large purchases. A suite-sized expansion requires wider framing, not miniature furniture.","living-room":"Wide interior photograph at human scale of seating, windows and floor. Keep one coherent primary seating arrangement, replace rather than duplicate exclusive sofas, and reconfigure furniture to make space.","kitchen":"Wide interior of realistic kitchen cabinetry, functional cooker, sink, fridge and walkways. Upgrade appliances in their existing positions; island or pantry purchases use actual floor space and maintain circulation.","bathroom":"Wide interior showing usable toilet, basin and shower. Baths, sauna and extra facilities must fit without overlap; upgrades replace the matching fixture in its original location.","resort":"High oblique aerial across extensive resort grounds. Accommodation zones, leisure facilities and transport paths use separate real-size plots with coastal or mountain geography retained.","airport":"Very high aerial of whole airport site. Maintain runway-taxiway-apron-terminal connections and safety separations. New runways and terminals expand the footprint without breaking the original runway network.","hotel":"High aerial or raised property view showing the full hotel and grounds. Extra wings, pools and sports facilities fit into linked plots; major hotel expansion widens site and camera while retaining old facilities.","restaurant":"Wide restaurant room with connected kitchen and tables. Kitchen upgrades replace equipment; terraces and additional dining rooms expand the building or framing rather than overlapping tables.","cafe":"Human-scale wide interior featuring café counter, brewing station and seating. Layout moves to accommodate extra tables or garden terrace, preserving clear service flow.","bakery":"Warm wide interior showing functioning ovens, counter, working space and display. Purchase additions fill shelves, machinery and service zones rather than random piles.","bar":"Wide bar interior focused on service counter, seating and atmosphere. The bar, cellar and stage occupy clear functional zones, with upgrades replacing matching fixtures.","office":"Wide corner office interior with working desk, chair and computer. Meeting zones or multiple workstations expand the space and reconfigure furniture realistically.","gym":"Wide elevated room showing workout areas and safe clearances between machines. Additional courts or swimming pools require significant expansion and a wider view.","studio":"Wide artist studio interior with worktable and tools, generous working floor. Add equipment in work zones; expand to attached spaces for large installations.","space-base":"Large cinematic exterior aerial showing a functioning sealed base with airlocks, life support and connected modules. Added domes and landing pads connect to access or utility networks; terrain remains consistent.","campsite":"High aerial across a genuine campsite with individual pitches, sanitary facilities and clear footpaths. Add cabins and amenities on separate sites and expand land when necessary.","sports-complex":"High aerial of whole sports campus, not one court. Keep reception and usable starter court; additional fields, pools and arenas require distinct full-size footprints and paths.","festival":"High aerial of festival grounds with stage, crowd space, access roads and sanitation. New stages and camping areas occupy separate zones with safe circulation and progressively wider views.","arcade":"Wide interior of real arcade cabinets at human scale with accessible aisles. Machines go in rows or gaming zones; large attractions expand the venue.","museum":"Wide oblique building/campus view or interior gallery layout as appropriate; exhibits belong in distinct galleries. Extensions connect to hallways; do not merge unrelated exhibitions into one display case.","yacht":"Raised three-quarter full-length maritime photograph. Preserve hull type and deck geometry, upgrade deck facilities in plausible positions; a purchased larger vessel requires deliberate full vessel transformation, not glued-on sections.","supercar":"Raised three-quarter whole-vehicle automotive photo. Upgrades modify this same car; replace wheel, seat, paint and body variants rather than spawning extra cars or changing body shape without a relevant purchase.","aquarium":"Wide interior overview of multiple actual water-filled exhibit tanks with clear visitor walkways. Separate marine species by environment, expand exhibition halls for giant tanks, avoid portraying the whole site as an outdoor pond.","cinema":"Wide interior from rear or elevated side showing screen, seating and projection. Replace the main screen or seating when upgraded. Extra screening rooms require expansion, not several screens piled in one room.","breakfast-plate":"Close overhead or slight angle of one real plate. Each purchased edible food is distinct, realistic-sized and on the plate; do not invent extra ingredients.","dessert-buffet":"Eye-level three-quarter wide photograph of a long real buffet counter. Purchased desserts occupy separate serving platters, and counter length increases to fit more.","bookshop":"Wide bookshop interior with bookshelves, counter and walkable aisles. Reading spaces and café additions use distinct zones and can expand floor area.","golf-course":"Very high aerial of an entire playable golf landscape with fairways, greens, tees and clubhouse. New hazards and facilities fit onto individual holes, extra holes expand course land.","pancakes":"Close food photo of one pancake stack and whole plate. Bought toppings sit directly on pancakes with readable layers; keep original stack, never create unrelated objects.","burger":"Close restaurant product photograph side-on showing a single burger and distinct ordered layers. All purchased ingredients fit within one bun; no unrelated food.","pizza":"Direct overhead photo of entire pizza. Purchased toppings are spread across this pizza, not arranged as separate plates or extra pizzas.","gaming":"Wide interior of a single actual gaming station with connected screen, console or PC, desk and seating. Upgrades replace equipment and cables remain plausible.","garage":"Wide three-quarter interior/forecourt composition showing all purchased full-size cars separately. Never miniaturise or merge vehicles; expand parking/garage footprint as collection grows."};
-function spatialDirection(t: Theme): string {
-  const key = (t as any).pool || t.id;
-  const guide = VISUAL_GUIDES[key] || '';
-  return guide ? 'VISUAL SPATIAL PLAN: ' + guide + ' Theme-specific setting: ' + t.title + '. Never invent unpurchased features.' : '';
+  const src = it.pic || it.visual;
+  // Catalogue pictures are "a clearly visible <name>" with no placement to trim; cutting at "clearly" left just "a".
+  const subject = /^an? clearly visible /i.test(src) ? src.replace(/^an? clearly visible /i, 'a ') : src.replace(/ (on|in|beside|across|over|into|outside|by|at|under|above|scattered|draped|layered|piled|replacing|parked|leaning|sitting|standing|strung|fitted|attached|added|clamped|mounted|squeezed)\b.*$/i, '');
+  return `Clear photograph of ${subject || it.name} as a single isolated subject, centred and filling most of the frame, on a plain softly lit warm-grey background. Square framing. ${STYLE}`;
 }
 function basePrompt(r: Room) {
   const t = r.theme;
-  if (t.spatial) return lotPrompt(r, t.base!, 'base') + ' ' + spatialDirection(t);
-  return `${t.scene}. ${spatialDirection(t)} Subject: ${t.base!.visual}. Show it plain and unembellished, exactly as described, with clear space around and on it so additions can be placed later. Square framing. ${STYLE}`;
+  if (t.spatial) return lotPrompt(r, t.base!, 'base');
+  return `${t.scene}. Subject: ${t.base!.visual}. Show it plain and unembellished, exactly as described, with clear space around and on it so additions can be placed later. Square framing. ${STYLE}`;
 }
 const LUXURIES = ['swimming pool', 'hot tub', 'supercar', 'tennis court', 'helicopter', 'extra storeys', 'larger garden or extra land', 'outbuildings'];
 function essentialRules(r: Room, p: number, to: number): string {
@@ -466,7 +462,6 @@ function essentialRules(r: Room, p: number, to: number): string {
 }
 function worldPrompt(r: Room, p: number, from: number, to: number, withRef = false) {
   const t = r.theme, pl = r.players[p];
-  const spatialPlan = spatialDirection(t);
   const acq = pl.won.map(i => r.lots[i]);
   const adds = acq.filter(x => x.kind === 'add');
   const collection = t.mode === 'collection';
@@ -485,8 +480,8 @@ function worldPrompt(r: Room, p: number, from: number, to: number, withRef = fal
     forbid = `Show each new item at its true real-world size next to the house; it must not cover, overlap or replace any part of the house. Do not enlarge the house or its plot and do not change its architecture. Do not add: ${missing.join(', ')}, or any other feature that is not listed above.`;
   } else if (t.mode === 'build') forbid = `Do not add any other toppings, ingredients, accessories or objects. Keep the ${t.noun} the same size and shape.`;
   else forbid = `The complete collection contains exactly ${fresh.length} purchased additions. Show EVERY listed addition as a separate, recognisable item, including every vehicle; do not merge, substitute or omit any. Arrange the collection side by side or in distinct rows appropriate to the subject, with enough space and widen the view as needed to show every member. Keep the original setting, style and lighting. Vehicles must all be full-size with plausible proportions, never miniature or toy-sized. If the garage is small, use its forecourt or extend the visible parking area in the same architectural style rather than shrinking, overlapping or hiding cars. Do not invent additional items.`;
-  if (collection) return `${spatialPlan} Use this original starting photograph of ${baseName} as the architectural reference. Original base description: ${hasBases(t) ? acq[0]?.visual : t.base?.visual}. Rebuild the complete collection from this inventory, not from an earlier partial picture:\n${lines}\n${forbid} ${STYLE}`;
-  return `${spatialPlan} Use this ORIGINAL CLEAN STARTING photograph of a ${t.mode === 'property' ? baseName.toLowerCase() : t.noun} (${baseName}). Preserve the original base identity, camera, setting and lighting. Original base description: ${hasBases(t) ? acq[0]?.visual : t.base?.visual}. Rebuild from the complete inventory below. Every listed purchase, including duds, must be visible. Do not invent related ingredients: maple syrup does not imply pancakes, and an empty plate stays an empty plate unless food was purchased. No unlisted foods, cars or attractions. ${keep}\nAdd ONLY the following purchased item${fresh.length > 1 ? 's' : ''}, each clearly recognisable and naturally placed:\n${lines}\n${forbid} ${withRef ? 'The second image is a reference photo of the purchased item: reproduce that item, not its background.' : ''} ${STYLE}`.trim();
+  if (collection) return `Use this original starting photograph of ${baseName} as the architectural reference. Original base description: ${hasBases(t) ? acq[0]?.visual : t.base?.visual}. Rebuild the complete collection from this inventory, not from an earlier partial picture:\n${lines}\n${forbid} ${STYLE}`;
+  return `Use this ORIGINAL CLEAN STARTING photograph of a ${t.mode === 'property' ? baseName.toLowerCase() : t.noun} (${baseName}). Preserve the original base identity, camera, setting and lighting. Original base description: ${hasBases(t) ? acq[0]?.visual : t.base?.visual}. Rebuild from the complete inventory below. Every listed purchase, including duds, must be visible. Do not invent related ingredients: maple syrup does not imply pancakes, and an empty plate stays an empty plate unless food was purchased. No unlisted foods, cars or attractions. ${keep}\nAdd ONLY the following purchased item${fresh.length > 1 ? 's' : ''}, each clearly recognisable and naturally placed:\n${lines}\n${forbid} ${withRef ? 'The second image is a reference photo of the purchased item: reproduce that item, not its background.' : ''} ${STYLE}`.trim();
 }
 async function openaiImage(prompt: string, refs: Uint8Array[], quality: string): Promise<Uint8Array> {
   const key = Bun.env.OPENAI_API_KEY; if (!key) throw Error('No image key');
@@ -665,10 +660,7 @@ async function ensureWorld(r: Room, p: number) {
   if (w.v < (property ? 1 : 0) || w.v >= target) { if (w.v >= target) w.state = 'ready'; return; }
   // Batch consecutive wins into one edit; the owned-item list is still updated immediately.
   const completed = r.status === 'finished' || target >= quota(r).hi;
-  // Only commission two showcase renders: after the third acquisition, and at the final reveal.
-  // Early base and auction images remain available for gameplay, but no intermediate world edits are billed.
-  if (!completed && target < 3) { w.state = 'ready'; return; }
-  if (!completed && w.v >= 3) { w.state = 'ready'; return; }
+  if (target > w.v && !completed && target - w.v < WORLD_BATCH) { w.state = 'ready'; return; }
   w.busy = true; w.state = 'updating'; bump(r);
   const from = w.v;
   enqueue(-1, async () => {
@@ -682,39 +674,32 @@ async function ensureWorld(r: Room, p: number) {
       if (ITEM_REFERENCE && lotRef && target - from === 1) refs.push(lotRef);
       let prompt = worldPrompt(r, p, from, target, refs.length > 1);
       if (completed) prompt = await compose(r, prompt);
-      // Showcase renders use Cloudflare's higher-quality 9B model under the existing spend ceiling.
-      // If Cloudflare isn't configured, retain the guarded standard image provider.
-      const premium = Boolean(CF_ACCOUNT && CF_TOKEN);
-      let out: Uint8Array;
-      if (premium) {
-        await spend();
-        try { out = await paidFallback(prompt, refs, WORLD_Q, r.cost); }
-        catch (e) { await refund(); throw e; }
-      } else out = await makeImage(prompt, refs, WORLD_Q, r.cost);
-      // Final collections are checked against the actual inventory, not trusted just because generation succeeded.
+      let out = await makeImage(prompt, refs, WORLD_Q, r.cost);
+      // Final collections are checked against the actual inventory and get one stronger repair if something is missing.
+      // A generated picture is never thrown away: if the repair or a check cannot run or still fails, the best picture is
+      // kept and labelled, because no picture at all was the worst outcome players saw.
+      w.note = undefined;
       if (completed && Bun.env.OPENAI_API_KEY) {
-        const checked = await checkCollection(r, p, target, out);
-        if (!checked.complete || checked.extras?.length) {
-          if (env('DRAFT_ALLOW_PAID_FALLBACK', '1') !== '1') throw Error('Creation picture incomplete: ' + checked.reason);
-          await spend();
-          try { out = await paidFallback(prompt + '\nCorrect these defects from the rejected draft: ' + checked.reason + '. Missing purchases: ' + checked.missing.join(', '), refs, env('DRAFT_FALLBACK_WORLD_QUALITY', 'medium'), r.cost); }
-          catch (e) { await refund(); throw e; }
-          const verified = await checkCollection(r, p, target, out);
-          if (!verified.complete || verified.extras?.length) throw Error('Creation picture incomplete after fallback: ' + verified.reason);
-        }
+        try {
+          const checked = await checkCollection(r, p, target, out);
+          if (!checked.complete || checked.extras?.length) {
+            w.note = 'Some purchases may not show clearly in this picture.';
+            if (env('DRAFT_ALLOW_PAID_FALLBACK', '1') === '1') {
+              await spend();
+              let fixed: Uint8Array | null = null;
+              try { fixed = await paidFallback(prompt + '\nCorrect these defects from the rejected draft: ' + checked.reason + '. Missing purchases: ' + checked.missing.join(', '), refs, env('DRAFT_FALLBACK_WORLD_QUALITY', 'medium'), r.cost); }
+              catch (e) { await refund(); console.error('Repair failed, keeping first picture', String(e)); }
+              if (fixed) { out = fixed; const verified = await checkCollection(r, p, target, out); if (verified.complete && !verified.extras?.length) w.note = undefined; }
+            }
+          }
+        } catch (e) { console.error('Picture check unavailable, keeping picture', String(e)); }
       }
       images.set(imgKey(r, worldKey(r, p, target)), out);
       if (target > w.v) w.v = target;
-      w.state = 'ready'; w.tries = 0; w.error = undefined;
+      w.state = 'ready'; w.tries = 0;
     } catch (e) {
-      w.tries++;
-      const reason = String(e);
-      const blocked = outOfCredit(r, e) || /Game AI budget reached|Unpriced/.test(reason);
-      // A failed visual inventory check can be transient. Allow two bounded retries
-      // instead of permanently accepting a photograph with missing purchases.
-      w.state = blocked || w.tries >= 3 ? 'error' : 'retrying';
-      w.error = blocked ? (r.imageError || 'Image budget or provider unavailable') : /Creation picture incomplete/.test(reason) ? 'The image missed one or more purchases' : 'Image generation failed';
-      console.error('World image failed', reason);
+      w.tries++; w.state = w.tries > 2 || outOfCredit(r, e) || /Creation picture incomplete|Game AI budget reached|Unpriced/.test(String(e)) ? 'error' : 'retrying';
+      console.error('World image failed', String(e));
     } finally {
       w.busy = false; bump(r);
       if (w.state === 'retrying') setTimeout(() => void ensureWorld(r, p), 4000);
@@ -849,7 +834,7 @@ function view(r: Room, me = -1) {
     lot: r.lot, total: r.status === 'lobby' ? r.auctionCount : r.lots.length,
     // Secret bids: everyone sees who has locked one in, but only their own amount until the reveal.
     auction: { giveTo: a.turn === null ? null : giftTarget(r, a.turn), bid: a.bid, leader: a.leader, turn: a.turn, passed: a.passed, phase: a.phase, deadline: a.deadline, log: a.log.slice(-6), result: a.result, rev: a.rev, elig: a.elig, sealed: a.sealed.map(x => x !== null), mine: a.sealed[me] ?? null },
-    worlds: r.worlds.map((w, p) => ({ v: w.v, state: w.state, error: w.error, key: worldKey(r, p, w.v) })),
+    worlds: r.worlds.map((w, p) => ({ v: w.v, state: w.state, note: w.note, key: worldKey(r, p, w.v) })),
     base: { state: r.baseImg }, prep: prep(r),
     history: r.history, verdict: r.verdict,
   };
@@ -943,7 +928,7 @@ async function handle(req: Request): Promise<Response> {
     const cpu = Boolean(body.cpu);
     const maxP = themeSummary(theme).maxPlayers;
     const r: Room = {
-      cost: newCost(theme.setupCost || 0), code: newCode(), rev: 1, created: clock(), status: 'lobby', theme, budget: clamp(Math.round(Number(body.budget) || 100), 5, 1000),
+      cost: newCost(), code: newCode(), rev: 1, created: clock(), status: 'lobby', theme, budget: clamp(Math.round(Number(body.budget) || 100), 5, 1000),
       capacity: cpu ? 2 : clamp(Math.round(Number(body.capacity) || 2), 2, maxP), auctionCount: 0, cpu, badItems: body.badItems === true, players: [], tokens: [], listed: !cpu && body.listed !== false, notice: '',
       deckBases: shuffle(theme.bases), deckAdds: weightedDeck(theme), deckBad: shuffle(theme.bad), lots: [], lot: 0,
       auction: { bid: 0, leader: null, turn: null, passed: [], phase: 'bidding', deadline: 0, log: [], result: null, rev: false, elig: [], sealed: [] },
