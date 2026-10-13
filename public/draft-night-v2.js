@@ -204,7 +204,7 @@
     var state = l.state === 'sold' ? playerName(l.winner) + ' · ' + money(l.price) : l.state === 'picked' ? playerName(l.winner) + ' · free' : l.state === 'unsold' ? 'Set aside' : l.state === 'left' ? 'Not taken' : live ? 'Up now' : '';
     var x = item(l.id);
     return '<button class="lot-card ' + l.state + (live ? ' live' : '') + (picking ? ' choosable' : '') + '"' + (picking ? ' data-pick="' + esc(l.id) + '"' : ' data-info="' + esc(l.id) + '"') + (l.winner != null ? ' style="--c:' + room.players[l.winner].color + '"' : '') + '>' +
-      '<span class="pic">' + picture(l.id) + '</span><span class="nm">' + esc(x.name) + '</span>' + (x.kind === 'upgrade' ? '<span class="kind">Upgrade</span>' : '') + '<span class="st">' + esc(state) + '</span></button>';
+      '<span class="pic">' + picture(l.id) + '</span><span class="nm">' + esc(x.name) + '</span>' + (x.kind === 'upgrade' ? '<span class="kind">' + esc(/^Replaces/.test(replacesNote(l.id)) ? replacesNote(l.id) : 'Upgrade') + '</span>' : '') + '<span class="st">' + esc(state) + '</span></button>';
   }
   // A warning when a lot would replace something you already own (a second batter, a bed upgrade).
   function replacesNote(id) {

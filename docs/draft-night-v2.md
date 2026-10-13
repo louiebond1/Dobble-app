@@ -26,15 +26,27 @@ The original game at `/draft-night.html` and its Railway function are untouched 
 - **Duds** are not part of v2.
 - **Voting.** At the end everyone votes for the best creation other than their own. A tie goes to the higher creation score (Showpiece 3, Great 2, Solid 1). If that is also tied, it is a draw. Money left never decides, because that would reward never bidding.
 
-## Pictures
+## Pictures: photographs only
 
-`layout.compose(theme, owned)` turns what a player owns into placed pieces: the base, one piece per category in its slot or parcel, and the latest upgrade per group. The page draws exactly that plan. With art, each piece is its picture. Without art, it is a labelled tile. Either way the creation is exactly what was bought, and every phone draws it instantly with no image generation during play.
+There are no emoji anywhere in the game. Every base, item, upgrade, theme cover and empty plot is a photograph from the library at `public/draft-night/art/<artKey>.jpg`: 640 × 640 JPEG, about 90 KB each. Photos are drawn once and reused by every game.
 
-Archetypes are `site` (zoo, water park, island), `plot` (house), `room` (bedroom), `stack` (pancakes) and `collection` (Drafter). A theme names its archetype and gives each category a slot. Adding a theme means writing data, not prompt rules.
+`layout.compose(theme, owned)` plans each creation exactly; the client places photos by that plan:
 
-Art lives at `public/draft-night/art/<artKey>.jpg`, for example `site/parcel/lion-pride-plains.jpg`. The server indexes it at start-up. `node scripts/draftnight-art.js --dry` lists all 417 assets for the seven themes with their prompts. A full draw is about $0.48 on klein 4B, or $6.25 on 9B, at published prices.
+- **Site** (zoo, water park, island) and **plot** (house): a 3 × 3 grid of photos. The base is in the centre and each purchase fills its own plot. Unbought plots show empty land (grass for the zoo, untouched jungle for the island, lawn for the house), so the board always reads as one whole place.
+- **Room** (bedroom) and **stack** (pancakes): the base photo is the board. Purchases are layered on top: framed photos in their part of the room, or round topping photos around the plate, with the side dish bottom right.
+- **Collection** (Drafter garage): one photo card per car.
+- **Upgrades** appear as a strip of photo badges under the board. A replaced upgrade (a second batter) is listed as "Replaced by …", and the lot card warns before you take it.
+- A photo that is still loading shows a neutral shimmer, never a symbol.
 
-**Not decided yet (needs the visual trial):** how pancake toppings and house upgrades are drawn *onto* the base. Either transparent cut-outs layered on the base, or one image edit per purchase. For now they appear as labelled tiles on the board.
+### How the library is made
+
+`lib/draftnight/photos.js` plans one prompt per photo (422 for the seven themes). Prompts are short and positive; FLUX.2 has no negative prompting. Rules that came out of reviewing real output:
+
+- Zoo habitats are shot from a low drone so the animals are large. From high up they were dots.
+- Gates and signs are described as "plain and unlabelled". One gateway came back with its name painted on it.
+- Brand names (Ferrari, Rolls-Royce, Nutella, Oreos…) are refused by Cloudflare's output filter, so those items carry a plain visual description, used automatically when the name is refused.
+
+The list is `draft-night/photo-jobs.json`. The Railway function `draft-night-photos` (in the `draft-night` project, with Cloudflare credentials referenced from `draft-night-web`) draws them on FLUX.2 klein 9B. `PHOTO_FROM`, `PHOTO_TO`, `PHOTO_STEP` or `PHOTO_KEYS` choose which. It shrinks each photo with sharp and prints it to its log in chunks; `draft-night/collect-photos.py` rebuilds the files and a contact sheet for review. The 9B price is about $0.015 per photo, so the full library costs about $6.
 
 ## Measured
 
@@ -50,6 +62,14 @@ Art lives at `public/draft-night/art/<artKey>.jpg`, for example `site/parcel/lio
 
   The value bidders took nearly every showpiece. Free choices are 50% of allocations with 2 players and 17% with 6, because the last player in each round chooses from the two lots left.
 - `draft-night/e2e/v2.mjs` played a complete two-phone house game in Chromium with no page errors: one home plus four items each, voting, and the final reveal on phone and wide layouts.
+- `test/draftnight-api.test.js` runs the real Express routes. It covers lobby, join, rejoin, full and started rooms, stale taps, voting, leaving and host hand-over, and a photo for every lot and board piece. It also checks the photo plan covers every picture with unique, negation-free prompts, and that every site or plot grid tile is drawn exactly once.
+- `draft-night/e2e/v2-matrix.mjs` has one browser per player across 17 games. It covers every theme, 2–6 players, a CPU game, and screens from 320 × 568 to 1920 × 1080. On every screen it checks:
+  - no page errors;
+  - no emoji;
+  - no raw markup;
+  - every photo loaded;
+  - no sideways scrolling;
+  - each final board matching that player's purchases.
 
 ## Triage applied to the original game (`draft-night/server.ts`, `public/draft-night.js`)
 
