@@ -79,7 +79,8 @@
     var p = room.players[i];
     return (p.base ? [p.base] : []).concat(p.items).map(function (id) {
       var h = room.history.filter(function (e) { return e.id === id; })[0];
-      return '<li><span class="mini">' + picture(id) + '</span><span class="nm">' + esc(item(id).name) + '</span><span class="num">' + (h ? (h.how === 'pick' ? 'Free pick' : money(h.price)) : '') + '</span></li>';
+      var by = p.layout.replaced && p.layout.replaced[id];
+      return '<li' + (by ? ' class="replaced"' : '') + '><span class="mini">' + picture(id) + '</span><span class="nm">' + esc(item(id).name) + (by ? '<small>Replaced by ' + esc(item(by).name) + '</small>' : '') + '</span><span class="num">' + (h ? (h.how === 'pick' ? 'Free pick' : money(h.price)) : '') + '</span></li>';
     }).join('');
   }
 

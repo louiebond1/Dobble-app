@@ -69,7 +69,8 @@ for (const run of RUNS.filter(r => !only || r.theme === only)) {
         placeholders: document.querySelectorAll('.board .ph, .lot-card .ph, .hero .ph, .ups .ph').length,
         overflow: document.documentElement.scrollWidth - window.innerWidth,
         // On the final reveal each purchase is a tile on the board or an upgrade badge beneath it.
-        boards: [...document.querySelectorAll('.entry')].map(e => e.querySelectorAll('.board .piece.item, .board .piece.card:not(.open), .ups .up').length),
+        // A replaced upgrade (a second batter) is listed as replaced rather than drawn, so it is counted from the list.
+        boards: [...document.querySelectorAll('.entry')].map(e => e.querySelectorAll('.board .piece.item, .board .piece.card:not(.open), .ups .up, .owned li.replaced').length),
       };
     });
     if (/(style|class|data-\w+)="|<\/?\w+[ >]/.test(r.text)) problems.push(`${label} player ${i}: raw markup on screen: ${r.text.match(/.{0,30}(style|class|data-\w+)=".{0,20}|.{0,20}<\/?\w+[ >].{0,20}/)[0]}`);

@@ -208,6 +208,7 @@ test('upgrades to the base come up every round, and a second upgrade of the same
   const t = byId('pancakes'), [choc, red] = t.upgrades.filter(u => u.group === 'batter');
   const plan = compose(t, { base: t.bases[0].id, items: [choc.id, t.categories[0].items[0].id, red.id] });
   assert.deepEqual(plan.pieces.filter(x => x.role === 'upgrade').map(x => x.id), [red.id]);
+  assert.deepEqual(plan.replaced, { [choc.id]: red.id }, 'the replaced batter is reported, not silently dropped');
   // A bed bought in the bed round replaces the basic bed rather than adding a second one.
   const b = byId('bedroom'), bed = b.categories.find(c => c.id === 'bed').items[0];
   assert.deepEqual(compose(b, { base: null, items: [bed.id] }).hidden, ['bed']);
