@@ -30,7 +30,7 @@
       "Activity Pool | Rope swings and floating pads | 1",
       "Infinity Edge Pool | Overlooks the whole park | 2",
       "Diving Pool | Boards and platforms | 1",
-      "Swim-up Bar Pool | Drinks without leaving the water | 2",
+      "Swim-up Bar Pool | Drinks served right in the pool | 2",
       "Hot Spring Pools | Warm terraced pools | 1"
     ]},
     { "id": "family", "name": "Family zone", "slot": "parcel", "emoji": "👨‍👩‍👧", "items": [

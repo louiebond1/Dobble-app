@@ -1,7 +1,7 @@
 {
   "id": "island", "title": "Dream Island", "emoji": "🏝️", "mode": "builder", "archetype": "site", "noun": "island",
   "intro": "Everyone starts with the same untouched tropical island. Each round develops a whole new part of it.",
-  "base": "Untouched Island | Beaches, jungle and open land, no buildings",
+  "base": "Untouched Island | Wild beaches, jungle and open land",
   "upgrades": [
     "Volcano Peak | A dormant volcano at the centre | 3 | landform",
     "Second Bay | A sheltered turquoise bay | 2 | bay",

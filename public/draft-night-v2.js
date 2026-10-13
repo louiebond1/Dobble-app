@@ -32,39 +32,47 @@
   function me() { return room ? room.me : -1; }
   function item(id) { return (room && room.items[id]) || { name: '?', blurb: '', tier: 2, kind: 'item' }; }
   function category(id) { return room.theme.categoryInfo.filter(function (c) { return c.id === id; })[0]; }
-  function emojiFor(id) {
-    var x = item(id);
-    if (x.kind === 'base') return room.theme.emoji;
-    if (x.kind === 'upgrade') return '⬆️';
-    var c = category(x.category); return c ? c.emoji : room.theme.emoji;
+  // Every picture is a photograph. A photo that has not loaded yet is a neutral tile, never a symbol.
+  function photo(url, cls) {
+    return url ? '<img class="' + (cls || '') + '" alt="" loading="lazy" src="' + esc(url) + '">' : '<span class="ph ' + (cls || '') + '" aria-hidden="true"></span>';
   }
-  function picture(id, cls) {
-    var url = room && room.art && room.art[id];
-    return url ? '<img class="' + (cls || '') + '" alt="" src="' + esc(url) + '">' : '<span class="em ' + (cls || '') + '">' + esc(emojiFor(id)) + '</span>';
-  }
+  function picture(id, cls) { return photo(room && room.art && room.art[id], cls); }
   function tierBadge(t) { return '<span class="tier t' + t + '">' + TIER[t] + '</span>'; }
   function secs(deadline) { return Math.max(0, Math.ceil((deadline - now()) / 1000)); }
   function playerName(i) { return i === me() ? 'You' : room.players[i].name; }
+  function rectStyle(r, z) { return 'left:' + r[0] * 100 + '%;top:' + r[1] * 100 + '%;width:' + r[2] * 100 + '%;height:' + r[3] * 100 + '%' + (z ? ';z-index:' + z : ''); }
 
   // ---------- a player's creation, drawn from the server's layout plan ----------
-  // Each piece has a normalised rect. With art, pieces are pictures placed in their rect. Without art yet, the same plan
-  // is drawn as labelled tiles, so the creation is always exactly what was bought.
+  // Every purchase is a photograph placed in its own part of the board, so the creation is exactly what was bought.
+  // Sites and plots are a grid of aerial photos around the base; rooms and dishes layer purchases on the base photo;
+  // Drafter collections are photo cards. Plots nobody has bought yet show empty land, so the board is always whole.
   function board(i, big) {
-    var p = room.players[i], t = room.theme, L = p.layout;
-    var hidden = L.hidden || [];
-    var pieces = L.pieces.map(function (x) {
-      var r = x.rect, st = 'left:' + r[0] * 100 + '%;top:' + r[1] * 100 + '%;width:' + r[2] * 100 + '%;height:' + r[3] * 100 + '%;z-index:' + x.z;
-      var art = room.art && room.art[x.id];
-      if (x.role === 'upgrade') return art ? '<img class="piece over" style="' + st + '" alt="" src="' + esc(art) + '">' : '';
-      if (t.archetype === 'stack' && x.role === 'item' && x.slot !== 'side' && !art) return '';
-      var label = item(x.id).name + (x.role === 'base' && hidden.length ? ' (upgraded)' : '');
-      return '<div class="piece ' + x.role + (art ? ' has-art' : '') + '" style="' + st + '">' + (art ? '<img alt="" src="' + esc(art) + '">' : '<span class="em">' + esc(emojiFor(x.id)) + '</span>' + (big ? '<b>' + esc(label) + '</b>' : '')) + '</div>';
-    }).join('');
-    // Toppings drawn as layers need art; until then they are listed on the dish. Upgrades without art are listed too.
-    var notes = L.pieces.filter(function (x) { return (x.role === 'upgrade' && !(room.art && room.art[x.id])) || (t.archetype === 'stack' && x.role === 'item' && x.slot !== 'side' && !(room.art && room.art[x.id])); })
-      .map(function (x) { return '<span>' + esc(emojiFor(x.id)) + ' ' + esc(item(x.id).name) + '</span>'; }).join('');
-    var empty = !L.pieces.length ? '<div class="empty">' + esc(t.archetype === 'collection' ? 'No picks yet' : (t.hasBaseRound && !p.base ? 'Win a ' + startWord() + ' first' : '')) + '</div>' : '';
-    return '<div class="board ' + t.archetype + (big ? ' big' : '') + '" style="--c:' + p.color + '">' + pieces + empty + (notes ? '<div class="notes">' + notes + '</div>' : '') + '</div>';
+    var p = room.players[i], t = room.theme, L = p.layout, f = room.frame || { slots: [], fill: [] }, a = t.archetype;
+    var tile = function (id, r, role, z) {
+      return '<div class="piece ' + role + '" style="' + rectStyle(r, z) + '">' + picture(id) + (big ? '<b>' + esc(item(id).name) + '</b>' : '') + '</div>';
+    };
+    var land = function (r) { return '<div class="piece land" style="' + rectStyle(r) + '">' + photo(room.emptyArt) + '</div>'; };
+    var html = '';
+    var base = L.pieces.filter(function (x) { return x.role === 'base'; })[0];
+    var items = L.pieces.filter(function (x) { return x.role === 'item'; });
+    var ups = L.pieces.filter(function (x) { return x.role === 'upgrade'; });
+    if (a === 'site' || a === 'plot') {
+      // Before a home is won, its plot is shown as empty land.
+      html += base ? tile(base.id, base.rect, 'base', 2) : '<div class="piece base waiting" style="' + rectStyle(f.base) + '">' + photo(room.emptyArt) + (big ? '<b>Wins a ' + esc(startWord()) + ' first</b>' : '') + '</div>';
+      items.forEach(function (x) { html += tile(x.id, x.rect, 'item', 2); });
+      var taken = items.map(function (x) { return x.rect.join(); });
+      f.slots.concat((f.fill || []).map(function (r) { return { rect: r }; })).forEach(function (sl) { if (taken.indexOf(sl.rect.join()) < 0) html += land(sl.rect); });
+    } else if (a === 'room' || a === 'stack') {
+      // Before pancakes are won, the board is the empty plate.
+      html += base ? '<div class="piece backdrop">' + picture(base.id) + '</div>' : '<div class="piece backdrop waiting">' + photo(room.emptyArt) + (big ? '<b>Wins a ' + esc(startWord()) + ' first</b>' : '') + '</div>';
+      items.forEach(function (x) { html += tile(x.id, x.rect, 'item ' + (a === 'stack' && x.slot !== 'side' ? 'round' : 'framed'), 3); });
+    } else {
+      items.forEach(function (x) { html += tile(x.id, x.rect, 'card', 2); });
+      f.slots.slice(items.length).forEach(function (sl) { html += '<div class="piece card open" style="' + rectStyle(sl.rect) + '">' + (big ? '<b>Still to pick</b>' : '') + '</div>'; });
+    }
+    // Upgrades change the base itself: shown as photo badges on it, latest of each kind only.
+    var strip = big && ups.length ? '<div class="ups">' + ups.map(function (x) { return '<span class="up">' + picture(x.id) + '<b>' + esc(item(x.id).name) + '</b></span>'; }).join('') + '</div>' : '';
+    return '<div class="board ' + a + (big ? ' big' : '') + '" style="--c:' + p.color + '">' + html + '</div>' + strip;
   }
   function startWord() { return room.theme.archetype === 'plot' ? 'home' : room.theme.noun.split(' ').slice(-1)[0]; }
   function owned(i) {
@@ -80,7 +88,7 @@
     screen = 'home';
     var t = ui.themes.filter(function (x) { return x.id === ui.themeId; })[0] || ui.themes[0];
     var tiles = ui.themes.map(function (x) {
-      return '<button class="theme" data-theme="' + x.id + '" aria-pressed="' + (t && x.id === t.id) + '"><span class="em">' + esc(x.emoji) + '</span><b>' + esc(x.title) + '</b><span class="mode">' + (x.mode === 'drafter' ? 'Drafter' : 'Builder') + '</span></button>';
+      return '<button class="theme" data-theme="' + x.id + '" aria-pressed="' + (t && x.id === t.id) + '"><span class="cover">' + photo(x.cover) + '</span><b>' + esc(x.title) + '</b><span class="mode">' + (x.mode === 'drafter' ? 'Drafter' : 'Builder') + '</span></button>';
     }).join('');
     var seg = function (key, values, label) {
       return '<div class="seg">' + values.map(function (v) { return '<button data-' + key + '="' + v + '" aria-pressed="' + (ui[key] === v) + '">' + label(v) + '</button>'; }).join('') + '</div>';
@@ -88,7 +96,7 @@
     var maxRounds = t ? t.maxRounds : 6;
     var create = !t ? '<p class="muted">Loading games…</p>' :
       '<div class="eyebrow">Game</div><div class="themes">' + tiles + '</div>' +
-      '<div class="brief"><b>' + esc(t.emoji + ' ' + t.title) + '</b><p>' + esc(t.intro) + '</p><p class="muted">Rounds: ' + esc(t.categories.join(' · ')) + (t.upgrades ? ' · upgrades every round' : '') + '</p></div>' +
+      '<div class="brief"><b>' + esc(t.title) + '</b><p>' + esc(t.intro) + '</p><p class="muted">Rounds: ' + esc(t.categories.join(' · ')) + (t.upgrades ? ' · upgrades every round' : '') + '</p></div>' +
       '<div class="eyebrow">Your name</div><input id="name" maxlength="16" autocomplete="nickname" placeholder="Name" value="' + esc(ui.name) + '">' +
       '<div class="eyebrow">Players</div>' + seg('players', [2, 3, 4, 5, 6], String) + '<label class="check"><input type="checkbox" id="cpu"' + (ui.cpu ? ' checked' : '') + '><span>Play against the computer</span></label>' +
       '<div class="eyebrow">Items each</div>' + seg('rounds', [3, 4, 5, 6].filter(function (n) { return n <= maxRounds; }), String) +
@@ -110,7 +118,7 @@
   function openHtml() {
     if (!ui.open.length) return '<p class="muted">No open games right now.</p>';
     return '<ul class="open">' + ui.open.map(function (g) {
-      return '<li><button data-open="' + g.code + '"><span class="em">' + esc(g.theme.emoji) + '</span><span><b>' + esc(g.host) + '’s ' + esc(g.theme.title) + '</b><span class="muted">' + g.players.length + '/' + g.capacity + ' players · ' + g.rounds + ' rounds · ' + money(g.budget) + '</span></span><span class="go">Join</span></button></li>';
+      return '<li><button data-open="' + g.code + '"><span><b>' + esc(g.host) + '’s ' + esc(g.theme.title) + '</b><span class="muted">' + g.players.length + '/' + g.capacity + ' players · ' + g.rounds + ' rounds · ' + money(g.budget) + '</span></span><span class="go">Join</span></button></li>';
     }).join('') + '</ul>';
   }
   function loadOpen() {
@@ -178,7 +186,7 @@
     var t = room.theme, host = me() === 0, n = room.players.length;
     var link = location.origin + location.pathname + '?room=' + room.code;
     app.innerHTML = '<div class="screen"><div class="bar"><button class="link" data-leave>‹ Leave</button><span class="wordmark">Draft Night</span><span class="code num">' + esc(room.code) + '</span></div><div class="content">' +
-      '<div class="brief"><b>' + esc(t.emoji + ' ' + t.title) + '</b><p>' + esc(t.intro) + '</p><p class="muted">' + room.roundsWanted + ' items each' + (t.hasBaseRound ? ' plus a ' + (t.archetype === 'plot' ? 'home' : 'base') : '') + ' · ' + money(room.budget) + ' each' + (t.upgrades ? ' · upgrades every round' : '') + '</p></div>' +
+      '<div class="brief"><b>' + esc(t.title) + '</b><p>' + esc(t.intro) + '</p><p class="muted">' + room.roundsWanted + ' items each' + (t.hasBaseRound ? ' plus a ' + (t.archetype === 'plot' ? 'home' : 'base') : '') + ' · ' + money(room.budget) + ' each' + (t.upgrades ? ' · upgrades every round' : '') + '</p></div>' +
       '<div class="eyebrow">Players ' + n + '/' + room.capacity + '</div><ul class="seats">' + room.players.map(function (p, i) {
         return '<li style="--c:' + p.color + '"><span class="dot"></span>' + esc(p.name) + (i === me() ? ' <span class="muted">(you)</span>' : '') + (i === 0 ? ' <span class="muted">· host</span>' : '') + '</li>';
       }).join('') + '</ul>' +
@@ -211,7 +219,7 @@
   function stage() {
     var rd = room.round, a = room.auction;
     if (room.phase === 'market') {
-      return '<div class="stage market"><div class="eyebrow">Round ' + (rd.index + 1) + ' of ' + rd.total + '</div><h2>' + esc(rd.emoji + ' ' + rd.name) + '</h2><p class="muted">' + (rd.kind === 'base' ? 'Everyone ends with one. Auctions start in ' + secs(room.deadline) + 's.' : 'Everyone wins one of these. Auctions start in ' + secs(room.deadline) + 's.') + '</p></div>';
+      return '<div class="stage market"><div class="eyebrow">Round ' + (rd.index + 1) + ' of ' + rd.total + '</div><h2>' + esc(rd.name) + '</h2><p class="muted">' + (rd.kind === 'base' ? 'Everyone ends with one. Auctions start in ' + secs(room.deadline) + 's.' : 'Everyone wins one of these. Auctions start in ' + secs(room.deadline) + 's.') + '</p></div>';
     }
     if (room.phase === 'picking') {
       var who = room.pick.who;
@@ -248,7 +256,7 @@
   function playersHtml() {
     var a = room.auction;
     return room.players.map(function (p, i) {
-      var sub = p.got ? '✓ got one' : a && room.phase === 'bidding' ? (a.leader === i ? 'Leading' : a.turn === i ? 'Deciding' : a.out[i] ? 'Passed' : '') : '';
+      var sub = p.got ? 'Got one this round' : a && room.phase === 'bidding' ? (a.leader === i ? 'Leading' : a.turn === i ? 'Deciding' : a.out[i] ? 'Passed' : '') : '';
       return '<button class="who' + (a && a.leader === i && room.phase === 'bidding' ? ' leading' : '') + '" data-world="' + i + '" style="--c:' + p.color + '">' + board(i, false) +
         '<span class="meta"><span class="dot"></span><b>' + esc(p.name) + (i === me() ? ' (you)' : '') + '</b><span class="num">' + money(p.budget) + '</span></span><span class="sub">' + esc(sub + (p.away ? ' · away' : '')) + '</span></button>';
     }).join('');
@@ -256,7 +264,7 @@
   function renderGame() {
     screen = 'game';
     var rd = room.round;
-    app.innerHTML = '<div class="game"><div class="bar"><button class="icon-btn" data-menu aria-label="Leave">‹</button><div class="progress"><span>' + esc(room.theme.emoji + ' ' + room.theme.title) + '</span><i><b style="width:' + (100 * (rd.index + (room.phase === 'market' ? 0 : 0.5)) / rd.total) + '%"></b></i></div><span class="code num">' + esc(room.code) + '</span></div>' +
+    app.innerHTML = '<div class="game"><div class="bar"><button class="icon-btn" data-menu aria-label="Leave">‹</button><div class="progress"><span>' + esc(room.theme.title) + '</span><i><b style="width:' + (100 * (rd.index + (room.phase === 'market' ? 0 : 0.5)) / rd.total) + '%"></b></i></div><span class="code num">' + esc(room.code) + '</span></div>' +
       '<div class="layout"><div class="main">' +
       '<div class="market"><div class="eyebrow">Round ' + (rd.index + 1) + ' · ' + esc(rd.name) + ' · ' + rd.lots.length + ' lots, everyone gets one</div><div class="lots">' + rd.lots.map(lotCard).join('') + '</div></div>' +
       stage() + '<div class="dock">' + dock() + '</div></div>' +
@@ -273,7 +281,7 @@
       '<div class="compare">' + room.players.map(function (p, i) {
         var self = i === me();
         return '<div class="entry" style="--c:' + p.color + '">' + board(i, true) + '<h3><span class="dot"></span>' + esc(p.name) + (self ? ' (you)' : '') + '</h3><ul class="owned">' + owned(i) + '</ul>' +
-          (self ? '' : '<button class="' + (mine === i ? 'primary' : 'secondary') + '" data-vote="' + i + '">' + (mine === i ? 'Your vote ✓' : 'Vote for ' + esc(p.name)) + '</button>') + '</div>';
+          (self ? '' : '<button class="' + (mine === i ? 'primary' : 'secondary') + '" data-vote="' + i + '">' + (mine === i ? 'Your vote' : 'Vote for ' + esc(p.name)) + '</button>') + '</div>';
       }).join('') + '</div></div></div>';
   }
   function renderFinal() {
@@ -282,10 +290,10 @@
     var head = names.length > 1 ? 'A draw: ' + names.join(' & ') : names[0] + ' wins!';
     var why = w.tiebreak === 'score' ? 'Tied on votes, so the higher creation score wins (Showpiece 3, Great 2, Solid 1).' : w.tiebreak === 'shared' ? 'Tied on votes and creation score.' : '';
     app.innerHTML = '<div class="screen"><div class="bar"><button class="link" data-leave>‹ New game</button><span class="wordmark">Draft Night</span><span style="width:60px"></span></div><div class="content wide">' +
-      '<div class="eyebrow">' + esc(room.theme.emoji + ' ' + room.theme.title) + ' · Final reveal</div><h1>' + esc(head) + '</h1>' + (why ? '<p class="muted">' + why + '</p>' : '') +
+      '<div class="eyebrow">' + esc(room.theme.title) + ' · Final reveal</div><h1>' + esc(head) + '</h1>' + (why ? '<p class="muted">' + why + '</p>' : '') +
       '<div class="compare">' + room.players.map(function (p, i) {
         var win = w.players.indexOf(i) >= 0;
-        return '<div class="entry' + (win ? ' winner' : '') + '" style="--c:' + p.color + '">' + board(i, true) + '<h3><span class="dot"></span>' + esc(p.name) + (win ? ' 🏆' : '') + '</h3><p class="muted num">' + w.score[i] + ' vote' + (w.score[i] === 1 ? '' : 's') + ' · score ' + w.points[i] + ' · spent ' + money(room.budget - p.budget) + ' · ' + money(p.budget) + ' left</p><ul class="owned">' + owned(i) + '</ul></div>';
+        return '<div class="entry' + (win ? ' winner' : '') + '" style="--c:' + p.color + '">' + board(i, true) + '<h3><span class="dot"></span>' + esc(p.name) + (win ? ' <span class="crown">Winner</span>' : '') + '</h3><p class="muted num">' + w.score[i] + ' vote' + (w.score[i] === 1 ? '' : 's') + ' · score ' + w.points[i] + ' · spent ' + money(room.budget - p.budget) + ' · ' + money(p.budget) + ' left</p><ul class="owned">' + owned(i) + '</ul></div>';
       }).join('') + '</div><button class="primary" data-leave>Play again</button></div></div>';
   }
 
