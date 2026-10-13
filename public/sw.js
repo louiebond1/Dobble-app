@@ -1,6 +1,6 @@
 // Bump this on any release that changes cached files, so old clients pick
 // up the new versions instead of serving stale ones forever.
-const CACHE_VERSION = 'v23';
+const CACHE_VERSION = 'v24';
 const CACHE_NAME = `favethings-${CACHE_VERSION}`;
 
 // Precached at install: the app shell for pages that work without a live
@@ -100,7 +100,11 @@ self.addEventListener('fetch', (event) => {
   // hit the network live — only its static client script is cacheable.
   if (url.pathname.startsWith('/socket.io/') && url.pathname !== '/socket.io/socket.io.js') return;
 
-  if (url.pathname.startsWith('/images/')) {
+  // Draft Night polls its game state every second or so; those answers are live and never worth caching.
+  if (url.pathname.startsWith('/api/dn/')) return;
+
+  // Draft Night photo URLs carry a content fingerprint (?v=), so a cached photo is always the current one.
+  if (url.pathname.startsWith('/images/') || url.pathname.startsWith('/draft-night/art/')) {
     event.respondWith(cacheFirst(req));
     return;
   }

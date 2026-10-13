@@ -51,7 +51,10 @@
     var tile = function (id, r, role, z) {
       return '<div class="piece ' + role + '" style="' + rectStyle(r, z) + '">' + picture(id) + (big ? '<b>' + esc(item(id).name) + '</b>' : '') + '</div>';
     };
-    var land = function (r) { return '<div class="piece land" style="' + rectStyle(r) + '">' + photo(room.emptyArt) + '</div>'; };
+    // Unbought plots: the same land photo turned or mirrored per tile so they never look copy-pasted, and dimmed so the
+    // purchases are what stand out.
+    var turns = ['', 'rotate(90deg)', 'rotate(180deg)', 'scaleX(-1)', 'rotate(270deg)', 'scaleY(-1)', 'rotate(90deg) scaleX(-1)', 'rotate(180deg) scaleX(-1)'], landN = 0;
+    var land = function (r) { return '<div class="piece land" style="' + rectStyle(r) + '"><span class="turn" style="transform:' + turns[landN++ % turns.length] + '">' + photo(room.emptyArt) + '</span></div>'; };
     var html = '';
     var base = L.pieces.filter(function (x) { return x.role === 'base'; })[0];
     var items = L.pieces.filter(function (x) { return x.role === 'item'; });

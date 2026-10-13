@@ -85,7 +85,7 @@ input:not([type=checkbox]) { width: 100%; height: 48px; border-radius: var(--r-m
 .stage { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-lg); padding: 14px; display: grid; gap: 10px; }
 .stage .eyebrow { margin: 0; }
 .stage.market, .stage.pick { text-align: center; padding: 24px 14px; }
-.hero { aspect-ratio: 16/10; border-radius: var(--r-md); background: var(--raised); display: grid; place-items: center; overflow: hidden; }
+.hero { aspect-ratio: 4/3; border-radius: var(--r-md); background: var(--raised); display: grid; place-items: center; overflow: hidden; }
 .hero img, .hero .ph { width: 100%; height: 100%; object-fit: cover; }
 .lot-info p { margin: 4px 0 0; }
 .tier { display: inline-block; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; padding: 3px 8px; border-radius: 999px; background: var(--raised); color: var(--muted); }
@@ -109,7 +109,9 @@ input:not([type=checkbox]) { width: 100%; height: 48px; border-radius: var(--r-m
 .piece b { position: absolute; left: 0; right: 0; bottom: 0; padding: 14px 6px 5px; font-size: 11px; line-height: 1.15; font-weight: 600; text-align: center; color: #fff; background: linear-gradient(transparent, rgba(0,0,0,.72)); }
 .board.big .piece b { font-size: 12px; }
 .piece.base { box-shadow: 0 0 0 2px var(--c); }
-.piece.land { opacity: .9; }
+.piece.land .turn { position: absolute; inset: 0; display: block; }
+.piece.land img, .piece.land .ph { filter: saturate(.55) brightness(.62); }
+.piece.land { box-shadow: inset 0 0 0 1px rgba(255,255,255,.06); }
 .piece.backdrop { inset: 0; border-radius: 0; }
 .piece.framed { box-shadow: 0 6px 18px rgba(0,0,0,.45), 0 0 0 2px rgba(255,255,255,.9); }
 .piece.round { border-radius: 50%; box-shadow: 0 6px 18px rgba(0,0,0,.45), 0 0 0 3px rgba(255,255,255,.95); }
