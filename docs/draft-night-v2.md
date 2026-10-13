@@ -13,7 +13,7 @@ The redesign from `docs/draft-night-investigation.md`. It runs inside the main D
 | Art generator | `scripts/draftnight-art.js` |
 | Tests | `test/draftnight-engine.test.js` (in `npm test`), `draft-night/e2e/v2.mjs` (two phones in Chromium) |
 
-The original game at `/draft-night.html` and its Railway function are untouched apart from the triage fixes listed at the end.
+Dobble Party's Draft Night card opens `/draft-night-v2.html`. The original game is still reachable at `/draft-night.html`, and its Railway function has the triage fixes listed at the end.
 
 ## Rules
 
@@ -80,4 +80,12 @@ The repo copy of the function was reset to what is live (`2951e95`). The staged 
 3. A final picture the checker doubts is labelled ("Some purchases may not show clearly in this picture.") instead of thrown away. The one stronger repair still runs.
 4. Custom-theme planning is no longer charged to the game's picture budget.
 
-Replays with half of all final pictures rejected by the checker showed every final picture: 16/16, 12/12 and 8/8 per configuration. The live code showed 19–75%. `npm test`: 85 pass, 0 fail. **The function is not redeployed.** That needs approval, and the steps in `docs/draft-night.md`.
+Replays with half of all final pictures rejected by the checker showed every final picture: 16/16, 12/12 and 8/8 per configuration. The live code showed 19–75%. `npm test`: 85 pass, 0 fail. The function was redeployed on 13 October, and its live code matches the repo byte for byte.
+
+## Library status (13 October)
+
+All 421 photos the seven themes can show are in `public/draft-night/art` and were checked by eye. About 40 were redrawn after review, for lettering, wrong animals, a literal crown and empty plots.
+
+The Rolls-Royce Spectre was removed. Cloudflare refused every attempt to draw it, and its category still has the seven cars a six-player game needs.
+
+Games make no image requests. The photo job `draft-night-photos` is parked (`PHOTO_KEYS=none`), so a restart draws nothing. To draw new photos, set `PHOTO_KEYS` (or `PHOTO_FROM`/`PHOTO_TO`) and `PHOTO_JOBS_URL` to the job list at an exact commit.
