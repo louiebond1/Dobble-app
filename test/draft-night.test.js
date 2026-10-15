@@ -1293,7 +1293,7 @@ test('client script parses and talks to the API', () => {
   const client = fs.readFileSync(path.join(__dirname, '../public/draft-night.js'), 'utf8');
   new vm.Script(client);
   assert.match(client, /draft-night-web-production\.up\.railway\.app/);
-  const html = fs.readFileSync(path.join(__dirname, '../public/draft-night.html'), 'utf8');
+  const html = fs.readFileSync(path.join(__dirname, '../public/draft-night-legacy.html'), 'utf8');
   assert.ok(html.includes('/draft-night.js') && html.includes('/draft-night.css'));
   assert.ok(!html.includes('<iframe'), 'no longer an iframe wrapper');
 });

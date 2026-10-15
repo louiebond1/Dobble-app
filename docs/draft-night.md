@@ -1,3 +1,5 @@
+> Rebuild branch: the new default frontend and final-only image pipeline are documented in [Draft Night 2.0 rebuild](draft-night-2-rebuild.md). The implementation described below is preserved at `/draft-night-legacy.html`. Production has not been changed by the rebuild.
+
 # Draft Night
 
 A party auction game: everyone gets the same budget, bids on one item at a time, and watches their own creation (a house, a pancake stack, a garage…) change with every win. At the end, the creations are shown side by side.
