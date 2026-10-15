@@ -4,3 +4,7 @@ data/predict-stats.json
 data/dates-log.json
 data/leaderboard.json
 shots/
+
+data/draft2/
+.env
+.env.*

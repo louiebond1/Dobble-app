@@ -3427,6 +3427,7 @@ app.get('/api/dates/history', (req, res) => {
 
 // Draft Night v2 (market rounds and composited creations). The old Railway-function version stays at /draft-night.html.
 require('./lib/draftnight/routes').draftNight(app);
+require('./lib/draft2/routes').draft2(app);
 
 app.use(express.static(path.join(__dirname, 'public')));
 

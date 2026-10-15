@@ -1,0 +1,41 @@
+{
+  "code": "097F6E",
+  "headings": [
+    "A SHARED CROWN."
+  ],
+  "counts": 10,
+  "layouts": [
+    {
+      "w": 320,
+      "h": 568,
+      "scroll": 320,
+      "buttonBottom": 510.671875
+    },
+    {
+      "w": 375,
+      "h": 667,
+      "scroll": 375,
+      "buttonBottom": 574.953125
+    },
+    {
+      "w": 390,
+      "h": 844,
+      "scroll": 390,
+      "buttonBottom": 679.953125
+    },
+    {
+      "w": 430,
+      "h": 932,
+      "scroll": 430,
+      "buttonBottom": 669.46875
+    },
+    {
+      "w": 1440,
+      "h": 900,
+      "scroll": 1440,
+      "buttonBottom": 742.109375
+    }
+  ],
+  "errors": [],
+  "providerRequests": []
+}
