@@ -36,7 +36,7 @@ Home → featured/custom theme → setup → invite lobby → secret auction →
 
 `lib/draft2/store.js`: SQLite WAL room state, cached text plans, generation ledger, response usage and daily request reservations. There are no new npm runtime dependencies. Run **one server replica** against one persistent data directory. This is not a multi-replica architecture.
 
-`lib/draft2/ai.js`: authored offline plans, custom-theme text planning, matching final art direction and exact-inventory image prompts. Zoo/park/island layouts request the entire site from the air with separated habitats. DEX uses deterministic witty event lines; there are no per-bid model calls. Custom theme planning is AI-generated; live improvisational commentary is not implemented.
+`lib/draft2/ai.js`: authored offline plans, custom-theme text planning, matching final art direction and exact-inventory image prompts. Zoo/park/island layouts request the entire site from the air with separated habitats. The host uses short factual event updates; there are no per-bid model calls. Custom theme planning is AI-generated; live improvisational commentary is not implemented.
 
 ## Spending controls
 
@@ -89,3 +89,7 @@ Remaining limits: real generated image quality and live custom-theme output are 
 - Layout widths: **320, 375, 390, 430 and 1440 px**. No sideways overflow; bidding controls inside every tested viewport.
 - Browser page errors: **0**. Provider requests in browser: **0**. Development API spend: **£0**.
 - Screenshots and captured results: [home](draft2-preview/home-desktop.webp), [auction](draft2-preview/auction-phone.webp), [reveal](draft2-preview/reveal-phone.webp), [result](draft2-preview/result-phone.webp), [browser measurements](draft2-preview/browser-results.json), [test output](draft2-preview/tests.log).
+
+## Wording update
+
+Removed marketing slogans, invented host branding and forced jokes from all rebuilt screens, invitations and host updates. Labels now describe actions directly, such as Play, Create game, Start game, Play again and It’s a draw. AI planning now requests friendly factual descriptions without teasing or catchphrases. Custom-theme cache keys are versioned so old wording is not reused. No deployment or paid API request was made for this update.

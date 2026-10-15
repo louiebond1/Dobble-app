@@ -83,7 +83,7 @@ try {
   };
   const base = "http://127.0.0.1:3988";
   await p.goto(base + "/draft-night.html");
-  await p.getByRole("button", { name: "Let’s play" }).waitFor();
+  await p.getByRole("button", { name: "Play" }).waitFor();
   await p.evaluate(() => document.fonts.ready);
   await snap(p, "01-home-phone");
   await p.setViewportSize({ width: 1440, height: 1000 });
@@ -92,25 +92,31 @@ try {
   await p.locator('[data-theme="Dream Pasta"]').click();
   await p.getByLabel("Your name").fill("Louie");
   await p.getByLabel("Items each").selectOption("5");
-  await p.getByRole("button", { name: "Open the studio" }).click();
+  await p.getByRole("button", { name: "Create game" }).click();
   await p.locator(".big-code").waitFor();
   const code = (await p.locator(".big-code").textContent()).trim();
   await snap(p, "03-lobby");
   await q.goto(base + "/draft-night.html?room=" + code);
   await q.getByLabel("Your name").fill("Ariel");
-  await q.getByRole("button", { name: "I’m in" }).click();
-  await p.getByRole("button", { name: "Lights. Bids. Action." }).waitFor();
-  await p.getByRole("button", { name: "Lights. Bids. Action." }).click();
+  await q.getByRole("button", { name: "Join game" }).click();
+  await p.getByRole("button", { name: "Start game" }).waitFor();
+  await p.getByRole("button", { name: "Start game" }).click();
   await p.locator("[data-bid]:not([disabled])").first().waitFor();
   await snap(p, "04-auction-phone");
   // Cross-phone leading bid is visible; reloading preserves the player's seat and budget.
   await p.locator("[data-bid]").first().click();
-  await q.getByText("Louie is leading", { exact: false }).waitFor();
+  await q
+    .locator(".price-label")
+    .filter({ hasText: "Louie is leading" })
+    .waitFor();
   await b.setOffline(true);
   await new Promise((r) => setTimeout(r, 800));
   await b.setOffline(false);
   await q.reload();
-  await q.getByText("Louie is leading", { exact: false }).waitFor();
+  await q
+    .locator(".price-label")
+    .filter({ hasText: "Louie is leading" })
+    .waitFor();
   await p.reload();
   await p.getByRole("button", { name: "You’re in the lead" }).waitFor();
   await q.getByRole("button", { name: "Pass", exact: true }).click();
@@ -135,7 +141,7 @@ try {
   await p.getByRole("button", { name: "Close", exact: true }).click();
   await p.locator('[data-vote="0"]').click();
   await q.locator('[data-vote="1"]').click();
-  await p.getByRole("heading", { name: "A SHARED CROWN." }).waitFor();
+  await p.getByRole("heading", { name: "IT’S A DRAW." }).waitFor();
   await snap(p, "07-result-phone");
   await p.setViewportSize({ width: 1280, height: 900 });
   await snap(p, "08-result-desktop");
@@ -144,11 +150,11 @@ try {
     headings: await p.locator("h1").allTextContents(),
     counts: await p.locator(".creation .chip").count(),
   };
-  await p.getByRole("button", { name: "Run it back" }).click();
-  await p.getByRole("button", { name: "Lights. Bids. Action." }).waitFor();
+  await p.getByRole("button", { name: "Play again" }).click();
+  await p.getByRole("button", { name: "Start game" }).waitFor();
   await q.locator(".big-code").waitFor();
   // Layout matrix: no sideways overflow; ensure bidding remains in the viewport on common phones.
-  await p.getByRole("button", { name: "Lights. Bids. Action." }).click();
+  await p.getByRole("button", { name: "Start game" }).click();
   await p.locator("[data-bid]").first().waitFor();
   result.layouts = [];
   for (const [width, height] of [

@@ -1,7 +1,7 @@
 {
-  "code": "097F6E",
+  "code": "C973FD",
   "headings": [
-    "A SHARED CROWN."
+    "IT’S A DRAW."
   ],
   "counts": 10,
   "layouts": [
@@ -9,19 +9,19 @@
       "w": 320,
       "h": 568,
       "scroll": 320,
-      "buttonBottom": 510.671875
+      "buttonBottom": 495.828125
     },
     {
       "w": 375,
       "h": 667,
       "scroll": 375,
-      "buttonBottom": 574.953125
+      "buttonBottom": 557.90625
     },
     {
       "w": 390,
       "h": 844,
       "scroll": 390,
-      "buttonBottom": 679.953125
+      "buttonBottom": 669.46875
     },
     {
       "w": 430,
