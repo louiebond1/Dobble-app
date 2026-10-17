@@ -93,3 +93,10 @@ Remaining limits: real generated image quality and live custom-theme output are 
 ## Wording update
 
 Removed marketing slogans, invented host branding and forced jokes from all rebuilt screens, invitations and host updates. Labels now describe actions directly, such as Play, Create game, Start game, Play again and It’s a draw. AI planning now requests friendly factual descriptions without teasing or catchphrases. Custom-theme cache keys are versioned so old wording is not reused. No deployment or paid API request was made for this update.
+
+## Final images, key safety and passing (update)
+
+- Final images: one `gpt-image-1.5` 1024x1024 photo per player, from a numbered prompt listing all purchased items. Job ids `CODE:match:image:0|1` are reserved before the request, so a match makes at most two requests and never retries.
+- The OpenAI key stays in the `draft-night` Railway project. The `draft-night-image-gateway` function reads it by same-project reference to `draft-night-web`; the site only holds a shared token. Gateway source: `draft-night/image-gateway.ts` (token check, id whitelist, once per id, daily cap `IMAGE_GATEWAY_DAILY_MAX`).
+- Site variables: `DRAFT2_IMAGES=live`, `DRAFT2_ENABLE_PAID=1`, `DRAFT2_DATA_DIR=/data/draft2` (volume at `/data`), `DRAFT2_IMAGE_GATEWAY_URL`, `DRAFT2_IMAGE_GATEWAY_TOKEN`, `DRAFT2_IMAGE_QUALITY` (default medium), `DRAFT2_MAX_IMAGES_PER_DAY`. `DRAFT2_TEXT` stays off.
+- Passing: a player who passes can never receive that lot. The other player gets it at their current bid, or free if nobody bid. If nobody bids before the timer, the lot goes free by rotating priority and nobody is marked as passed.

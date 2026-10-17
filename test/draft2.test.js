@@ -75,20 +75,148 @@ test("stale, duplicate, unaffordable, fractional, negative and self raises are r
   assert.throws(() => move(g, 0, "bid", 2), /already lead/);
   assert.throws(() => E.act(g, 1, { rev: 0, type: "pass" }), /moved/);
 });
-test("passing locks the lot, both pass rotates free ownership, zero budgets finish, no future deck leaks", () => {
+test("pass: the other player gets the lot free when nobody bid, and the passer cannot take part again", () => {
   const g = game();
   move(g, 0, "pass");
-  assert.throws(() => move(g, 0, "bid", 1), /passed/);
+  assert.equal(g.status, "sold");
+  assert.deepEqual([g.last.player, g.last.price], [1, 0]);
+  assert.deepEqual(
+    g.players.map((p) => p.items.length),
+    [0, 1],
+  );
+  assert.equal(g.players[1].money, g.budget);
+  assert.match(g.host, /Louie passed\. Ariel receives .* for free\./);
+  assert.throws(() => move(g, 0, "bid", 1), /Wait for the next lot/);
+  assert.throws(() => move(g, 0, "pass"), /Wait for the next lot/);
+});
+test("pass: the other player pays the current bid when they are leading", () => {
+  const g = game();
+  move(g, 0, "bid", 3);
   move(g, 1, "pass");
-  assert.equal(g.last.player, 0);
-  assert.equal(g.last.price, 0);
+  assert.deepEqual([g.last.player, g.last.price], [0, 3]);
+  assert.deepEqual(
+    g.players.map((p) => p.money),
+    [g.budget - 3, g.budget],
+  );
+  assert.match(g.host, /Ariel passed\. Louie bought .* for £3\./);
+  // Outbid, then pass: the new leader pays their own bid, never the old one.
+  const h = game();
+  move(h, 0, "bid", 2);
+  move(h, 1, "bid", 5);
+  move(h, 0, "pass");
+  assert.deepEqual([h.last.player, h.last.price], [1, 5]);
+});
+test("pass: both players cannot pass the same lot; a second pass is refused and the lot stays with the first non-passer", () => {
+  const g = game();
+  const rev = g.rev;
+  E.act(g, 0, { rev, type: "pass" }, 0);
+  assert.throws(() => E.act(g, 1, { rev, type: "pass" }, 0), /moved/);
+  assert.throws(
+    () => E.act(g, 1, { rev: g.rev, type: "pass" }, 0),
+    /Wait for the next lot/,
+  );
+  assert.equal(g.last.player, 1);
+  assert.equal(g.players[0].items.length, 0);
+  // Next lot: a fresh start for both, so the earlier passer may now bid or pass.
+  E.tick(g, g.deadline + 1);
+  assert.equal(g.status, "auction");
+  assert.deepEqual(g.passed, []);
+  move(g, 0, "bid", 1);
+  assert.equal(g.leader, 0);
+});
+test("no bids before the timer: nobody is marked as having passed, and free priority alternates", () => {
+  const g = game();
+  const who = [];
+  while (g.status !== "preparing") {
+    E.tick(g, g.deadline + 1);
+    if (g.status === "sold") {
+      assert.deepEqual(g.passed, [], "a silent lot passes nobody");
+      who.push(g.last.player);
+    }
+  }
+  assert.deepEqual(who.slice(0, 4), [0, 1, 0, 1]);
+  assert.deepEqual(
+    g.players.map((p) => p.items.length),
+    [5, 5],
+  );
+  // A player who had passed is never picked, even when it is their turn in the rotation.
+  const h = game();
+  h.passed = [0];
+  E.tick(h, h.deadline + 1);
+  assert.equal(h.last.player, 1);
+  h.status = "auction";
+  h.passed = [0, 1];
+  assert.throws(() => E.tick(h, h.deadline + 1), /No player can take this lot/);
+  assert.throws(() => {
+    h.passed = [0];
+    h.deck[h.round] = { name: "x", line: "", visual: "x", tag: "T" };
+    E.act(h, 0, { rev: h.rev, type: "pass" }, 0);
+  }, /passed/);
+});
+test("500 random games: no lot ever goes to a player who passed it; pass and timeout prices are right", () => {
+  let seed = 7;
+  const rnd = () => (seed = (1664525 * seed + 1013904223) >>> 0) / 2 ** 32;
+  for (let k = 0; k < 500; k++) {
+    const g = game(3 + (k % 4), 5 + (k % 25));
+    const passers = new Set();
+    let moves = 0,
+      seen = 0;
+    while (g.status !== "preparing") {
+      assert.ok(++moves < 400);
+      if (g.status === "sold") {
+        passers.clear();
+        E.tick(g, g.deadline + 1);
+        continue;
+      }
+      const can = E.eligible(g).filter(
+        (i) => !g.passed.includes(i) && g.leader !== i,
+      );
+      const r = rnd();
+      const leader = g.leader,
+        bid = g.bid;
+      let expect; // who must receive the lot, and at what price, if this move ends it
+      if (r < 0.25) {
+        E.tick(g, g.deadline + 1);
+        expect =
+          leader === null ? { free: true } : { player: leader, price: bid };
+      } else {
+        const i = can[Math.floor(rnd() * can.length)];
+        if (g.players[i].money > g.bid && r < 0.65) {
+          move(g, i, "bid", g.bid + 1);
+          expect = { player: i, price: bid + 1 };
+        } else {
+          passers.add(i);
+          move(g, i, "pass");
+          expect = { player: 1 - i, price: leader === 1 - i ? bid : 0 };
+        }
+      }
+      if (g.history.length > seen) {
+        const h = g.history[g.history.length - 1];
+        assert.ok(!passers.has(h.player), "awarded to a player who passed");
+        assert.ok(!g.passed.includes(h.player), "awarded to a flagged passer");
+        if (expect.free) assert.equal(h.price, 0);
+        else
+          assert.deepEqual([h.player, h.price], [expect.player, expect.price]);
+        seen = g.history.length;
+      }
+    }
+    for (const p of g.players) {
+      assert.equal(p.items.length, g.limit);
+      assert.equal(
+        p.money + p.items.reduce((s, x) => s + x.price, 0),
+        g.budget,
+      );
+    }
+    assert.equal(g.history.length, g.limit * 2);
+  }
+});
+test("zero budgets still finish with exact collections, and the view leaks no tokens or future deck", () => {
+  const g = game();
+  move(g, 0, "pass");
   assert.ok(!JSON.stringify(E.view(g, 0, true)).includes("token"));
   assert.equal(E.view(g, 0, true).deck, undefined);
   g.players.forEach((p) => (p.money = 0));
-  while (g.status !== "preparing") {
-    if (g.status === "sold") E.tick(g, g.deadline + 1);
-    else E.tick(g, g.deadline + 1);
-  }
+  while (g.status !== "preparing") E.tick(g, g.deadline + 1);
   assert.deepEqual(
     g.players.map((p) => p.items.length),
     [5, 5],
@@ -344,4 +472,159 @@ test("live-provider transport mocked: two requests only, no retries after failur
     s.close();
     fs.rmSync(dir, { recursive: true });
   }
+});
+test("gateway: live images use the shared token, never the OpenAI key; exactly two requests per match; no retry", async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "dn2-"));
+  const s = new Store(dir);
+  const seen = [];
+  const real = global.fetch;
+  global.fetch = async (url, opts) => {
+    seen.push({
+      url,
+      auth: opts.headers.Authorization,
+      body: JSON.parse(opts.body),
+    });
+    return Response.json({
+      data: [{ b64_json: Buffer.from("img").toString("base64") }],
+      usage: {},
+    });
+  };
+  try {
+    const ai = makeAI(s, {
+      mock: false,
+      key: undefined,
+      imageEnabled: true,
+      gatewayUrl: "https://gw.example/images",
+      gatewayToken: "shared-token",
+      maxImages: 50,
+    });
+    const g = game();
+    for (let k = 0; k < 10; k++) {
+      const i = k % 2;
+      g.players[i].items.push({
+        name: "Item " + k,
+        visual: "visual " + k,
+        price: 1,
+      });
+    }
+    g.status = "preparing";
+    await Promise.all([ai.image(g, 0), ai.image(g, 0), ai.image(g, 1)]);
+    assert.equal(seen.length, 2);
+    assert.ok(
+      seen.every(
+        (x) =>
+          x.url === "https://gw.example/images" &&
+          x.auth === "Bearer shared-token",
+      ),
+    );
+    assert.ok(
+      seen.every((x) => /^[A-Z0-9]{6}:\d+:image:[01]$/.test(x.body.id)),
+    );
+    assert.ok(seen[0].body.prompt.includes("5 purchased"));
+    g.match++;
+    global.fetch = async () => new Response("no", { status: 500 });
+    assert.equal(await ai.image(g, 0), "failed");
+    assert.equal(await ai.image(g, 0), "failed");
+  } finally {
+    global.fetch = real;
+    s.close();
+    fs.rmSync(dir, { recursive: true });
+  }
+});
+test("gateway function: auth, whitelist, once per id, daily cap, key only server-side", async () => {
+  const { stripTypeScriptTypes } = require("node:module");
+  const src = stripTypeScriptTypes(
+    fs.readFileSync(
+      path.join(__dirname, "../draft-night/image-gateway.ts"),
+      "utf8",
+    ),
+  )
+    .replace("export async function handle", "async function handle")
+    .replace(/export default[\s\S]*$/, "module.exports = { handle };");
+  const m = { exports: {} };
+  new Function("module", "Bun", src)(m, { env: {} });
+  const env = {
+    IMAGE_GATEWAY_TOKEN: "t",
+    OPENAI_API_KEY: "sk-secret",
+    IMAGE_GATEWAY_DAILY_MAX: "2",
+  };
+  const calls = [];
+  const fake = async (url, o) => {
+    calls.push({ url, o });
+    return Response.json({ data: [{ b64_json: "QQ==" }], usage: { x: 1 } });
+  };
+  const req = (b, tok = "t") =>
+    new Request("https://gw/images", {
+      method: "POST",
+      headers: { authorization: "Bearer " + tok },
+      body: JSON.stringify(b),
+    });
+  const p = "x".repeat(40);
+  assert.equal(
+    (
+      await m.exports.handle(
+        req({ id: "ABC123:1:image:0", prompt: p }, "bad"),
+        env,
+        fake,
+      )
+    ).status,
+    401,
+  );
+  assert.equal(
+    (await m.exports.handle(req({ id: "nope", prompt: p }), env, fake)).status,
+    400,
+  );
+  const ok = await m.exports.handle(
+    req({
+      id: "ABC123:1:image:0",
+      prompt: p,
+      model: "gpt-4",
+      size: "4096x4096",
+      quality: "high",
+    }),
+    env,
+    fake,
+  );
+  assert.equal(ok.status, 200);
+  assert.equal(JSON.stringify(await ok.json()).includes("sk-secret"), false);
+  const sent = JSON.parse(calls[0].o.body);
+  assert.equal(sent.model, "gpt-image-1.5");
+  assert.equal(sent.size, "1024x1024");
+  assert.equal(calls[0].o.headers.Authorization, "Bearer sk-secret");
+  assert.equal(
+    (
+      await m.exports.handle(
+        req({ id: "ABC123:1:image:0", prompt: p }),
+        env,
+        fake,
+      )
+    ).status,
+    409,
+  );
+  assert.equal(
+    (
+      await m.exports.handle(
+        req({ id: "ABC123:1:image:1", prompt: p }),
+        env,
+        fake,
+      )
+    ).status,
+    200,
+  );
+  assert.equal(
+    (
+      await m.exports.handle(
+        req({ id: "ABC123:2:image:0", prompt: p }),
+        env,
+        fake,
+      )
+    ).status,
+    429,
+  );
+  assert.equal(calls.length, 2);
+  assert.equal(
+    (await m.exports.handle(new Request("https://gw/health"), env, fake))
+      .status,
+    200,
+  );
 });
