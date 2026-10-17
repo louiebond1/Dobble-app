@@ -72,7 +72,13 @@ export async function handle(
     signal: AbortSignal.timeout(140000),
   });
   if (!res.ok) {
-    console.error(`[gateway] ${b.id} openai status ${res.status}`);
+    const detail = await res.text().catch(() => "");
+    let why = "";
+    try {
+      const e = JSON.parse(detail).error;
+      why = `${e?.type ?? ""} ${e?.code ?? ""} ${String(e?.message ?? "").slice(0, 200)}`;
+    } catch {}
+    console.error(`[gateway] ${b.id} openai status ${res.status} ${why}`);
     return json({ error: "provider failed" }, 502);
   }
   const out: any = await res.json();
