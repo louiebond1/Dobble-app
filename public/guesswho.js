@@ -11,7 +11,7 @@ const FACES = [
   F(13, 'teeth necklace curly long'), F(14, 'teeth earrings long'), F(15, 'earrings blonde long hairup'),
   F(16, 'teeth facialhair'), F(17, 'facialhair'), F(18, 'hat teeth curly blue'),
   F(19, 'teeth earrings necklace long'), F(20, 'hat teeth curly blue'), F(21, 'sunglasses eyewear teeth necklace curly long blue'),
-  F(22, 'earrings'), F(23, 'teeth earrings necklace'), F(24, 'teeth long'),
+  F(22, 'earrings'), F(23, 'teeth earrings necklace'), F(24, 'teeth long'), F(25, 'teeth blue'),
 ];
 const QUESTIONS = [
   ['hat', 'Wearing a hat or cap?'], ['sunglasses', 'Wearing sunglasses?'], ['eyewear', 'Any glasses or sunglasses showing?'],
