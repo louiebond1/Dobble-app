@@ -60,3 +60,31 @@ header{padding-top:calc(14px + env(safe-area-inset-top, 0px));min-height:calc(68
 .cpu-question{font-size:clamp(15px,2.5vw,21px);font-weight:850;color:#fff;background:#345482;padding:13px;border-radius:12px}
 .end-turn{width:100%;margin-top:12px}
 @media(max-width:420px){.opponent-wrap{max-width:260px}.opponent-board{gap:3px;padding:6px}.opponent-card{border-width:1px;border-radius:4px;font-size:12px}.opponent-title{font-size:10px;margin-bottom:5px}}
+
+/* Guess Who visual reset: restrained tabletop styling, no glass panels or neon. */
+:root{--bg:#171b21;--ink:#f5f2e9;--accent:#f2c34d;--good:#a6c6a7;--bad:#e7a39c}
+html{background:#171b21}
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif;background:#171b21;color:var(--ink)}
+header{max-width:1000px;padding-bottom:5px}
+header h1{font-size:clamp(23px,4vw,31px);font-weight:750;letter-spacing:-.8px;text-shadow:none}
+.back{background:transparent;border:1px solid #ffffff35;border-radius:8px;font-weight:600;min-width:72px}
+main{max-width:1000px;padding-top:2px}
+.panel{background:transparent;border:0;box-shadow:none;border-radius:0;padding:8px 3px 12px;margin:0}
+.panel h2{font-size:clamp(19px,3vw,24px);font-weight:720;letter-spacing:-.4px}
+.msg{color:#b9bdc5;font-size:13px;line-height:1.45;margin:5px 0 8px}
+button{border-radius:7px;font-weight:650;background:#edc85b;color:#24201a;box-shadow:none}
+button.alt{background:#2d333b;border:1px solid #555d65;color:#f2f0e9}
+.board{background:#dfad37;border:2px solid #e9c36b;border-bottom:7px solid #986e1e;border-radius:12px;box-shadow:0 6px 16px #0005;gap:clamp(4px,1vw,9px);padding:clamp(6px,1.2vw,12px)}
+.face{background:#e8e4db;border:2px solid #f5e9cb;border-radius:5px;box-shadow:0 3px 0 #95681b,0 4px 6px #0002}
+.face .n{background:#f7f1e5;color:#34302a;font-size:clamp(10px,1.4vw,13px);font-weight:750;padding:4px 1px}
+.face.mine{outline:2px solid #6d9679;outline-offset:-2px}
+.face.down{box-shadow:0 1px 0 #805c1c}
+.opponent-wrap{margin:3px auto 10px;max-width:440px}
+.opponent-title{font-size:10px;letter-spacing:1.3px;color:#aab0b8}
+.opponent-board{background:#d5a334;border:2px solid #e6be65;border-radius:9px;box-shadow:0 5px 0 #8e681d,0 9px 15px #0004}
+.opponent-card{background:#9e5147;border:1px solid #d48c78;border-radius:3px;box-shadow:0 2px 0 #713d34;color:#f1d0bf;font-size:13px}
+.cpu-question{background:transparent;border-left:3px solid #edc85b;border-radius:0;padding:8px 12px;font-size:15px;font-weight:650}
+.qs{gap:5px}
+.qs button{font-size:12px;padding:10px 8px;text-align:left}
+.log{opacity:.75}
+@media(max-width:420px){header h1{font-size:24px}.panel{padding:6px 2px 10px}.board{padding:5px;gap:4px;border-radius:9px}.face{border-width:1px;border-radius:4px}.face .n{font-size:9px;padding:3px 1px}.opponent-wrap{max-width:225px}.opponent-board{padding:5px;gap:2px}}
