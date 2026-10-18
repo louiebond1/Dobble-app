@@ -8,6 +8,23 @@ function table(options={}){
   function add(id,who,token){const handlers={};const s={id,on:(e,f)=>handlers[e]=f,emit:(ev,v)=>messages.push({id,ev,s:v})};sockets.set(id,s);connect(s);const call=(ev,p={})=>{let result;handlers['cm:'+ev]({...p,revision:p.revision??view(id)?.revision},r=>result=r);return result;};const join=call('join',{who,token});return {id,who,call,join,view:()=>view(id),disconnect:()=>{sockets.delete(id);handlers.disconnect();}};}
   return {add,view,advance:ms=>{clock+=ms;const pending=task;if(pending&&pending.at<=clock){task=null;pending.fn();}},messages};
 }
+test('Country Memory: the first arrival can ready up before their partner joins',()=>{
+  const t=table(),l=t.add('L','louie');assert.equal(l.call('ready').ok,true);assert.deepEqual(l.view().ready,['louie']);assert.equal(l.view().phase,'lobby');
+  const a=t.add('A','ariel');a.call('ready');assert.equal(l.view().phase,'intro');
+});
+test('Country Memory: disconnect pauses the study clock and reconnect preserves time',()=>{
+  const t=table(),l=t.add('L','louie'),a=t.add('A','ariel');l.call('ready');a.call('ready');t.advance(2500);l.call('draw');l.call('loaded');t.advance(3000);t.advance(10000);
+  a.disconnect();assert.equal(l.view().paused,true);assert.equal(l.view().remaining,20000);assert.equal(l.view().deadline,null);
+  t.advance(60000);assert.equal(l.view().phase,'study');
+  t.add('A2','ariel',a.join.token);assert.equal(l.view().paused,false);assert.equal(l.view().deadline-l.view().serverNow,20000);
+  t.advance(20000);assert.equal(l.view().phase,'fade');
+});
+test('Country Memory: reader can prepare questions but picture review stays hidden until scoring',()=>{
+  const t=table(),l=t.add('L','louie'),a=t.add('A','ariel');l.call('ready');a.call('ready');t.advance(2500);l.call('draw');l.call('loaded');t.advance(3000);
+  assert.equal(a.view().questions.length,6);assert.equal(l.view().questions,null);assert.equal(a.view().card,null);assert.equal(a.view().review,null);
+  t.advance(30000);t.advance(650);l.call('roll');const q=l.view().question;a.call('reveal');assert.equal(l.view().question,q);assert.equal(l.view().review,null);
+  a.call('judge',{correct:false});assert.ok(l.view().review.art);assert.deepEqual(l.view().review,a.view().review);assert.equal(l.view().scores.louie,0);
+});
 test('Country Memory: full 12-card match, shared dice, role privacy, scoring, replay and no duplicate actions',()=>{
   const t=table(),l=t.add('L','louie'),a=t.add('A','ariel');assert.ok(l.join.token);
   l.call('ready');assert.equal(l.view().phase,'lobby');a.call('ready');assert.equal(l.view().phase,'intro');t.advance(2500);
@@ -40,7 +57,7 @@ test('Country Memory: server restart restores the match and its remaining study 
   try{
     const first=table({saveFile}),l=first.add('L','louie'),a=first.add('A','ariel');l.call('ready');a.call('ready');first.advance(2500);l.call('draw');l.call('loaded');first.advance(3000);
     const restored=table({saveFile}),back=restored.add('L2','louie',l.join.token),other=restored.add('A2','ariel',a.join.token);
-    assert.equal(back.view().phase,'study');assert.equal(back.view().deadline,35500);assert.equal(other.view().card,null);
+    assert.equal(back.view().phase,'study');assert.equal(back.view().deadline-back.view().serverNow,30000);assert.equal(other.view().card,null);
   }finally{fs.rmSync(dir,{recursive:true,force:true});}
 });
 test('Country Memory: each shuffled card has four picture questions and two caption facts',()=>{

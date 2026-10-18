@@ -17,24 +17,26 @@ server.listen(0,async()=>{
  const browser=await chromium.launch({executablePath:process.env.PW_EXECUTABLE_PATH});
  let errors=[];
  try{
-  for(const size of [[390,667],[820,1180]]){
+  for(const size of [[320,568],[390,667],[820,1180]]){
    const a=await browser.newContext({viewport:{width:size[0],height:size[1]}}),b=await browser.newContext({viewport:{width:size[0],height:size[1]}});
    const l=await a.newPage(),r=await b.newPage();for(const p of [l,r])p.on('pageerror',e=>errors.push(e.message));
    const fit=async(p,label)=>{const overflow=await p.evaluate(()=>{const es=[...document.querySelectorAll('button,input,textarea')].filter(e=>e.getClientRects().length);return {page:document.documentElement.scrollHeight>innerHeight+1,sideways:document.documentElement.scrollWidth>innerWidth+1,out:es.filter(e=>{const r=e.getBoundingClientRect();return r.bottom>innerHeight+1||r.right>innerWidth+1||r.left<0;}).map(e=>e.textContent)};});assert(!overflow.page&&!overflow.sideways&&!overflow.out.length,label+' '+JSON.stringify(overflow));};
-   await l.goto(base+'/country-memory.html');await r.goto(base+'/country-memory.html');
+   await l.goto(base+'/country-memory.html');await r.goto(base+'/country-memory.html');await fit(l,'memory home '+size);
    await l.getByRole('button',{name:'I’m Louie',exact:true}).click();await r.getByRole('button',{name:'I’m Ariel',exact:true}).click();
+   await l.waitForFunction(()=>state.online.length===2);await r.waitForFunction(()=>state.online.length===2);
    await l.getByRole('button',{name:'I’m ready',exact:true}).click();await r.getByRole('button',{name:'I’m ready',exact:true}).click();
    for(let i=0;i<12;i++){
     console.log('Memory browser turn',size[0],i+1);
     const learner=i%2?r:l,asker=i%2?l:r;
-    await learner.getByRole('button',{name:'Draw a country card',exact:true}).click();
+    await learner.getByRole('button',{name:'Draw a country card',exact:true}).waitFor();await fit(learner,'memory deck '+size);await learner.getByRole('button',{name:'Draw a country card',exact:true}).click();
     await learner.waitForSelector('.study .art-box img');
-    if(i===0){await learner.waitForTimeout(500);await learner.screenshot({path:shots+'/memory-study-'+size[0]+'.png'});await fit(learner,'memory study '+size);await learner.reload();await learner.waitForSelector('.study .art-box img');}
+    if(i===0){await learner.waitForTimeout(500);await learner.screenshot({path:shots+'/memory-study-'+size[0]+'.png'});await fit(learner,'memory study '+size);await fit(asker,'reader preparation '+size);assert(await asker.locator('.question-list p').count()===6,'six reader preview questions');await learner.reload();await learner.waitForSelector('.study .art-box img');}
     await learner.getByRole('button',{name:'Roll the die',exact:true}).click();
     await learner.getByRole('button',{name:'I’ve answered aloud',exact:true}).click();
-    assert(await asker.locator('.question-list p').count()===6,'six questions');
+    assert(await asker.locator('.question-list p').count()===1,'die selects one question');
     if(i===0){await fit(asker,'memory question '+size);await asker.screenshot({path:shots+'/memory-questions-'+size[0]+'.png'});}
     await asker.getByRole('button',{name:'Reveal the answer',exact:true}).click();await asker.getByRole('button',{name:'Correct · +1',exact:true}).click();
+    if(i===0){await fit(asker,'round result '+size);await asker.locator('[data-review]').click();await asker.getByRole('button',{name:'Close picture',exact:true}).waitFor();await fit(asker,'picture review '+size);await asker.getByRole('button',{name:'Close picture',exact:true}).click();}
     await asker.getByRole('button',{name:i===11?'See final scores':'Next card',exact:true}).click();
    }
    await l.getByRole('button',{name:'Play again',exact:true}).waitFor();assert(await l.locator('h1').textContent()==='A perfect match.','draw result');
