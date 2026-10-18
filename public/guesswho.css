@@ -18,7 +18,7 @@ button:disabled{opacity:.35}
 .board{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:clamp(4px,1.15vw,12px);background:linear-gradient(165deg,#ffdb61,#f2a91e);padding:clamp(7px,1.6vw,18px);border:3px solid #ffe48a;border-bottom:10px solid #bd7415;border-radius:22px;box-shadow:0 16px 0 #081328,0 22px 34px #0007}
 .face{position:relative;aspect-ratio:4/5;min-width:0;border-radius:10px;overflow:hidden;background:#eee7d9;border:3px solid #fff5cf;padding:0;box-shadow:0 4px 0 #bd7818,0 5px 8px #583a1a55;transform-origin:bottom center;transition:transform .25s,filter .25s,background .25s}
 .face:hover{filter:brightness(1.06)}
-.face img{width:100%;height:100%;object-fit:cover;object-position:center 30%;display:block;transition:transform .25s,opacity .2s}
+.face img{width:100%;height:100%;object-fit:contain;object-position:center center;background:#eee7d9;display:block;transition:transform .25s,opacity .2s}
 .face .n{position:absolute;left:0;right:0;bottom:0;top:auto;background:#fff6e5;color:#1b2944;font-size:clamp(9px,1.5vw,15px);font-weight:900;text-align:center;padding:5px 2px;border-radius:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .face.down{background:#2c4166;border-color:#5d7195;transform:perspective(400px) rotateX(62deg) scaleY(.7);filter:saturate(.6)}
 .face.down img{opacity:0}
