@@ -278,3 +278,6 @@ header h1{color:#352533}
  .dock-actions button{min-height:32px}
  .category-choice{min-height:95px}
 }
+
+.board-title{text-align:center;font-size:11px;letter-spacing:1.4px;text-transform:uppercase;font-weight:800;color:#aab0b8;margin:2px 0 8px}
+.board .face:disabled{opacity:1}

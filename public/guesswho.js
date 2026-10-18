@@ -81,6 +81,7 @@ function board(opts) {
   // The whole board turns blue together (flipped-down cards too), so it never looks patchy.
   if (away) { if (lastAway) b.classList.add('away-board'); else requestAnimationFrame(() => requestAnimationFrame(() => b.classList.add('away-board'))); }
   lastAway = away;
+  if (opts.enter) { const cs = [...b.querySelectorAll('.face:not(.down)')]; cs.forEach((c) => c.classList.add('away')); cs.forEach((c) => flipClass(c, 'away', false, Math.random() * 70)); }
   return b;
 }
 function home() {
@@ -118,10 +119,17 @@ function pickSecret() {
   app.append(el('<div class="panel"><h2>Pick your secret face</h2><p class="msg">Tap the face the computer has to find. Keep it in mind.</p></div>'));
   app.append(board({ tap: (id) => start(id) }));
 }
+// The computer's go: your board flips to blue backs, then their board takes its place and you
+// watch them put faces down. Your board comes back (flipping up) on your turn.
+function beginCpuTurn() {
+  S.turn = 'cpu'; S.cpuStage = 'away'; S.cpuEntered = false; S.cpuMessage = ''; render();
+  later(() => { if (S && S.turn === 'cpu') { S.cpuStage = 'theirs'; render(); } }, 700);
+  later(cpuTurn, 1500);
+}
 function start(mine) {
   clearCpuTimers(); lastAway = false; flipStack = [];
-  S = { phase: 'play', mine, secret: rnd(FACES).id, down: new Set(), cpuDown: new Set(), cpuLeft: FACES.map((f) => f.id), asked: new Set(), cpuAsked: new Set(), log: [], turn: 'cpu', guessing: false, over: null, cpuMessage: '', qa: null };
-  render(); later(cpuTurn, 850);
+  S = { phase: 'play', mine, secret: rnd(FACES).id, down: new Set(), cpuDown: new Set(), cpuLeft: FACES.map((f) => f.id), asked: new Set(), cpuAsked: new Set(), log: [], turn: 'you', guessing: false, over: null, cpuMessage: '', qa: null, cpuStage: null };
+  beginCpuTurn();
 }
 
 // ---- card flip, timed from a 60fps frame breakdown of the reference video ----
@@ -212,35 +220,35 @@ function openSheet({ asked, onPick, custom, onGuess }) {
 }
 function closeSheet() { document.querySelectorAll('.sheet-wrap').forEach((n) => n.remove()); }
 
-function opponentBoard() {
-  const wrap = el('<section class="opponent-wrap"><div class="opponent-title">COMPUTER’S BOARD <span id="cpu-count"></span></div></section>');
-  const b = el('<div class="opponent-board" aria-label="Computer board facing away"></div>');
-  for (const f of LAYOUT) { const c = el('<div class="opponent-card" data-cpu="'+f.id+'"><span>?</span></div>'); if (S.cpuDown.has(f.id)) c.classList.add('down'); b.append(c); }
-  wrap.append(b); return wrap;
-}
 const face = (id) => FACES.find((f) => f.id === id);
 function render() {
   closeSheet();
   app.innerHTML = '';
   document.body.classList.toggle('has-dock', !S.over);
-  // The computer's board only shows while it is the computer's turn.
-  if (!S.over && S.turn === 'cpu') app.append(opponentBoard());
   if (S.over) {
     const p = el('<div class="panel"></div>');
     p.append(el(`<h2>${S.over.win ? 'You win' : 'You lose'}</h2>`), el(`<p class="msg">${S.over.text}</p>`),
       el(`<img class="secret" src="${face(S.secret).src}" alt="">`));
     p.append(btn('Play again', '', pickSecret)); app.append(p);
   }
-  app.append(board({ down: S.down, mine: S.mine, away: S.turn === 'cpu' && !S.over, tap: (id) => {
-    if (S.over || (S.turn !== 'you' && S.turn !== 'eliminate')) return;
-    if (S.guessing) return guess(id);
-    toggleCard(id, S.down, app);
-  } }));
+  if (!S.over && S.turn === 'cpu' && S.cpuStage === 'theirs') {
+    // Their board, face up, so you can see what they put down.
+    app.append(el('<div class="board-title">Computer’s board</div>'));
+    app.append(board({ down: S.cpuDown, away: false, enter: !S.cpuEntered, tap: () => {} }));
+    S.cpuEntered = true;
+  } else {
+    app.append(board({ down: S.down, mine: S.mine, away: S.turn === 'cpu' && !S.over, enter: S.enterMine, tap: (id) => {
+      if (S.over || (S.turn !== 'you' && S.turn !== 'eliminate')) return;
+      if (S.guessing) return guess(id);
+      toggleCard(id, S.down, app);
+    } }));
+    S.enterMine = false;
+  }
   if (S.over) return;
   let d;
   if (S.turn === 'eliminate') {
     d = dock({ pill: 'Your move', qa: S.qa, hint: 'Tap faces to put them down',
-      actions: [btn('Undo', 'alt', () => undoFlip(S.down, app)), btn('End turn', 'main', () => { S.turn = 'cpu'; S.cpuMessage = ''; render(); later(cpuTurn, 750); })] });
+      actions: [btn('Undo', 'alt', () => undoFlip(S.down, app)), btn('End turn', 'main', () => beginCpuTurn())] });
   } else if (S.turn === 'you') {
     d = S.guessing
       ? dock({ pill: 'Your guess', qa: S.qa, hint: 'Tap the face you think it is', actions: [btn('Cancel', 'alt', () => { S.guessing = false; render(); })] })
@@ -259,7 +267,7 @@ function ask(q) {
 }
 function guess(id) {
   if (id === S.secret) S.over = { win: true, text: 'Correct! It was ' + face(id).name + '.' };
-  else { S.qa = { who: 'You guessed', text: 'Is it ' + face(id).name + '?', ans: 'no' }; S.guessing = false; S.turn = 'cpu'; render(); return later(cpuTurn, 900); }
+  else { S.qa = { who: 'You guessed', text: 'Is it ' + face(id).name + '?', ans: 'no' }; S.guessing = false; return beginCpuTurn(); }
   render();
 }
 function cpuTurn() {
@@ -293,14 +301,14 @@ function cpuTurn() {
     removed.forEach((id,i)=>later(()=>{
       if(!S || S.over)return;
       S.cpuDown.add(id);
-      flipClass(app.querySelector('[data-cpu="'+id+'"]'), 'down', true);
+      flipClass(app.querySelector('.board .face[data-face="'+id+'"]'), 'down', true);
     },350+i*140));
     later(finishCpu,650+removed.length*140);
   },1400);
 }
 function finishCpu() {
   if (!S || S.over) { if(S)render(); return; }
-  S.turn='you'; S.guessing=false; render();
+  S.turn='you'; S.cpuStage=null; S.enterMine=true; S.guessing=false; render();
 }
 
 // ---- two phones: "I'm Louie" / "I'm Ariel" ----
