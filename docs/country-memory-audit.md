@@ -19,7 +19,7 @@ Subjective product assessment, not a player-study result: fun improved from appr
 
 ## Validation
 
-- Automated suite: 117 passing tests, including first-arrival readiness, timed disconnect/reconnect, restart, card/answer privacy, question selection, old saved decks and scoring.
+- Automated suite: 118 tests, including first-arrival readiness, ready players rejoining, timed disconnect/reconnect, restart, card/answer privacy, question selection, old saved decks and scoring.
 - Complete 12-turn multiplayer matches at 320×568, 390×667 and 820×1180, including refresh, shared dice, alternating roles, reader preparation, picture review, results and screen fit.
 - Complete six-card solo games at those three sizes, including an intentionally missed answer, automatic timer expiry, skip timer, picture review and final score.
 - Guess Who regression browser pass: questions, voice turn, live eliminated faces, undo, refresh, win and rematch.
