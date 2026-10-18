@@ -8,7 +8,7 @@ const FACES = [
   F(4, 'hat sunglasses eyewear facialhair blue', 'Karim'), F(5, 'hat sunglasses eyewear teeth', 'Luca'), F(6, 'facialhair', 'Casey'),
   F(7, 'blonde long', 'Emily'), F(8, 'teeth facialhair curly', 'Louie'), F(9, 'hat teeth facialhair necklace', 'Lawrence'),
   F(10, 'hat teeth necklace blonde', 'Nanna'), F(11, 'teeth earrings necklace eyewear blonde hairup', 'Dani B'), F(12, 'long', 'Becca P'),
-  F(13, 'teeth necklace curly long', 'Becca P (2)'), F(14, 'teeth earrings long', 'Ariel'), F(15, 'earrings blonde long hairup', 'Jess'),
+  F(13, 'teeth necklace curly long', 'Becca L'), F(14, 'teeth earrings long', 'Ariel'), F(15, 'earrings blonde long hairup', 'Jess'),
   F(16, 'teeth facialhair', 'Josh M'), F(17, 'facialhair', 'Josh B'), F(18, 'hat teeth curly blue', 'Harry'),
   F(19, 'teeth earrings necklace long', 'Dani K'), F(20, 'hat teeth curly blue', 'Zac'), F(21, 'sunglasses eyewear teeth necklace curly long blue', 'Shaine'),
   F(22, 'earrings', 'Rachael'), F(23, 'teeth earrings necklace', 'Izzy'), F(24, 'teeth long', 'Grace'), F(25, 'teeth blue', 'Rob'),
