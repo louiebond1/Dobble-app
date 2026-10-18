@@ -2,6 +2,62 @@
 // Mode) keep working with no signal once they've been opened at least
 // once. Two-person modes still need a live connection to sync the other
 // phone — this only covers the app shell + solo game data.
+const partyStyle=document.createElement('link');partyStyle.rel='stylesheet';partyStyle.href='/party-ui.css?v=3';document.head.append(partyStyle);
+window.addEventListener('DOMContentLoaded',()=>{
+  if(location.pathname==='/'){
+    document.body.classList.add('party-home');
+    const heading=document.querySelector('h1');if(heading)heading.textContent='Our Favourite Things';
+    document.querySelectorAll('.feature-card').forEach(a=>{
+      const cover=document.createElement('div');cover.className='party-cover';cover.setAttribute('aria-hidden','true');
+      const url=a.getAttribute('href');
+      if(url==='/country-memory.html')cover.innerHTML='<img src="/country-memory/italy.png" alt="" loading="lazy">';
+      else if(url==='/guesswho.html'){cover.classList.add('faces');cover.innerHTML=[8,14,10].map(n=>'<img src="/guesswho/'+String(n).padStart(2,'0')+'.webp?v=8" alt="" loading="lazy">').join('');}
+      else{
+        const palette=['#245743','#bd8647','#657c93'];const i=[...document.querySelectorAll('.feature-card')].indexOf(a);const colour=palette[i%3];
+        const board='<rect x="20" y="8" width="110" height="90" rx="12" fill="#fffaf1" stroke="'+colour+'" stroke-width="2"/>';
+        const covers={
+          '#':'<circle cx="75" cy="52" r="45" fill="#fffaf1" stroke="'+colour+'" stroke-width="2"/><path d="M52 24l9 17-19-2zM91 65l12 14H81z" fill="'+colour+'"/><circle cx="96" cy="29" r="9" fill="#c48d4f"/><rect x="44" y="63" width="16" height="16" rx="3" fill="#657c93"/><path d="M75 44l8 8-8 8-8-8z" fill="#b66e5d"/>',
+          '/draft-night.html':'<path d="M15 85l40-22 35 10 45-22v40H15z" fill="#95ad8f"/><path d="M48 53l29-28 30 28v33H48z" fill="#fffaf1" stroke="'+colour+'" stroke-width="3"/><path d="M40 54l37-34 38 34" fill="none" stroke="'+colour+'" stroke-width="6"/><rect x="72" y="62" width="14" height="24" fill="#c48d4f"/><circle cx="123" cy="22" r="10" fill="#e8be64"/>',
+          '/memory':board+[0,1,2,3,4,5].map((n)=>'<rect x="'+(31+(n%3)*31)+'" y="'+(20+Math.floor(n/3)*37)+'" width="25" height="30" rx="4" fill="'+(n===1||n===4?'#c48d4f':colour)+'"/>').join(''),
+          '/gofish':'<g transform="rotate(-12 55 50)"><rect x="25" y="12" width="58" height="80" rx="7" fill="'+colour+'"/></g><g transform="rotate(9 90 50)"><rect x="60" y="8" width="58" height="80" rx="7" fill="#fffaf1" stroke="'+colour+'" stroke-width="2"/><text x="68" y="29" font-size="18" fill="#b6604c">K</text><path d="M89 38l13 15-13 15-13-15z" fill="#b6604c"/></g>',
+          '/ttt':board+'<path d="M57 17v72M93 17v72M30 40h90M30 65h90" stroke="'+colour+'" stroke-width="2"/><circle cx="75" cy="52" r="9" fill="none" stroke="#bd8647" stroke-width="4"/><path d="M34 22l12 12m0-12L34 34m65 41l12 12m0-12L99 87" stroke="'+colour+'" stroke-width="4"/>',
+          '/puzzle':board+[1,2,3,4,5,6,7,8].map(n=>'<rect x="'+(31+((n-1)%3)*30)+'" y="'+(17+Math.floor((n-1)/3)*25)+'" width="25" height="21" rx="3" fill="'+colour+'"/><text x="'+(39+((n-1)%3)*30)+'" y="'+(33+Math.floor((n-1)/3)*25)+'" fill="#fffaf1" font-size="14">'+n+'</text>').join(''),
+          '/countries':'<circle cx="75" cy="52" r="41" fill="#a6c0ce" stroke="'+colour+'" stroke-width="2"/><ellipse cx="75" cy="52" rx="20" ry="41" fill="none" stroke="'+colour+'"/><path d="M35 52h80M42 29h66M42 75h66" stroke="'+colour+'"/><path d="M55 31l20-6 17 17-8 19-14 5-12-16z" fill="#688a69"/>',
+          '/draw':'<rect x="25" y="10" width="88" height="84" rx="7" fill="#fffaf1"/><path d="M44 65q10-45 35-18t20 8" fill="none" stroke="'+colour+'" stroke-width="4"/><path d="M90 74l30-48 8 5-29 49-13 9z" fill="#c48d4f"/>',
+          '/reaction':'<circle cx="75" cy="55" r="35" fill="#fffaf1" stroke="'+colour+'" stroke-width="4"/><path d="M75 55V32m0 23l17 8M65 10h20M75 10v9" stroke="'+colour+'" stroke-width="5" stroke-linecap="round"/>',
+          '/roulette':'<circle cx="75" cy="52" r="40" fill="#fffaf1" stroke="'+colour+'" stroke-width="3"/><path d="M75 12v80M35 52h80M47 24l56 56M47 80l56-56" stroke="'+colour+'" stroke-width="2"/><circle cx="75" cy="52" r="12" fill="#c48d4f"/><path d="M69 4h12l-6 15z" fill="#b6604c"/>'
+        };
+        cover.innerHTML='<svg viewBox="0 0 150 105">'+(covers[url]||board+'<text x="75" y="70" text-anchor="middle" font-family="Georgia" font-size="52" fill="'+colour+'">'+(url==='/scramble'?'Aa':url==='/predict'?'…':url==='/mashup'?'↔':'?')+'</text>')+'</svg>';
+      }
+      a.prepend(cover);
+    });
+    const shelf=document.querySelector('.feature-cards');
+    const featured=['/country-memory.html','/guesswho.html','/draft-night.html','/gofish'];
+    if(shelf)featured.slice().reverse().forEach(url=>{const card=shelf.querySelector('a[href="'+url+'"]');if(card)shelf.prepend(card);});
+    const copy={
+      '/country-memory.html':['Country Memory','Study a country, roll the die and test each other’s memory.'],
+      '/guesswho.html':['Guess Who','Find their secret face. Ask aloud or type your own questions.'],
+      '/draft-night.html':['Draft Night','Bid for items and compare what you build.'],
+      '/mashup':['Party Mashup','A different game in every round.'],
+      '/gofish':['Go Fish','Collect books. Play each other or the computer.'],
+      '/memory':['Memory Match','Turn over the cards and find the pairs.']};
+    document.querySelectorAll('.feature-card').forEach(a=>{const c=copy[a.getAttribute('href')];if(c){a.querySelector('.feature-card-title').textContent=c[0];a.querySelector('.feature-card-sub').textContent=c[1];}});
+  }
+  // Long setup forms use short pages, with all existing controls and listeners retained.
+  const setup=document.getElementById('setup');
+  if(setup&&setup.querySelectorAll(':scope > .field-group').length>=4){
+    const groups=[...setup.querySelectorAll(':scope > .field-group')];
+    const remaining=[...setup.children].filter(n=>!groups.includes(n));
+    const final=document.createElement('div');remaining.forEach(n=>final.append(n));setup.append(final);
+    const pages=[...groups,final],nav=document.createElement('div');nav.className='setup-pages';
+    nav.innerHTML='<button type="button">Back</button><span></span><button type="button">Next</button>';setup.append(nav);
+    let page=0;const buttons=nav.querySelectorAll('button');
+    const paint=()=>{pages.forEach((g,i)=>g.classList.toggle('setup-page-hidden',i!==page));buttons[0].disabled=page===0;buttons[1].disabled=page===pages.length-1;nav.querySelector('span').textContent='Setup '+(page+1)+' of '+pages.length;};
+    buttons[0].onclick=()=>{page=Math.max(0,page-1);paint();};buttons[1].onclick=()=>{page=Math.min(pages.length-1,page+1);paint();};paint();
+  }
+  const filters=document.getElementById('filtersPanel');
+  if(filters){const groups=[...filters.querySelectorAll(':scope > .filter-group')];let index=0;const nav=document.createElement('div');nav.className='setup-pages';nav.innerHTML='<button type="button">Previous filter</button><span></span><button type="button">Next filter</button>';filters.insertBefore(nav,filters.querySelector('.surprise-toggle'));const buttons=nav.querySelectorAll('button');const paint=()=>{groups.forEach((g,i)=>g.classList.toggle('setup-page-hidden',i!==index));buttons[0].disabled=!index;buttons[1].disabled=index===groups.length-1;nav.querySelector('span').textContent=(index+1)+' / '+groups.length;};buttons[0].onclick=()=>{index--;paint();};buttons[1].onclick=()=>{index++;paint();};paint();}
+});
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('/sw.js').catch(() => {});

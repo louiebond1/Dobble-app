@@ -333,8 +333,19 @@ function duo(who) {
   join();
 }
 function onDuoState(st) {
+  if (!D) return;
+  const previous=D.st;
+  const boardOnly=previous&&st.phase==='play'&&previous.phase===st.phase&&previous.turn===st.turn&&previous.step===st.step&&previous.question===st.question&&previous.log.length===st.log.length;
+  D.down=new Set(st.myDown||[]);
+  if(st.order)LAYOUT=st.order.map(face).filter(Boolean);
+  if(boardOnly&&app.querySelector('.board')){
+    const ids=new Set(st.turn===st.me?st.myDown:st.opponentDown);
+    app.querySelectorAll('.board .face').forEach(c=>{const down=ids.has(Number(c.dataset.face));if(c.classList.contains('down')!==down)flipClass(c,'down',down);});
+    const title=app.querySelector('.board-title');if(title&&st.turn===st.me)title.textContent='Your board · '+D.down.size+' faces down';
+    D.st=st;return;
+  }
   const fresh = st.phase === 'pick' && st.mySecret === null;
-  if (fresh && D.shuffledFor !== 'pick') { reshuffle(); D.down.clear(); D.guessing = false; }
+  if (fresh && D.shuffledFor !== 'pick') { if(!st.order)reshuffle(); D.down.clear(); D.guessing = false; }
   D.shuffledFor = st.phase;
   if (st.step === 'flip' && D.prevStep !== 'flip') flipStack = [];
   D.prevStep = st.step;
@@ -365,11 +376,13 @@ function duoRender() {
       el(`<img class="secret" src="${face(st.opponentSecret)?.src}" alt="">`));
     p.append(btn('Play again', '', () => sock.emit('gw:again'))); app.append(p); showBoard = false;
   }
-  if (showBoard) app.append(board({ down: D.down, mine: st.mySecret, away: st.phase === 'play' && st.turn !== st.me && st.step !== 'answer', tap: (id) => {
+  const theirs=st.phase==='play'&&st.turn!==st.me;
+  if(showBoard&&st.phase==='play')app.append(el(`<div class="board-title">${theirs?opp+'’s board · watch their moves':'Your board · '+D.down.size+' faces down'}</div>`));
+  if (showBoard) app.append(board({ down: theirs?new Set(st.opponentDown||[]):D.down, mine: theirs?null:st.mySecret, away: false, tap: (id) => {
     if (st.phase === 'pick') { if (st.mySecret === null) sock.emit('gw:pick', { id }); return; }
     if (st.turn !== st.me) return;
     if (D.guessing && st.step === 'ask') { D.guessing = false; return sock.emit('gw:guess', { id }); }
-    if (st.step === 'flip') toggleCard(id, D.down, app);
+    if (st.step === 'flip') {const down=!D.down.has(id);if(down)flipStack.push(id);else flipStack=flipStack.filter(x=>x!==id);sock.emit('gw:flip',{id,down});}
   } }));
   if (st.phase !== 'play') return;
   const mine = st.turn === st.me, last = logQA(st.log[st.log.length - 1]);
@@ -377,19 +390,28 @@ function duoRender() {
   if (mine && st.step === 'ask') {
     d = D.guessing
       ? dock({ pill: 'Your guess', qa: last, hint: `Tap the face you think is ${opp}’s`, actions: [btn('Cancel', 'alt', () => { D.guessing = false; duoRender(); })] })
-      : dock({ pill: 'Your turn', qa: last, actions: [btn('Guess face', 'alt', () => { D.guessing = true; duoRender(); })], picker: categoryPicker(q => sock.emit('gw:ask', { text: q.text })) });
+      : dock({ pill: 'Your turn', hint:'Ask over your call or type a question', actions: [btn('Asked aloud', 'main', () => sock.emit('gw:spoken')),btn('Type question', 'alt', customDuoQuestion),btn('Guess face', 'alt', () => { D.guessing = true; duoRender(); })] });
   } else if (mine && st.step === 'answer') {
     d = dock({ pill: 'Your turn', qa: { who: 'You asked', text: st.question, ans: 'wait' }, hint: `Waiting for ${opp}`, actions: [] });
   } else if (mine && st.step === 'flip') {
     d = dock({ pill: 'Your move', qa: last, hint: 'Tap faces to put them down',
-      actions: [btn('Undo', 'alt', () => undoFlip(D.down, app)), btn('End turn', 'main', () => sock.emit('gw:done'))] });
+      actions: [btn('Undo', 'alt', () => {const id=flipStack.pop();if(id!==undefined)sock.emit('gw:flip',{id,down:false});}), btn('End turn', 'main', () => sock.emit('gw:done'))] });
   } else if (!mine && st.step === 'answer') {
     d = dock({ pill: `${opp} asks`, tone: 'theirs', qa: { who: `${opp} asked`, text: st.question, ans: null }, hint: 'Answer about your face (yellow border)',
       actions: [btn('Yes', 'yes-btn', () => sock.emit('gw:answer', { yes: true })), btn('No', 'no-btn', () => sock.emit('gw:answer', { yes: false }))] });
   } else {
-    d = dock({ pill: `${opp}’s turn`, tone: 'theirs', qa: last, hint: st.step === 'flip' ? `${opp} is flipping cards…` : `${opp} is choosing a question…`, actions: [] });
+    d = dock({ pill: `${opp}’s turn`, tone: 'theirs', hint: st.step === 'flip' ? `${opp} is putting faces down…` : `Answer ${opp} over your call, or wait for a typed question.`, actions: [] });
   }
   app.append(d);
+}
+function customDuoQuestion(){
+  closeSheet();
+  const dialog=document.createElement('dialog');dialog.className='custom-question-dialog';
+  dialog.innerHTML='<form><h2>Your question</h2><p>Ask anything you can answer about the photo.</p><label for="custom-gw-question">Yes/no question</label><textarea id="custom-gw-question" maxlength="90" required placeholder="Does your person…?"></textarea><div class="row"><button type="button" class="alt" data-close>Cancel</button><button type="submit">Send question</button></div><button type="button" class="alt wide" data-suggest>Suggested questions</button></form>';
+  document.body.append(dialog);dialog.showModal();dialog.querySelector('textarea').focus();
+  dialog.querySelector('[data-close]').onclick=()=>dialog.close();dialog.addEventListener('close',()=>dialog.remove());
+  dialog.querySelector('form').onsubmit=e=>{e.preventDefault();const text=dialog.querySelector('textarea').value.trim();if(text){sock.emit('gw:ask',{text});dialog.close();}};
+  dialog.querySelector('[data-suggest]').onclick=()=>{dialog.close();openSheet({custom:true,onPick:text=>sock.emit('gw:ask',{text})});};
 }
 const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
