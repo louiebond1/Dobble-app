@@ -17,6 +17,8 @@ const {chromium}=require(process.env.PW_ROOT||'playwright');
    for(let i=0;i<6;i++){
     await p.getByRole('button',{name:'Draw a country card',exact:true}).click();
     await p.waitForSelector('.count');await p.clock.fastForward(3100);await p.waitForSelector('.study .art-box img');
+    if(await p.locator('.caption').count()!==3)throw Error('Expected three card fact labels');
+    if(!/-v[23]\.png$/.test(await p.locator('.art-box img').getAttribute('src')))throw Error('Old observation art');
     if(i===0){
      await p.clock.runFor(1100);const n=Number(await p.locator('#count').textContent());
      if(n>29||n<27)throw Error('Study timer did not start '+n);

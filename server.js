@@ -3245,7 +3245,7 @@ app.get('/api/photos', (req, res) => {
 
 // Public practice deck; does not create, join or mutate the shared two-player match.
 app.get('/api/country-memory/practice', (_req, res) => {
-  res.json(require('./lib/country-memory').cards);
+  res.json(require('./lib/country-memory').makeDeck());
 });
 
 // Raw deck structure (which symbol ids are on each of the 57 cards) so Trial
