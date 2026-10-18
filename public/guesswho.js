@@ -78,6 +78,8 @@ function board(opts) {
   }
   const away = !!opts.away;
   awayCards(b, away, away !== lastAway);
+  // The whole board turns blue together (flipped-down cards too), so it never looks patchy.
+  if (away) { if (lastAway) b.classList.add('away-board'); else requestAnimationFrame(() => requestAnimationFrame(() => b.classList.add('away-board'))); }
   lastAway = away;
   return b;
 }
