@@ -23,11 +23,14 @@ const app = document.getElementById('app');
 const rnd = (a) => a[Math.floor(Math.random() * a.length)];
 const el = (h) => { const t = document.createElement('template'); t.innerHTML = h.trim(); return t.content.firstChild; };
 let S;
+let cpuTimers = [];
+const later = (fn, ms) => { const t = setTimeout(fn, ms); cpuTimers.push(t); };
+const clearCpuTimers = () => { cpuTimers.forEach(clearTimeout); cpuTimers = []; };
 
 function board(opts) {
   const b = el('<div class="board"></div>');
   for (const f of FACES) {
-    const c = el(`<button class="face" aria-label="Face ${f.id}"><img src="${f.src}" alt="" loading="lazy"><span class="n">${f.name}</span></button>`);
+    const c = el(`<button class="face" data-face="${f.id}" aria-label="Face ${f.id}"><img src="${f.src}" alt="" loading="lazy"><span class="n">${f.name}</span></button>`);
     if (opts.down && opts.down.has(f.id)) c.classList.add('down');
     if (opts.mine === f.id) c.classList.add('mine');
     c.onclick = () => opts.tap(f.id);
@@ -36,6 +39,7 @@ function board(opts) {
   return b;
 }
 function home() {
+  clearCpuTimers();
   S = null; app.innerHTML = '';
   app.append(el(`<div class="panel"><h2>Guess Who?</h2><p class="msg">${FACES.length} faces. Work out their secret face before they work out yours.</p>
     <div class="row"><button id="vs">Play the computer</button><button class="alt" id="ip">Play a friend in person</button></div></div>`));
@@ -48,7 +52,7 @@ function inPerson() {
   const draw = () => {
     app.innerHTML = '';
     app.append(el('<div class="panel"><h2>In person</h2><p class="msg">Tap a face to flip it down or up. Ask each other yes/no questions out loud. Tap “Pick my secret” and keep the screen hidden.</p><div class="row"><button id="rs">Pick my secret</button><button class="alt" id="reset">Flip all up</button><button class="alt" id="h">Home</button></div><p class="msg" id="sec"></p></div>'));
-    app.append(board({ down: S.down, mine: S.mine, tap: (id) => { S.down.has(id) ? S.down.delete(id) : S.down.add(id); draw(); } }));
+    app.append(board({ down: S.down, mine: S.mine, tap: (id) => { toggleCard(id, S.down, app); } }));
     document.getElementById('rs').onclick = () => { const f = rnd(FACES); alert('Your secret face is #' + f.id + '. Memorise it, then press OK.'); };
     document.getElementById('reset').onclick = () => { S.down.clear(); draw(); };
     document.getElementById('h').onclick = home;
@@ -57,14 +61,27 @@ function inPerson() {
 }
 // ---- vs computer ----
 function pickSecret() {
+  clearCpuTimers();
   S = { phase: 'pick' };
   app.innerHTML = '';
   app.append(el('<div class="panel"><h2>Pick your secret face</h2><p class="msg">Tap the face the computer has to find. Keep it in mind.</p></div>'));
   app.append(board({ tap: (id) => start(id) }));
 }
 function start(mine) {
-  S = { phase: 'play', mine, secret: rnd(FACES).id, down: new Set(), cpuLeft: FACES.map((f) => f.id), asked: new Set(), cpuAsked: new Set(), log: [], turn: 'you', guessing: false, over: null };
-  render();
+  clearCpuTimers();
+  S = { phase: 'play', mine, secret: rnd(FACES).id, down: new Set(), cpuDown: new Set(), cpuLeft: FACES.map((f) => f.id), asked: new Set(), cpuAsked: new Set(), log: [], turn: 'cpu', guessing: false, over: null, cpuMessage: 'Computer is choosing a question…', cpuAnswer: '', lastAnswer: '' };
+  render(); later(cpuTurn, 850);
+}
+function toggleCard(id, set, root) {
+  if (set.has(id)) set.delete(id); else set.add(id);
+  const card = root.querySelector('.board:not(.opponent-board) .face[data-face="'+id+'"]');
+  if (card) { card.classList.toggle('down', set.has(id)); card.classList.remove('card-snap'); void card.offsetWidth; card.classList.add('card-snap'); }
+}
+function opponentBoard() {
+  const wrap = el('<section class="opponent-wrap"><div class="opponent-title">COMPUTER’S BOARD <span id="cpu-count"></span></div></section>');
+  const b = el('<div class="opponent-board" aria-label="Computer board facing away"></div>');
+  for (const f of FACES) { const c = el('<div class="opponent-card" data-cpu="'+f.id+'"><span>?</span></div>'); if (S.cpuDown.has(f.id)) c.classList.add('down'); b.append(c); }
+  wrap.append(b); return wrap;
 }
 const face = (id) => FACES.find((f) => f.id === id);
 function render() {
@@ -74,6 +91,9 @@ function render() {
     p.append(el(`<h2>${S.over.win ? '🎉 You win!' : '😬 You lose'}</h2>`), el(`<p class="msg">${S.over.text}</p>`),
       el(`<img class="secret" src="${face(S.secret).src}" alt="">`));
     const again = el('<button>Play again</button>'); again.onclick = pickSecret; p.append(again);
+  } else if (S.turn === 'eliminate') {
+    p.append(el('<h2>Your move</h2><p class="msg">'+S.lastAnswer+' Tap each face you want to put down. Then end your turn.</p>'));
+    const done = el('<button class="end-turn">Done flipping · Computer’s turn →</button>'); done.onclick = () => { S.turn='cpu'; S.cpuMessage='Computer is choosing a question…'; render(); later(cpuTurn, 750); }; p.append(done);
   } else if (S.turn === 'you') {
     p.append(el('<h2>Your turn</h2>'));
     if (S.guessing) p.append(el('<p class="msg">Tap the face you think is the computer’s secret.</p>'));
@@ -87,12 +107,13 @@ function render() {
     g.onclick = () => { S.guessing = !S.guessing; render(); }; p.append(g);
   }
   if (S.log.length) { const l = el('<div class="log"></div>'); S.log.slice(-6).forEach((t) => l.append(el(`<div>${t}</div>`))); p.append(l); }
-  if (!S.over && S.turn === 'cpu') p.append(el('<p class="msg">Computer is thinking…</p>'));
+  if (!S.over && S.turn === 'cpu') p.append(el('<p class="msg cpu-question">'+(S.cpuMessage || 'Computer is thinking…')+'</p>'));
+  if (!S.over) app.append(opponentBoard());
   app.append(p);
   app.append(board({ down: S.down, mine: S.mine, tap: (id) => {
-    if (S.over || S.turn !== 'you') return;
+    if (S.over || (S.turn !== 'you' && S.turn !== 'eliminate')) return;
     if (S.guessing) return guess(id);
-    S.down.has(id) ? S.down.delete(id) : S.down.add(id); render();
+    toggleCard(id, S.down, app);
   } }));
   app.append(el('<p class="msg" style="opacity:.7">Your secret face has a yellow border. Faces you flip down are out.</p>'));
 }
@@ -100,35 +121,55 @@ function ask(q) {
   const yes = face(S.secret).tags.has(q.tag);
   S.asked.add(q.tag);
   S.log.push(`You: ${q.text} <span class="${yes ? 'yes' : 'no'}">${yes ? 'YES' : 'NO'}</span>`);
-  // Auto flip the faces ruled out; they can be flipped back by tapping.
-  for (const f of FACES) if (f.id !== S.mine && f.tags.has(q.tag) !== yes) S.down.add(f.id);
-  S.turn = 'cpu'; render(); setTimeout(cpuTurn, 900);
+  S.lastAnswer = `Answer: <strong class="${yes ? 'yes' : 'no'}">${yes ? 'YES' : 'NO'}</strong>. Your turn to flip down faces.`;
+  S.turn = 'eliminate'; render();
 }
 function guess(id) {
   if (id === S.secret) S.over = { win: true, text: 'Correct! It was face #' + id + '.' };
-  else { S.log.push(`You guessed #${id}: <span class="no">wrong</span>`); S.guessing = false; S.turn = 'cpu'; render(); return setTimeout(cpuTurn, 900); }
+  else { S.log.push(`You guessed #${id}: <span class="no">wrong</span>`); S.guessing = false; S.turn = 'cpu'; render(); return later(cpuTurn, 900); }
   render();
 }
 function cpuTurn() {
-  if (S.over) return;
+  if (!S || S.over || S.turn !== 'cpu') return;
   if (S.cpuLeft.length === 1) {
     const g = S.cpuLeft[0];
-    if (g === S.mine) S.over = { win: false, text: `The computer guessed face #${g}, your secret.` };
-    return finishCpu();
+    S.cpuMessage = 'Computer guesses '+face(g).name+'…';
+    render();
+    later(() => { if (g === S.mine) S.over = {win:false,text:'The computer found your secret face.'}; else S.cpuLeft = S.cpuLeft.filter(x=>x!==g); finishCpu(); }, 1200);
+    return;
   }
-  // Ask the question that splits the remaining faces closest to half.
   const half = S.cpuLeft.length / 2;
-  const opts = QUESTIONS.filter((q) => !S.cpuAsked.has(q.tag)).map((q) => {
-    const n = S.cpuLeft.filter((id) => face(id).tags.has(q.tag)).length;
-    return { q, n, d: Math.abs(n - half) };
-  }).filter((o) => o.n > 0 && o.n < S.cpuLeft.length).sort((a, b) => a.d - b.d);
-  if (!opts.length) { const g = rnd(S.cpuLeft); S.log.push(`Computer guessed #${g}: <span class="no">wrong</span>`); S.cpuLeft = S.cpuLeft.filter((x) => x !== g); return finishCpu(); }
-  const { q } = opts[0];
-  const yes = face(S.mine).tags.has(q.tag);
+  const opts = QUESTIONS.filter(q=>!S.cpuAsked.has(q.tag)).map(q=>{
+    const n=S.cpuLeft.filter(id=>face(id).tags.has(q.tag)).length;
+    return {q,n,d:Math.abs(n-half)};
+  }).filter(o=>o.n>0 && o.n<S.cpuLeft.length).sort((a,b)=>a.d-b.d);
+  if (!opts.length) {
+    const g=rnd(S.cpuLeft); S.cpuMessage='Computer guesses '+face(g).name+'…'; render();
+    later(()=>{if(g===S.mine)S.over={win:false,text:'The computer found your secret face.'};else S.cpuLeft=S.cpuLeft.filter(x=>x!==g);finishCpu();},1100);
+    return;
+  }
+  const {q}=opts[0], yes=face(S.mine).tags.has(q.tag);
   S.cpuAsked.add(q.tag);
-  S.cpuLeft = S.cpuLeft.filter((id) => face(id).tags.has(q.tag) === yes);
-  S.log.push(`Computer: ${q.text} <span class="${yes ? 'yes' : 'no'}">${yes ? 'YES' : 'NO'}</span> (your secret)`);
-  finishCpu();
+  S.cpuMessage='Computer asks: “'+q.text+'”';
+  render();
+  later(()=>{
+    S.cpuMessage='Your answer: '+(yes?'YES':'NO')+' · Computer is flipping cards…';
+    const removed=S.cpuLeft.filter(id=>face(id).tags.has(q.tag)!==yes);
+    S.cpuLeft=S.cpuLeft.filter(id=>face(id).tags.has(q.tag)===yes);
+    S.log.push('Computer: '+q.text+' <span class="'+(yes?'yes':'no')+'">'+(yes?'YES':'NO')+'</span>');
+    render();
+    removed.forEach((id,i)=>later(()=>{
+      if(!S || S.over)return;
+      S.cpuDown.add(id);
+      const card=app.querySelector('[data-cpu="'+id+'"]');
+      if(card)card.classList.add('down');
+    },350+i*140));
+    later(finishCpu,650+removed.length*140);
+  },1400);
 }
-function finishCpu() { if (!S.over) S.turn = 'you'; S.guessing = false; render(); }
+function finishCpu() {
+  if (!S || S.over) { if(S)render(); return; }
+  S.turn='you'; S.guessing=false; render();
+}
+
 home();
