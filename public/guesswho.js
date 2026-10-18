@@ -27,9 +27,12 @@ let cpuTimers = [];
 const later = (fn, ms) => { const t = setTimeout(fn, ms); cpuTimers.push(t); };
 const clearCpuTimers = () => { cpuTimers.forEach(clearTimeout); cpuTimers = []; };
 
+// A fresh random board order every game, so the faces are always mixed up.
+let LAYOUT = FACES.slice();
+function reshuffle() { for (let i = LAYOUT.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [LAYOUT[i], LAYOUT[j]] = [LAYOUT[j], LAYOUT[i]]; } }
 function board(opts) {
   const b = el('<div class="board"></div>');
-  for (const f of FACES) {
+  for (const f of LAYOUT) {
     const c = el(`<button class="face" data-face="${f.id}" aria-label="${f.name}"><img src="${f.src}" alt="" loading="lazy"><span class="n">${f.name}</span></button>`);
     if (opts.down && opts.down.has(f.id)) c.classList.add('down');
     if (opts.mine === f.id) c.classList.add('mine');
@@ -48,6 +51,7 @@ function home() {
 }
 // ---- in person: shared board, players ask each other out loud ----
 function inPerson() {
+  reshuffle();
   S = { down: new Set(), mine: null };
   const draw = () => {
     app.innerHTML = '';
@@ -61,6 +65,7 @@ function inPerson() {
 }
 // ---- vs computer ----
 function pickSecret() {
+  reshuffle();
   clearCpuTimers();
   S = { phase: 'pick' };
   app.innerHTML = '';
@@ -80,7 +85,7 @@ function toggleCard(id, set, root) {
 function opponentBoard() {
   const wrap = el('<section class="opponent-wrap"><div class="opponent-title">COMPUTER’S BOARD <span id="cpu-count"></span></div></section>');
   const b = el('<div class="opponent-board" aria-label="Computer board facing away"></div>');
-  for (const f of FACES) { const c = el('<div class="opponent-card" data-cpu="'+f.id+'"><span>?</span></div>'); if (S.cpuDown.has(f.id)) c.classList.add('down'); b.append(c); }
+  for (const f of LAYOUT) { const c = el('<div class="opponent-card" data-cpu="'+f.id+'"><span>?</span></div>'); if (S.cpuDown.has(f.id)) c.classList.add('down'); b.append(c); }
   wrap.append(b); return wrap;
 }
 const face = (id) => FACES.find((f) => f.id === id);
