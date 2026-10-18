@@ -4,7 +4,7 @@ const {chromium}=require(process.env.PW_ROOT||'playwright');
  await new Promise(r=>setTimeout(r,150));
  const browser=await chromium.launch({executablePath:process.env.PW_EXECUTABLE_PATH});
  try{
-  for(const size of [[390,667],[820,1180]]){
+  for(const size of [[320,568],[390,667],[820,1180]]){
    const p=await browser.newPage({viewport:{width:size[0],height:size[1]},serviceWorkers:'block',reducedMotion:'reduce'}),errors=[];
    await p.clock.install();
    p.on('pageerror',e=>errors.push(e.message));
@@ -26,11 +26,14 @@ const {chromium}=require(process.env.PW_ROOT||'playwright');
      await p.clock.fastForward(30000);
     }else await p.getByRole('button',{name:'Skip timer · practice only',exact:true}).click();
     await p.clock.fastForward(700);await p.getByRole('button',{name:'Roll the die',exact:true}).click();
+    if(i===0){await p.getByRole('textbox',{name:'Your answer',exact:true}).fill('My answer');await p.setViewportSize({width:size[0],height:360});const box=await p.getByRole('button',{name:'Check answer',exact:true}).boundingBox();if(box.y+box.height>360)throw Error('Answer button hidden behind keyboard');await p.setViewportSize({width:size[0],height:size[1]});}
     await p.getByRole('button',{name:'Check answer',exact:true}).click();
-    await p.getByRole('button',{name:'I got it · +1',exact:true}).click();
+    await p.getByRole('button',{name:i===1?'I missed it':'I got it · +1',exact:true}).click();
+    if(i===1&&!await p.getByText('Not this time',{exact:true}).count())throw Error('Missed answer shown as correct');
+    if(i===0){await p.locator('[data-review]').click();await p.getByRole('button',{name:'Close picture',exact:true}).click();}
     await p.getByRole('button',{name:i===5?'See practice score':'Next card',exact:true}).click();
    }
-   await p.getByRole('heading',{name:'6 out of 6',exact:true}).waitFor();
+   await p.getByRole('heading',{name:'5 out of 6',exact:true}).waitFor();
    if(errors.length)throw Error(errors.join(';'));
    console.log('PASS original home and complete solo practice: auto timer, skip, dice, answers, final score',size);
    await p.close();
