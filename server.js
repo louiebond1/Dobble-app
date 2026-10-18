@@ -38,6 +38,8 @@ const rooms = new Map();
 
 /** @type {Map<string, any>} */
 const memoryRooms = new Map();
+const countryMemoryRooms = new Map();
+const COUNTRY_MEMORY_COUNTRIES = ['france','italy','greece','spain','japan','egypt','australia','brazil','canada','india','netherlands','germany'];
 
 /** @type {Map<string, any>} */
 const drawRooms = new Map();
@@ -1641,6 +1643,29 @@ io.on('connection', (socket) => {
       ack({ ok: true, code, name, isHost, hostToken, started: room.started });
     }
     io.to(`mem:${code}`).emit('memory:players:update', memoryRoomPlayers(room));
+  });
+
+  socket.on('country:join', (payload, ack) => {
+    const who = payload && payload.who;
+    if (who !== 'Louie' && who !== 'Ariel') return ack && ack({ok:false,error:'Choose Louie or Ariel'});
+    let room = countryMemoryRooms.get('OURS');
+    if (!room) { room = { players: {}, ready: {}, started: false, createdAt: Date.now() }; countryMemoryRooms.set('OURS', room); }
+    if (room.players[who] && room.players[who] !== socket.id) return ack && ack({ok:false,error:`${who} is already playing`});
+    room.players[who] = socket.id; socket.data.countryWho = who; socket.join('country:OURS');
+    ack && ack({ok:true, who, otherReady: !!room.ready[who === 'Louie' ? 'Ariel' : 'Louie']});
+    io.to('country:OURS').emit('country:state', {players:Object.keys(room.players), ready:Object.keys(room.ready), started:room.started});
+  });
+  socket.on('country:ready', () => {
+    const room = countryMemoryRooms.get('OURS'); if (!room || !socket.data.countryWho) return;
+    room.ready[socket.data.countryWho] = true;
+    const both = room.players.Louie && room.players.Ariel && room.ready.Louie && room.ready.Ariel;
+    if (both) { room.started = true; room.ready = {}; io.to('country:OURS').emit('country:start', {players:['Louie','Ariel']}); }
+    else io.to('country:OURS').emit('country:state', {players:Object.keys(room.players), ready:Object.keys(room.ready), started:false});
+  });
+  socket.on('country:draw', (payload) => {
+    const room = countryMemoryRooms.get('OURS'); if (!room || !room.started || socket.data.countryWho !== 'Louie') return;
+    const id = COUNTRY_MEMORY_COUNTRIES[Math.floor(Math.random() * COUNTRY_MEMORY_COUNTRIES.length)];
+    io.to('country:OURS').emit('country:drawn', {id});
   });
 
   socket.on('memory:host:cancel', (payload) => {
