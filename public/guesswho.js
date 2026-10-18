@@ -23,6 +23,39 @@ const QUESTIONS = [
   ['Clothes', 'blue', 'Blue or navy', 'Are they wearing blue?'],
 ].map(([cat, tag, label, text]) => ({ cat, tag, label, text }));
 const CATS = ['Hair', 'Face', 'Accessories', 'Clothes'];
+
+// Only photograph-verifiable features. Never infer age, eye colour, skin tone or gender.
+const CATEGORIES = [
+  {name:'Hair', icon:'✂', tags:['blonde','grey','curly','long','hairup']},
+  {name:'Accessories',icon:'◉',tags:['hat','sunglasses','eyewear','earrings','necklace']},
+  {name:'Facial hair',icon:'〰',tags:['facialhair']},
+  {name:'Headwear',icon:'▱',tags:['hat']},
+  {name:'Visible features',icon:'☺',tags:['teeth','blue']}
+];
+function categoryPicker(onQuestion, used = new Set()) {
+  const dock = el('<div class="category-dock" aria-label="Question categories"></div>');
+  for (const cat of CATEGORIES) {
+    const b = el('<button class="category-btn" type="button"><span class="category-icon">'+cat.icon+'</span><span>'+cat.name+'</span></button>');
+    b.onclick = () => {
+      const overlay = el('<div class="category-overlay"><div class="category-shade"></div><section class="category-modal" role="dialog" aria-modal="true"><div class="category-head"><h2>'+cat.name+'</h2><button class="category-close" aria-label="Close">×</button></div><div class="category-choices"></div></section></div>');
+      const close = () => overlay.remove();
+      overlay.querySelector('.category-shade').onclick=close;
+      overlay.querySelector('.category-close').onclick=close;
+      const choices=overlay.querySelector('.category-choices');
+      cat.tags.forEach(tag=>{
+        const q=QUESTIONS.find(x=>x.tag===tag);
+        if (!q) return;
+        const option=el('<button type="button" class="category-choice">'+q.text+'</button>');
+        option.disabled=used.has(tag);
+        option.onclick=()=>{close();onQuestion(q);};
+        choices.append(option);
+      });
+      document.body.append(overlay);
+    };
+    dock.append(b);
+  }
+  return dock;
+}
 const app = document.getElementById('app');
 const rnd = (a) => a[Math.floor(Math.random() * a.length)];
 const el = (h) => { const t = document.createElement('template'); t.innerHTML = h.trim(); return t.content.firstChild; };
