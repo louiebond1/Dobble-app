@@ -26,11 +26,11 @@ const CATS = ['Hair', 'Face', 'Accessories', 'Clothes'];
 
 // Only photograph-verifiable features. Never infer age, eye colour, skin tone or gender.
 const CATEGORIES = [
-  {name:'Hair', icon:'✂', tags:['blonde','grey','curly','long','hairup']},
-  {name:'Accessories',icon:'◉',tags:['hat','sunglasses','eyewear','earrings','necklace']},
-  {name:'Facial hair',icon:'〰',tags:['facialhair']},
-  {name:'Headwear',icon:'▱',tags:['hat']},
-  {name:'Visible features',icon:'☺',tags:['teeth','blue']}
+  {name:'Hair', icon:'💇', tags:['blonde','grey','curly','long','hairup']},
+  {name:'Accessories',icon:'🕶️',tags:['hat','sunglasses','eyewear','earrings','necklace']},
+  {name:'Facial hair',icon:'〰️',tags:['facialhair']},
+  {name:'Headwear',icon:'🧢',tags:['hat']},
+  {name:'Visible features',icon:'😊',tags:['teeth','blue']}
 ];
 function categoryPicker(onQuestion, used = new Set()) {
   const dock = el('<div class="category-dock" aria-label="Question categories"></div>');
@@ -45,7 +45,7 @@ function categoryPicker(onQuestion, used = new Set()) {
       cat.tags.forEach(tag=>{
         const q=QUESTIONS.find(x=>x.tag===tag);
         if (!q) return;
-        const option=el('<button type="button" class="category-choice">'+q.text+'</button>');
+        const option=el('<button type="button" class="category-choice"><span class="choice-symbol">'+({hat:'🧢',sunglasses:'🕶️',eyewear:'👓',earrings:'💍',necklace:'📿',facialhair:'〰️',teeth:'😁',blonde:'💛',grey:'🩶',curly:'➰',long:'💇',hairup:'🎀',blue:'👕'}[tag]||'❔')+'</span><span>'+q.label+'</span></button>');
         option.disabled=used.has(tag);
         option.onclick=()=>{close();onQuestion(q);};
         choices.append(option);
@@ -173,12 +173,13 @@ function awayCards(boardEl, away, animate) {
 
 
 // ---- bottom dock: whose turn, the question card with its answer stamp, and the actions ----
-function dock({ pill, tone, qa, hint, actions }) {
+function dock({ pill, tone, qa, hint, actions, picker }) {
   const d = el(`<div class="dock tone-${tone || 'mine'}"><div class="dock-top"><span class="pill">${pill}</span><span class="dock-hint">${hint || ''}</span></div></div>`);
   if (qa) {
     const stamp = qa.ans === 'wait' ? '<span class="stamp wait"><i></i><i></i><i></i></span>' : qa.ans ? `<span class="stamp ${qa.ans}">${qa.ans === 'yes' ? 'Yes' : 'No'}</span>` : '';
     d.append(el(`<div class="qa"><div class="qa-main"><div class="qa-who">${qa.who}</div><div class="qa-text">${esc(qa.text)}</div></div>${stamp}</div>`));
   }
+  if (picker) d.append(picker);
   const row = el('<div class="dock-actions"></div>');
   (actions || []).forEach((a) => row.append(a));
   d.append(row);
@@ -244,7 +245,7 @@ function render() {
     d = S.guessing
       ? dock({ pill: 'Your guess', qa: S.qa, hint: 'Tap the face you think it is', actions: [btn('Cancel', 'alt', () => { S.guessing = false; render(); })] })
       : dock({ pill: 'Your turn', qa: S.qa, hint: '',
-          actions: [btn('Ask a question', 'main', () => openSheet({ asked: S.asked, onPick: (t) => ask(QUESTIONS.find((q) => q.text === t)) })), btn('Guess', 'alt', () => { S.guessing = true; render(); })] });
+          actions: [btn('Guess face', 'alt', () => { S.guessing = true; render(); })], picker: categoryPicker(ask, S.asked) });
   } else {
     d = dock({ pill: 'Computer’s turn', tone: 'theirs', qa: S.qa, hint: S.cpuMessage || '', actions: [] });
   }
@@ -368,7 +369,7 @@ function duoRender() {
   if (mine && st.step === 'ask') {
     d = D.guessing
       ? dock({ pill: 'Your guess', qa: last, hint: `Tap the face you think is ${opp}’s`, actions: [btn('Cancel', 'alt', () => { D.guessing = false; duoRender(); })] })
-      : dock({ pill: 'Your turn', qa: last, actions: [btn('Ask a question', 'main', () => openSheet({ custom: true, onPick: (t) => sock.emit('gw:ask', { text: t }) })), btn('Guess', 'alt', () => { D.guessing = true; duoRender(); })] });
+      : dock({ pill: 'Your turn', qa: last, actions: [btn('Guess face', 'alt', () => { D.guessing = true; duoRender(); })], picker: categoryPicker(q => sock.emit('gw:ask', { text: q.text })) });
   } else if (mine && st.step === 'answer') {
     d = dock({ pill: 'Your turn', qa: { who: 'You asked', text: st.question, ans: 'wait' }, hint: `Waiting for ${opp}`, actions: [] });
   } else if (mine && st.step === 'flip') {
