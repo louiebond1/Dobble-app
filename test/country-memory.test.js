@@ -12,6 +12,10 @@ test('Country Memory: the first arrival can ready up before their partner joins'
   const t=table(),l=t.add('L','louie');assert.equal(l.call('ready').ok,true);assert.deepEqual(l.view().ready,['louie']);assert.equal(l.view().phase,'lobby');
   const a=t.add('A','ariel');a.call('ready');assert.equal(l.view().phase,'intro');
 });
+test('Country Memory: two ready players start automatically when the missing player reconnects',()=>{
+  const t=table(),l=t.add('L','louie');l.call('ready');l.disconnect();const a=t.add('A','ariel');a.call('ready');assert.equal(a.view().phase,'lobby');assert.equal(a.view().ready.length,2);
+  t.add('L2','louie',l.join.token);assert.equal(a.view().phase,'intro');
+});
 test('Country Memory: disconnect pauses the study clock and reconnect preserves time',()=>{
   const t=table(),l=t.add('L','louie'),a=t.add('A','ariel');l.call('ready');a.call('ready');t.advance(2500);l.call('draw');l.call('loaded');t.advance(3000);t.advance(10000);
   a.disconnect();assert.equal(l.view().paused,true);assert.equal(l.view().remaining,20000);assert.equal(l.view().deadline,null);
