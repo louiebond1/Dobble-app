@@ -1373,6 +1373,8 @@ function startRound(code) {
   }, 23000); // padded ~3s over the visible answer window to cover the client-side countdown reveal
 }
 
+io.on('connection', require('./lib/guesswho').guessWho(io));
+
 io.on('connection', (socket) => {
   socket.on('host:create', (payload, ack) => {
     const rounds = Math.max(3, Math.min(28, Number(payload && payload.rounds) || 15));

@@ -42,10 +42,14 @@ function board(opts) {
   return b;
 }
 function home() {
-  clearCpuTimers();
+  clearCpuTimers(); duoLeave();
   S = null; app.innerHTML = '';
   app.append(el(`<div class="panel"><h2>Guess Who?</h2><p class="msg">${FACES.length} faces. Work out their secret face before they work out yours.</p>
-    <div class="row"><button id="vs">Play the computer</button><button class="alt" id="ip">Play a friend in person</button></div></div>`));
+    <div class="row"><button id="vs">Play the computer</button><button class="alt" id="ip">Play a friend in person</button></div>
+    <p class="msg" style="margin-top:14px">Two phones, one game. Who are you?</p>
+    <div class="row"><button id="iL">I’m Louie</button><button id="iA">I’m Ariel</button></div></div>`));
+  document.getElementById('iL').onclick = () => duo('louie');
+  document.getElementById('iA').onclick = () => duo('ariel');
   document.getElementById('vs').onclick = pickSecret;
   document.getElementById('ip').onclick = inPerson;
 }
@@ -176,5 +180,95 @@ function finishCpu() {
   if (!S || S.over) { if(S)render(); return; }
   S.turn='you'; S.guessing=false; render();
 }
+
+// ---- two phones: "I'm Louie" / "I'm Ariel" ----
+const NAME = { louie: 'Louie', ariel: 'Ariel' };
+let D = null, sock = null;
+function duoLeave() { if (sock) { sock.emit('gw:leave'); sock.off('gw:state'); } D = null; }
+function duo(who) {
+  if (typeof io === 'undefined') { alert('Could not connect. Reload and try again.'); return; }
+  sock = sock || io();
+  D = { who, st: null, down: new Set(), guessing: false, shuffledFor: null };
+  sock.off('gw:state');
+  sock.on('gw:state', (st) => { if (!D) return; onDuoState(st); });
+  const join = () => sock.emit('gw:join', { who }, (r) => {
+    if (r && r.ok) return;
+    app.innerHTML = '';
+    app.append(el(`<div class="panel"><h2>${NAME[who]} is already playing</h2><p class="msg">That seat is taken on another phone. If that was you, close the other page and try again.</p><button id="back">Back</button></div>`));
+    document.getElementById('back').onclick = home;
+  });
+  sock.off('connect'); sock.on('connect', () => { if (D) join(); });
+  app.innerHTML = '<div class="panel"><p class="msg">Connecting…</p></div>';
+  join();
+}
+function onDuoState(st) {
+  const fresh = st.phase === 'pick' && st.mySecret === null;
+  if (fresh && D.shuffledFor !== 'pick') { reshuffle(); D.down.clear(); D.guessing = false; }
+  D.shuffledFor = st.phase;
+  D.st = st; duoRender();
+}
+function duoRender() {
+  const st = D.st, me = NAME[st.me], opp = NAME[st.opponent];
+  app.innerHTML = '';
+  const p = el('<div class="panel"></div>');
+  const back = el('<button class="alt" style="margin-top:10px">Leave game</button>'); back.onclick = home;
+  const rec = el(`<p class="msg">${NAME.louie} ${st.record.louie} – ${st.record.ariel} ${NAME.ariel}</p>`);
+  const lastLog = st.log[st.log.length - 1];
+  const logLine = (l) => l.wrong ? `${NAME[l.by]} guessed ${face(l.guess)?.name || '?'}: <span class="no">wrong</span>` : `${NAME[l.by]}: ${esc(l.q)} <span class="${l.yes ? 'yes' : 'no'}">${l.yes ? 'YES' : 'NO'}</span>`;
+  let showBoard = true;
+  if (st.phase === 'waiting') {
+    p.append(el(`<h2>Hi ${me}</h2>`), el(`<p class="msg">Waiting for ${opp} to open Guess Who and tap “I’m ${opp}”…</p>`)); showBoard = false;
+  } else if (st.phase === 'pick') {
+    p.append(el(`<h2>${st.mySecret === null ? 'Pick your secret face' : 'Secret picked'}</h2>`),
+      el(`<p class="msg">${st.mySecret === null ? `Tap the face ${opp} has to find.` : st.opponentPicked ? 'Starting…' : `Waiting for ${opp} to pick…`}</p>`));
+    if (st.mySecret !== null) showBoard = true;
+  } else if (st.phase === 'over') {
+    const won = st.winner === st.me;
+    p.append(el(`<h2>${won ? '🎉 You win!' : `😬 ${opp} wins`}</h2>`),
+      el(`<p class="msg">${won ? `You found ${opp}’s face.` : `${opp} found your face.`} ${opp}’s secret was ${face(st.opponentSecret)?.name}.</p>`),
+      el(`<img class="secret" src="${face(st.opponentSecret)?.src}" alt="">`), rec);
+    const again = el('<button>Play again</button>'); again.onclick = () => sock.emit('gw:again'); p.append(again); showBoard = false;
+  } else {
+    const mine = st.turn === st.me;
+    if (mine && st.step === 'ask') {
+      p.append(el('<h2>Your turn</h2>'));
+      if (D.guessing) p.append(el(`<p class="msg">Tap the face you think is ${opp}’s secret.</p>`));
+      else {
+        p.append(el(`<p class="msg">Ask ${opp} a yes/no question about their face:</p>`));
+        const row = el('<div class="row"><input id="q" maxlength="90" placeholder="Type your own question…" style="flex:1 1 200px;font:inherit;padding:11px;border-radius:7px;border:1px solid #555d65;background:#1f242b;color:#f5f2e9"><button id="send">Ask</button></div>');
+        p.append(row);
+        const qs = el('<div class="qs" style="margin-top:8px"></div>');
+        for (const q of QUESTIONS) { const b = el(`<button class="alt">${q.text}</button>`); b.onclick = () => sock.emit('gw:ask', { text: q.text }); qs.append(b); }
+        p.append(qs);
+        setTimeout(() => { const send = () => { const v = document.getElementById('q').value.trim(); if (v) sock.emit('gw:ask', { text: v }); }; document.getElementById('send').onclick = send; document.getElementById('q').onkeydown = (e) => { if (e.key === 'Enter') send(); }; }, 0);
+      }
+      const g = el(`<button style="margin-top:8px">${D.guessing ? 'Cancel guess' : 'Make a guess'}</button>`);
+      g.onclick = () => { D.guessing = !D.guessing; duoRender(); }; p.append(g);
+    } else if (mine && st.step === 'answer') {
+      p.append(el('<h2>Your turn</h2>'), el(`<p class="msg cpu-question">You asked: “${esc(st.question)}” — waiting for ${opp}…</p>`));
+    } else if (mine && st.step === 'flip') {
+      p.append(el('<h2>Your move</h2>'), el(`<p class="msg">${opp} answered <strong class="${lastLog?.yes ? 'yes' : 'no'}">${lastLog?.yes ? 'YES' : 'NO'}</strong>. Tap each face you want to put down, then end your turn.</p>`));
+      const done = el(`<button class="end-turn">Done flipping · ${opp}’s turn →</button>`); done.onclick = () => sock.emit('gw:done'); p.append(done);
+    } else if (!mine && st.step === 'answer') {
+      p.append(el(`<h2>${opp} asks</h2>`), el(`<p class="msg cpu-question">“${esc(st.question)}”</p>`), el('<p class="msg">Answer honestly about your secret face (yellow border).</p>'));
+      const row = el('<div class="row"><button id="y">YES</button><button class="alt" id="n">NO</button></div>');
+      p.append(row);
+      setTimeout(() => { document.getElementById('y').onclick = () => sock.emit('gw:answer', { yes: true }); document.getElementById('n').onclick = () => sock.emit('gw:answer', { yes: false }); }, 0);
+    } else {
+      p.append(el(`<h2>${opp}’s turn</h2>`), el(`<p class="msg cpu-question">${st.step === 'flip' ? `${opp} is flipping cards…` : `${opp} is choosing a question…`}</p>`));
+    }
+    if (st.log.length) { const l = el('<div class="log"></div>'); st.log.slice(-5).forEach((x) => l.append(el(`<div>${logLine(x)}</div>`))); p.append(l); }
+    p.append(rec);
+  }
+  p.append(back);
+  app.append(p);
+  if (showBoard) app.append(board({ down: D.down, mine: st.mySecret, tap: (id) => {
+    if (st.phase === 'pick') { if (st.mySecret === null) sock.emit('gw:pick', { id }); return; }
+    if (st.turn !== st.me) return;
+    if (D.guessing && st.step === 'ask') { D.guessing = false; return sock.emit('gw:guess', { id }); }
+    if (st.step === 'flip') toggleCard(id, D.down, app);
+  } }));
+}
+const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
 home();
