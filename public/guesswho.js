@@ -14,11 +14,15 @@ const FACES = [
   F(22, 'earrings', 'Rachael'), F(23, 'teeth earrings necklace', 'Izzy'), F(24, 'teeth long', 'Grace'), F(25, 'teeth blue', 'Rob'), F(26, 'teeth necklace', 'Cameron'), F(27, '', 'Jiggle'), F(28, 'teeth blue', 'Jared'), F(29, 'necklace', 'Jake'), F(30, 'teeth curly', 'Zach S'),
 ];
 const QUESTIONS = [
-  ['hat', 'Wearing a hat or cap?'], ['sunglasses', 'Wearing sunglasses?'], ['eyewear', 'Any glasses or sunglasses showing?'],
-  ['facialhair', 'Beard, stubble or moustache?'], ['earrings', 'Earrings showing?'], ['necklace', 'Necklace or chain showing?'],
-  ['teeth', 'Smiling with teeth showing?'], ['blonde', 'Blonde hair?'], ['grey', 'Grey or white hair?'], ['curly', 'Curly hair?'],
-  ['long', 'Long hair past the shoulders?'], ['hairup', 'Hair tied up?'], ['blue', 'Wearing blue or navy?'],
-].map(([tag, text]) => ({ tag, text }));
+  ['Hair', 'hat', 'Hat or cap', 'Are they wearing a hat?'], ['Accessories', 'sunglasses', 'Sunglasses', 'Are they wearing sunglasses?'],
+  ['Accessories', 'eyewear', 'Any glasses', 'Are there glasses or sunglasses showing?'], ['Face', 'facialhair', 'Beard or stubble', 'Do they have a beard or stubble?'],
+  ['Accessories', 'earrings', 'Earrings', 'Are they wearing earrings?'], ['Accessories', 'necklace', 'Necklace or chain', 'Are they wearing a necklace?'],
+  ['Face', 'teeth', 'Smiling with teeth', 'Are they smiling with teeth?'], ['Hair', 'blonde', 'Blonde', 'Do they have blonde hair?'],
+  ['Hair', 'grey', 'Grey or white', 'Do they have grey or white hair?'], ['Hair', 'curly', 'Curly', 'Do they have curly hair?'],
+  ['Hair', 'long', 'Long, past shoulders', 'Is their hair long, past the shoulders?'], ['Hair', 'hairup', 'Tied up', 'Is their hair tied up?'],
+  ['Clothes', 'blue', 'Blue or navy', 'Are they wearing blue?'],
+].map(([cat, tag, label, text]) => ({ cat, tag, label, text }));
+const CATS = ['Hair', 'Face', 'Accessories', 'Clothes'];
 const app = document.getElementById('app');
 const rnd = (a) => a[Math.floor(Math.random() * a.length)];
 const el = (h) => { const t = document.createElement('template'); t.innerHTML = h.trim(); return t.content.firstChild; };
@@ -81,7 +85,7 @@ function pickSecret() {
 }
 function start(mine) {
   clearCpuTimers(); lastAway = false; flipStack = [];
-  S = { phase: 'play', mine, secret: rnd(FACES).id, down: new Set(), cpuDown: new Set(), cpuLeft: FACES.map((f) => f.id), asked: new Set(), cpuAsked: new Set(), log: [], turn: 'cpu', guessing: false, over: null, cpuMessage: 'Computer is choosing a question…', cpuAnswer: '', lastAnswer: '' };
+  S = { phase: 'play', mine, secret: rnd(FACES).id, down: new Set(), cpuDown: new Set(), cpuLeft: FACES.map((f) => f.id), asked: new Set(), cpuAsked: new Set(), log: [], turn: 'cpu', guessing: false, over: null, cpuMessage: '', qa: null };
   render(); later(cpuTurn, 850);
 }
 
@@ -132,6 +136,46 @@ function awayCards(boardEl, away, animate) {
   if (animate) cards.forEach((c) => flipClass(c, 'away', away, Math.random() * 70));
 }
 
+
+// ---- bottom dock: whose turn, the question card with its answer stamp, and the actions ----
+function dock({ pill, tone, qa, hint, actions }) {
+  const d = el(`<div class="dock tone-${tone || 'mine'}"><div class="dock-top"><span class="pill">${pill}</span><span class="dock-hint">${hint || ''}</span></div></div>`);
+  if (qa) {
+    const stamp = qa.ans === 'wait' ? '<span class="stamp wait"><i></i><i></i><i></i></span>' : qa.ans ? `<span class="stamp ${qa.ans}">${qa.ans === 'yes' ? 'Yes' : 'No'}</span>` : '';
+    d.append(el(`<div class="qa"><div class="qa-main"><div class="qa-who">${qa.who}</div><div class="qa-text">${esc(qa.text)}</div></div>${stamp}</div>`));
+  }
+  const row = el('<div class="dock-actions"></div>');
+  (actions || []).forEach((a) => row.append(a));
+  d.append(row);
+  return d;
+}
+const btn = (label, cls, fn) => { const b = el(`<button class="${cls || ''}">${label}</button>`); b.onclick = fn; return b; };
+// Question picker: a bottom sheet with a tab per topic and one tidy row per question.
+function openSheet({ asked, onPick, custom, onGuess }) {
+  closeSheet();
+  let cat = CATS[0];
+  const sh = el('<div class="sheet-wrap"><div class="sheet-bg"></div><div class="sheet" role="dialog" aria-label="Ask a question"><div class="sheet-grab"></div><div class="tabs"></div><div class="rows"></div><div class="sheet-foot"></div></div></div>');
+  const tabs = sh.querySelector('.tabs'), rows = sh.querySelector('.rows'), foot = sh.querySelector('.sheet-foot');
+  const draw = () => {
+    tabs.innerHTML = ''; rows.innerHTML = '';
+    CATS.forEach((c) => { const t = el(`<button class="tab${c === cat ? ' on' : ''}">${c}</button>`); t.onclick = () => { cat = c; draw(); }; tabs.append(t); });
+    QUESTIONS.filter((q) => q.cat === cat).forEach((q) => {
+      const r = el(`<button class="row-q"${asked && asked.has(q.tag) ? ' disabled' : ''}><span>${q.label}</span><i>${asked && asked.has(q.tag) ? 'asked' : '›'}</i></button>`);
+      r.onclick = () => { closeSheet(); onPick(q.text); }; rows.append(r);
+    });
+  };
+  draw();
+  if (custom) {
+    const f = el('<form class="own"><input maxlength="90" placeholder="Or type your own yes/no question" autocomplete="off"><button>Ask</button></form>');
+    f.onsubmit = (e) => { e.preventDefault(); const v = f.querySelector('input').value.trim(); if (v) { closeSheet(); onPick(v); } };
+    foot.append(f);
+  }
+  sh.querySelector('.sheet-bg').onclick = closeSheet;
+  document.body.append(sh);
+  requestAnimationFrame(() => sh.classList.add('open'));
+}
+function closeSheet() { document.querySelectorAll('.sheet-wrap').forEach((n) => n.remove()); }
+
 function opponentBoard() {
   const wrap = el('<section class="opponent-wrap"><div class="opponent-title">COMPUTER’S BOARD <span id="cpu-count"></span></div></section>');
   const b = el('<div class="opponent-board" aria-label="Computer board facing away"></div>');
@@ -140,58 +184,54 @@ function opponentBoard() {
 }
 const face = (id) => FACES.find((f) => f.id === id);
 function render() {
+  closeSheet();
   app.innerHTML = '';
-  const p = el('<div class="panel"></div>');
-  if (S.over) {
-    p.append(el(`<h2>${S.over.win ? '🎉 You win!' : '😬 You lose'}</h2>`), el(`<p class="msg">${S.over.text}</p>`),
-      el(`<img class="secret" src="${face(S.secret).src}" alt="">`));
-    const again = el('<button>Play again</button>'); again.onclick = pickSecret; p.append(again);
-  } else if (S.turn === 'eliminate') {
-    p.append(el('<h2>Your move</h2><p class="msg">'+S.lastAnswer+' Tap each face you want to put down. Then end your turn.</p>'));
-    const undo = el('<button class="alt undo" aria-label="Undo last flip">↶ Undo</button>'); undo.onclick = () => undoFlip(S.down, app); p.append(undo);
-    const done = el('<button class="end-turn">Done flipping · Computer’s turn →</button>'); done.onclick = () => { S.turn='cpu'; S.cpuMessage='Computer is choosing a question…'; render(); later(cpuTurn, 750); }; p.append(done);
-  } else if (S.turn === 'you') {
-    p.append(el('<h2>Your turn</h2>'));
-    if (S.guessing) p.append(el('<p class="msg">Tap the face you think is the computer’s secret.</p>'));
-    else {
-      p.append(el('<p class="msg">Ask a question about the computer’s secret face:</p>'));
-      const qs = el('<div class="qs"></div>');
-      for (const q of QUESTIONS) { const b = el(`<button class="alt">${q.text}</button>`); b.disabled = S.asked.has(q.tag); b.onclick = () => ask(q); qs.append(b); }
-      p.append(qs);
-    }
-    const g = el(`<button style="margin-top:8px">${S.guessing ? 'Cancel guess' : 'Make a guess'}</button>`);
-    g.onclick = () => { S.guessing = !S.guessing; render(); }; p.append(g);
-  }
-  if (S.log.length) { const l = el('<div class="log"></div>'); S.log.slice(-6).forEach((t) => l.append(el(`<div>${t}</div>`))); p.append(l); }
-  if (!S.over && S.turn === 'cpu') p.append(el('<p class="msg cpu-question">'+(S.cpuMessage || 'Computer is thinking…')+'</p>'));
+  document.body.classList.toggle('has-dock', !S.over);
   if (!S.over) app.append(opponentBoard());
-  app.append(p);
+  if (S.over) {
+    const p = el('<div class="panel"></div>');
+    p.append(el(`<h2>${S.over.win ? 'You win' : 'You lose'}</h2>`), el(`<p class="msg">${S.over.text}</p>`),
+      el(`<img class="secret" src="${face(S.secret).src}" alt="">`));
+    p.append(btn('Play again', '', pickSecret)); app.append(p);
+  }
   app.append(board({ down: S.down, mine: S.mine, away: S.turn === 'cpu' && !S.over, tap: (id) => {
     if (S.over || (S.turn !== 'you' && S.turn !== 'eliminate')) return;
     if (S.guessing) return guess(id);
     toggleCard(id, S.down, app);
   } }));
-  app.append(el('<p class="msg" style="opacity:.7">Your secret face has a yellow border. Faces you flip down are out.</p>'));
+  if (S.over) return;
+  let d;
+  if (S.turn === 'eliminate') {
+    d = dock({ pill: 'Your move', qa: S.qa, hint: 'Tap faces to put them down',
+      actions: [btn('Undo', 'alt', () => undoFlip(S.down, app)), btn('End turn', 'main', () => { S.turn = 'cpu'; S.cpuMessage = ''; render(); later(cpuTurn, 750); })] });
+  } else if (S.turn === 'you') {
+    d = S.guessing
+      ? dock({ pill: 'Your guess', qa: S.qa, hint: 'Tap the face you think it is', actions: [btn('Cancel', 'alt', () => { S.guessing = false; render(); })] })
+      : dock({ pill: 'Your turn', qa: S.qa, hint: '',
+          actions: [btn('Ask a question', 'main', () => openSheet({ asked: S.asked, onPick: (t) => ask(QUESTIONS.find((q) => q.text === t)) })), btn('Guess', 'alt', () => { S.guessing = true; render(); })] });
+  } else {
+    d = dock({ pill: 'Computer’s turn', tone: 'theirs', qa: S.qa, hint: S.cpuMessage || '', actions: [] });
+  }
+  app.append(d);
 }
 function ask(q) {
   const yes = face(S.secret).tags.has(q.tag);
   S.asked.add(q.tag); flipStack = [];
-  S.log.push(`You: ${q.text} <span class="${yes ? 'yes' : 'no'}">${yes ? 'YES' : 'NO'}</span>`);
-  S.lastAnswer = `Answer: <strong class="${yes ? 'yes' : 'no'}">${yes ? 'YES' : 'NO'}</strong>. Your turn to flip down faces.`;
+  S.qa = { who: 'You asked', text: q.text, ans: yes ? 'yes' : 'no' };
   S.turn = 'eliminate'; render();
 }
 function guess(id) {
   if (id === S.secret) S.over = { win: true, text: 'Correct! It was ' + face(id).name + '.' };
-  else { S.log.push(`You guessed ${face(id).name}: <span class="no">wrong</span>`); S.guessing = false; S.turn = 'cpu'; render(); return later(cpuTurn, 900); }
+  else { S.qa = { who: 'You guessed', text: 'Is it ' + face(id).name + '?', ans: 'no' }; S.guessing = false; S.turn = 'cpu'; render(); return later(cpuTurn, 900); }
   render();
 }
 function cpuTurn() {
   if (!S || S.over || S.turn !== 'cpu') return;
   if (S.cpuLeft.length === 1) {
     const g = S.cpuLeft[0];
-    S.cpuMessage = 'Computer guesses '+face(g).name+'…';
+    S.qa={who:'Computer guesses',text:'Is it '+face(g).name+'?',ans:'wait'}; S.cpuMessage='';
     render();
-    later(() => { if (g === S.mine) S.over = {win:false,text:'The computer found your secret face.'}; else S.cpuLeft = S.cpuLeft.filter(x=>x!==g); finishCpu(); }, 1200);
+    later(() => { if (g === S.mine) S.over = {win:false,text:'The computer found your secret face.'}; else { S.cpuLeft = S.cpuLeft.filter(x=>x!==g); S.qa.ans='no'; } finishCpu(); }, 1200);
     return;
   }
   const half = S.cpuLeft.length / 2;
@@ -200,19 +240,18 @@ function cpuTurn() {
     return {q,n,d:Math.abs(n-half)};
   }).filter(o=>o.n>0 && o.n<S.cpuLeft.length).sort((a,b)=>a.d-b.d);
   if (!opts.length) {
-    const g=rnd(S.cpuLeft); S.cpuMessage='Computer guesses '+face(g).name+'…'; render();
-    later(()=>{if(g===S.mine)S.over={win:false,text:'The computer found your secret face.'};else S.cpuLeft=S.cpuLeft.filter(x=>x!==g);finishCpu();},1100);
+    const g=rnd(S.cpuLeft); S.qa={who:'Computer guesses',text:'Is it '+face(g).name+'?',ans:'wait'}; S.cpuMessage=''; render();
+    later(()=>{if(g===S.mine)S.over={win:false,text:'The computer found your secret face.'};else { S.cpuLeft=S.cpuLeft.filter(x=>x!==g); S.qa.ans='no'; } finishCpu();},1100);
     return;
   }
   const {q}=opts[0], yes=face(S.mine).tags.has(q.tag);
   S.cpuAsked.add(q.tag);
-  S.cpuMessage='Computer asks: “'+q.text+'”';
+  S.qa={who:'Computer asks',text:q.text,ans:'wait'}; S.cpuMessage='';
   render();
   later(()=>{
-    S.cpuMessage='Your answer: '+(yes?'YES':'NO')+' · Computer is flipping cards…';
+    S.qa={who:'Computer asks',text:q.text,ans:yes?'yes':'no'}; S.cpuMessage='Flipping cards…';
     const removed=S.cpuLeft.filter(id=>face(id).tags.has(q.tag)!==yes);
     S.cpuLeft=S.cpuLeft.filter(id=>face(id).tags.has(q.tag)===yes);
-    S.log.push('Computer: '+q.text+' <span class="'+(yes?'yes':'no')+'">'+(yes?'YES':'NO')+'</span>');
     render();
     removed.forEach((id,i)=>later(()=>{
       if(!S || S.over)return;
@@ -257,67 +296,55 @@ function onDuoState(st) {
   D.st = st; duoRender();
 }
 function duoRender() {
+  closeSheet();
   const st = D.st, me = NAME[st.me], opp = NAME[st.opponent];
   app.innerHTML = '';
-  const p = el('<div class="panel"></div>');
-  const back = el('<button class="alt" style="margin-top:10px">Leave game</button>'); back.onclick = home;
-  const rec = el(`<p class="msg">${NAME.louie} ${st.record.louie} – ${st.record.ariel} ${NAME.ariel}</p>`);
-  const lastLog = st.log[st.log.length - 1];
-  const logLine = (l) => l.wrong ? `${NAME[l.by]} guessed ${face(l.guess)?.name || '?'}: <span class="no">wrong</span>` : `${NAME[l.by]}: ${esc(l.q)} <span class="${l.yes ? 'yes' : 'no'}">${l.yes ? 'YES' : 'NO'}</span>`;
+  document.body.classList.toggle('has-dock', st.phase === 'play');
+  const top = el(`<div class="topline"><span>${NAME.louie} <b>${st.record.louie}</b> – <b>${st.record.ariel}</b> ${NAME.ariel}</span></div>`);
+  top.append(btn('Leave', 'linkbtn', home));
+  app.append(top);
+  const logQA = (l) => !l ? null : l.wrong ? { who: `${NAME[l.by]} guessed`, text: `Is it ${face(l.guess)?.name || '?'}?`, ans: 'no' } : { who: `${NAME[l.by]} asked`, text: l.q, ans: l.yes ? 'yes' : 'no' };
   let showBoard = true;
   if (st.phase === 'waiting') {
-    p.append(el(`<h2>Hi ${me}</h2>`), el(`<p class="msg">Waiting for ${opp} to open Guess Who and tap “I’m ${opp}”…</p>`)); showBoard = false;
+    const p = el('<div class="panel"></div>');
+    p.append(el(`<h2>Hi ${me}</h2>`), el(`<p class="msg">Waiting for ${opp} to open Guess Who and tap “I’m ${opp}”…</p>`)); app.append(p); showBoard = false;
   } else if (st.phase === 'pick') {
+    const p = el('<div class="panel"></div>');
     p.append(el(`<h2>${st.mySecret === null ? 'Pick your secret face' : 'Secret picked'}</h2>`),
-      el(`<p class="msg">${st.mySecret === null ? `Tap the face ${opp} has to find.` : st.opponentPicked ? 'Starting…' : `Waiting for ${opp} to pick…`}</p>`));
-    if (st.mySecret !== null) showBoard = true;
+      el(`<p class="msg">${st.mySecret === null ? `Tap the face ${opp} has to find.` : st.opponentPicked ? 'Starting…' : `Waiting for ${opp} to pick…`}</p>`)); app.append(p);
   } else if (st.phase === 'over') {
     const won = st.winner === st.me;
-    p.append(el(`<h2>${won ? '🎉 You win!' : `😬 ${opp} wins`}</h2>`),
+    const p = el('<div class="panel"></div>');
+    p.append(el(`<h2>${won ? 'You win' : `${opp} wins`}</h2>`),
       el(`<p class="msg">${won ? `You found ${opp}’s face.` : `${opp} found your face.`} ${opp}’s secret was ${face(st.opponentSecret)?.name}.</p>`),
-      el(`<img class="secret" src="${face(st.opponentSecret)?.src}" alt="">`), rec);
-    const again = el('<button>Play again</button>'); again.onclick = () => sock.emit('gw:again'); p.append(again); showBoard = false;
-  } else {
-    const mine = st.turn === st.me;
-    if (mine && st.step === 'ask') {
-      p.append(el('<h2>Your turn</h2>'));
-      if (D.guessing) p.append(el(`<p class="msg">Tap the face you think is ${opp}’s secret.</p>`));
-      else {
-        p.append(el(`<p class="msg">Ask ${opp} a yes/no question about their face:</p>`));
-        const row = el('<div class="row"><input id="q" maxlength="90" placeholder="Type your own question…" style="flex:1 1 200px;font:inherit;padding:11px;border-radius:7px;border:1px solid #555d65;background:#1f242b;color:#f5f2e9"><button id="send">Ask</button></div>');
-        p.append(row);
-        const qs = el('<div class="qs" style="margin-top:8px"></div>');
-        for (const q of QUESTIONS) { const b = el(`<button class="alt">${q.text}</button>`); b.onclick = () => sock.emit('gw:ask', { text: q.text }); qs.append(b); }
-        p.append(qs);
-        setTimeout(() => { const send = () => { const v = document.getElementById('q').value.trim(); if (v) sock.emit('gw:ask', { text: v }); }; document.getElementById('send').onclick = send; document.getElementById('q').onkeydown = (e) => { if (e.key === 'Enter') send(); }; }, 0);
-      }
-      const g = el(`<button style="margin-top:8px">${D.guessing ? 'Cancel guess' : 'Make a guess'}</button>`);
-      g.onclick = () => { D.guessing = !D.guessing; duoRender(); }; p.append(g);
-    } else if (mine && st.step === 'answer') {
-      p.append(el('<h2>Your turn</h2>'), el(`<p class="msg cpu-question">You asked: “${esc(st.question)}” — waiting for ${opp}…</p>`));
-    } else if (mine && st.step === 'flip') {
-      p.append(el('<h2>Your move</h2>'), el(`<p class="msg">${opp} answered <strong class="${lastLog?.yes ? 'yes' : 'no'}">${lastLog?.yes ? 'YES' : 'NO'}</strong>. Tap each face you want to put down, then end your turn.</p>`));
-      const undo = el('<button class="alt undo" aria-label="Undo last flip">↶ Undo</button>'); undo.onclick = () => undoFlip(D.down, app); p.append(undo);
-      const done = el(`<button class="end-turn">Done flipping · ${opp}’s turn →</button>`); done.onclick = () => sock.emit('gw:done'); p.append(done);
-    } else if (!mine && st.step === 'answer') {
-      p.append(el(`<h2>${opp} asks</h2>`), el(`<p class="msg cpu-question">“${esc(st.question)}”</p>`), el('<p class="msg">Answer honestly about your secret face (yellow border).</p>'));
-      const row = el('<div class="row"><button id="y">YES</button><button class="alt" id="n">NO</button></div>');
-      p.append(row);
-      setTimeout(() => { document.getElementById('y').onclick = () => sock.emit('gw:answer', { yes: true }); document.getElementById('n').onclick = () => sock.emit('gw:answer', { yes: false }); }, 0);
-    } else {
-      p.append(el(`<h2>${opp}’s turn</h2>`), el(`<p class="msg cpu-question">${st.step === 'flip' ? `${opp} is flipping cards…` : `${opp} is choosing a question…`}</p>`));
-    }
-    if (st.log.length) { const l = el('<div class="log"></div>'); st.log.slice(-5).forEach((x) => l.append(el(`<div>${logLine(x)}</div>`))); p.append(l); }
-    p.append(rec);
+      el(`<img class="secret" src="${face(st.opponentSecret)?.src}" alt="">`));
+    p.append(btn('Play again', '', () => sock.emit('gw:again'))); app.append(p); showBoard = false;
   }
-  p.append(back);
-  app.append(p);
   if (showBoard) app.append(board({ down: D.down, mine: st.mySecret, away: st.phase === 'play' && st.turn !== st.me && st.step !== 'answer', tap: (id) => {
     if (st.phase === 'pick') { if (st.mySecret === null) sock.emit('gw:pick', { id }); return; }
     if (st.turn !== st.me) return;
     if (D.guessing && st.step === 'ask') { D.guessing = false; return sock.emit('gw:guess', { id }); }
     if (st.step === 'flip') toggleCard(id, D.down, app);
   } }));
+  if (st.phase !== 'play') return;
+  const mine = st.turn === st.me, last = logQA(st.log[st.log.length - 1]);
+  let d;
+  if (mine && st.step === 'ask') {
+    d = D.guessing
+      ? dock({ pill: 'Your guess', qa: last, hint: `Tap the face you think is ${opp}’s`, actions: [btn('Cancel', 'alt', () => { D.guessing = false; duoRender(); })] })
+      : dock({ pill: 'Your turn', qa: last, actions: [btn('Ask a question', 'main', () => openSheet({ custom: true, onPick: (t) => sock.emit('gw:ask', { text: t }) })), btn('Guess', 'alt', () => { D.guessing = true; duoRender(); })] });
+  } else if (mine && st.step === 'answer') {
+    d = dock({ pill: 'Your turn', qa: { who: 'You asked', text: st.question, ans: 'wait' }, hint: `Waiting for ${opp}`, actions: [] });
+  } else if (mine && st.step === 'flip') {
+    d = dock({ pill: 'Your move', qa: last, hint: 'Tap faces to put them down',
+      actions: [btn('Undo', 'alt', () => undoFlip(D.down, app)), btn('End turn', 'main', () => sock.emit('gw:done'))] });
+  } else if (!mine && st.step === 'answer') {
+    d = dock({ pill: `${opp} asks`, tone: 'theirs', qa: { who: `${opp} asked`, text: st.question, ans: null }, hint: 'Answer about your face (yellow border)',
+      actions: [btn('Yes', 'yes-btn', () => sock.emit('gw:answer', { yes: true })), btn('No', 'no-btn', () => sock.emit('gw:answer', { yes: false }))] });
+  } else {
+    d = dock({ pill: `${opp}’s turn`, tone: 'theirs', qa: last, hint: st.step === 'flip' ? `${opp} is flipping cards…` : `${opp} is choosing a question…`, actions: [] });
+  }
+  app.append(d);
 }
 const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
