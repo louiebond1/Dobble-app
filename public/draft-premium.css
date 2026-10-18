@@ -6,4 +6,5 @@ body{background:#141719;color:var(--paper)}.grain{display:none}header{height:64p
 /* Navigation must never overlap iOS status bar. */
 header{height:auto;min-height:calc(64px + env(safe-area-inset-top, 0px));padding-top:env(safe-area-inset-top, 0px)}
 .nav-back{min-height:48px;min-width:70px;justify-content:center;touch-action:manipulation}
+body{overflow-x:hidden}.hero-art{min-width:0;overflow:hidden}
 @media(max-width:650px){header{height:auto;min-height:calc(58px + env(safe-area-inset-top, 0px));padding-top:env(safe-area-inset-top, 0px)}.nav-back{min-height:48px}}

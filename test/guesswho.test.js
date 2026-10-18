@@ -45,12 +45,22 @@ test("guess who two-player: seats, secrets stay private, turns, answers, guesses
   assert.equal(T.call("gw:ask", { text: "Do they wear a hat?" }).ok, true);
   assert.equal(T.call("gw:answer", { yes: true }).ok, false);
   assert.equal(N.call("gw:answer", { yes: false }).ok, true);
+  assert.equal(N.call('gw:flip',{id:2,down:true}).ok,false);
+  assert.equal(T.call('gw:flip',{id:2,down:true}).ok,true);
+  assert.deepEqual(last(N===L?'L':'A').opponentDown,[2]);
+  assert.equal(T.call('gw:flip',{id:2,down:false}).ok,true);
+  assert.deepEqual(last(N===L?'L':'A').opponentDown,[]);
   assert.equal(T.call("gw:guess", { id: 1 }).ok, false); // must finish flipping first
   assert.equal(T.call("gw:done").ok, true);
   assert.equal(last("L").turn, turn === "louie" ? "ariel" : "louie");
   // wrong guess passes the turn, right guess wins and reveals both secrets
   assert.equal(N.call("gw:guess", { id: 3 }).correct, false);
   assert.equal(last("L").turn, turn);
+  assert.equal(T.call('gw:spoken').ok,true);
+  assert.equal(last('L').step,'flip');
+  assert.equal(T.call('gw:done').ok,true);
+  assert.equal(N.call('gw:spoken').ok,true);
+  assert.equal(N.call('gw:done').ok,true);
   const winnerSeat = T === L ? "louie" : "ariel";
   const target = T === L ? 14 : 8;
   assert.equal(T.call("gw:guess", { id: target }).correct, true);
