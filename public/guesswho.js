@@ -4,14 +4,14 @@
 // face, add the photo and one entry here; set `name` to show a name.
 const F = (id, tags, name) => ({ id, tags: new Set(tags.split(' ').filter(Boolean)), name: name || '#' + id, src: '/guesswho/' + String(id).padStart(2, '0') + '.webp' });
 const FACES = [
-  F(1, 'teeth necklace blonde'), F(2, 'earrings curly grey'), F(3, 'teeth earrings blue'),
-  F(4, 'hat sunglasses eyewear facialhair blue'), F(5, 'hat sunglasses eyewear teeth'), F(6, 'facialhair'),
-  F(7, 'blonde long'), F(8, 'teeth facialhair curly'), F(9, 'hat teeth facialhair necklace'),
-  F(10, 'hat teeth necklace blonde'), F(11, 'teeth earrings necklace eyewear blonde hairup'), F(12, 'long'),
-  F(13, 'teeth necklace curly long'), F(14, 'teeth earrings long'), F(15, 'earrings blonde long hairup'),
-  F(16, 'teeth facialhair'), F(17, 'facialhair'), F(18, 'hat teeth curly blue'),
-  F(19, 'teeth earrings necklace long'), F(20, 'hat teeth curly blue'), F(21, 'sunglasses eyewear teeth necklace curly long blue'),
-  F(22, 'earrings'), F(23, 'teeth earrings necklace'), F(24, 'teeth long'), F(25, 'teeth blue'),
+  F(1, 'teeth necklace blonde', 'Sue'), F(2, 'earrings curly grey', 'Grams'), F(3, 'teeth earrings blue', 'Susan'),
+  F(4, 'hat sunglasses eyewear facialhair blue', 'Karim'), F(5, 'hat sunglasses eyewear teeth', 'Luca'), F(6, 'facialhair', 'Casey'),
+  F(7, 'blonde long', 'Emily'), F(8, 'teeth facialhair curly', 'Louie'), F(9, 'hat teeth facialhair necklace', 'Lawrence'),
+  F(10, 'hat teeth necklace blonde', 'Nanna'), F(11, 'teeth earrings necklace eyewear blonde hairup', 'Dani B'), F(12, 'long', 'Becca P'),
+  F(13, 'teeth necklace curly long', 'Becca P (2)'), F(14, 'teeth earrings long', 'Ariel'), F(15, 'earrings blonde long hairup', 'Jess'),
+  F(16, 'teeth facialhair', 'Josh M'), F(17, 'facialhair', 'Josh B'), F(18, 'hat teeth curly blue', 'Harry'),
+  F(19, 'teeth earrings necklace long', 'Dani K'), F(20, 'hat teeth curly blue', 'Zac'), F(21, 'sunglasses eyewear teeth necklace curly long blue', 'Shaine'),
+  F(22, 'earrings', 'Rachael'), F(23, 'teeth earrings necklace', 'Izzy'), F(24, 'teeth long', 'Grace'), F(25, 'teeth blue', 'Rob'),
 ];
 const QUESTIONS = [
   ['hat', 'Wearing a hat or cap?'], ['sunglasses', 'Wearing sunglasses?'], ['eyewear', 'Any glasses or sunglasses showing?'],
@@ -30,7 +30,7 @@ const clearCpuTimers = () => { cpuTimers.forEach(clearTimeout); cpuTimers = []; 
 function board(opts) {
   const b = el('<div class="board"></div>');
   for (const f of FACES) {
-    const c = el(`<button class="face" data-face="${f.id}" aria-label="Face ${f.id}"><img src="${f.src}" alt="" loading="lazy"><span class="n">${f.name}</span></button>`);
+    const c = el(`<button class="face" data-face="${f.id}" aria-label="${f.name}"><img src="${f.src}" alt="" loading="lazy"><span class="n">${f.name}</span></button>`);
     if (opts.down && opts.down.has(f.id)) c.classList.add('down');
     if (opts.mine === f.id) c.classList.add('mine');
     c.onclick = () => opts.tap(f.id);
@@ -53,7 +53,7 @@ function inPerson() {
     app.innerHTML = '';
     app.append(el('<div class="panel"><h2>In person</h2><p class="msg">Tap a face to flip it down or up. Ask each other yes/no questions out loud. Tap “Pick my secret” and keep the screen hidden.</p><div class="row"><button id="rs">Pick my secret</button><button class="alt" id="reset">Flip all up</button><button class="alt" id="h">Home</button></div><p class="msg" id="sec"></p></div>'));
     app.append(board({ down: S.down, mine: S.mine, tap: (id) => { toggleCard(id, S.down, app); } }));
-    document.getElementById('rs').onclick = () => { const f = rnd(FACES); alert('Your secret face is #' + f.id + '. Memorise it, then press OK.'); };
+    document.getElementById('rs').onclick = () => { const f = rnd(FACES); alert('Your secret face is ' + f.name + '. Memorise it, then press OK.'); };
     document.getElementById('reset').onclick = () => { S.down.clear(); draw(); };
     document.getElementById('h').onclick = home;
   };
@@ -125,8 +125,8 @@ function ask(q) {
   S.turn = 'eliminate'; render();
 }
 function guess(id) {
-  if (id === S.secret) S.over = { win: true, text: 'Correct! It was face #' + id + '.' };
-  else { S.log.push(`You guessed #${id}: <span class="no">wrong</span>`); S.guessing = false; S.turn = 'cpu'; render(); return later(cpuTurn, 900); }
+  if (id === S.secret) S.over = { win: true, text: 'Correct! It was ' + face(id).name + '.' };
+  else { S.log.push(`You guessed ${face(id).name}: <span class="no">wrong</span>`); S.guessing = false; S.turn = 'cpu'; render(); return later(cpuTurn, 900); }
   render();
 }
 function cpuTurn() {
