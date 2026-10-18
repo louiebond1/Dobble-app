@@ -43,3 +43,36 @@ test('Country Memory: server restart restores the match and its remaining study 
     assert.equal(back.view().phase,'study');assert.equal(back.view().deadline,35500);assert.equal(other.view().card,null);
   }finally{fs.rmSync(dir,{recursive:true,force:true});}
 });
+test('Country Memory: each shuffled card has four picture questions and two caption facts',()=>{
+  const {makeDeck}=require('../lib/country-memory');const first=makeDeck(()=>.1),second=makeDeck(()=>.9);
+  for(const deck of [first,second])for(const c of deck){
+    assert.equal(c.pictureQuestions.length,6);assert.equal(c.questions.length,6);
+    assert.equal(new Set(c.questions.map(q=>q.field)).size,6);
+    assert.equal(c.questions.filter(q=>q.kind==='picture').length,4);
+    assert.equal(c.questions.filter(q=>q.kind==='fact').length,2);
+    assert.equal(c.country.captions.length,3);
+    for(const q of c.pictureQuestions)assert.notEqual(c.country[q.field],undefined);
+    assert.ok(!c.questions.some(q=>q.field==='birds'));
+  }
+  assert.notDeepEqual(first[0].questions,second[0].questions);
+});
+test('Country Memory: saved v1 games retain their original artwork and answers',()=>{
+  const fs=require('fs'),os=require('os'),path=require('path'),dir=fs.mkdtempSync(path.join(os.tmpdir(),'cm-old-')),saveFile=path.join(dir,'match.json');
+  try{
+    const first=table({saveFile}),l=first.add('L','louie'),a=first.add('A','ariel');l.call('ready');a.call('ready');first.advance(2500);l.call('draw');l.call('loaded');first.advance(3000);
+    const saved=JSON.parse(fs.readFileSync(saveFile,'utf8'));saved.order[0]='facts-country-france-v1';fs.writeFileSync(saveFile,JSON.stringify(saved));
+    const t=table({saveFile}),back=t.add('L2','louie',l.join.token),other=t.add('A2','ariel',a.join.token);
+    assert.equal(back.view().card.art,'/country-memory/france.png');t.advance(35500);t.advance(650);
+    assert.ok(other.view().questions.includes('How many pigeons were in the picture?'));
+    back.call('roll');other.call('reveal');assert.equal(back.view().answer,'Baguette');
+  }finally{fs.rmSync(dir,{recursive:true,force:true});}
+});
+test('Country Memory: restarting the server preserves the selected question bank',()=>{
+  const fs=require('fs'),os=require('os'),path=require('path'),dir=fs.mkdtempSync(path.join(os.tmpdir(),'cm-bank-')),saveFile=path.join(dir,'match.json');
+  try{
+    const first=table({saveFile}),l=first.add('L','louie'),a=first.add('A','ariel');l.call('ready');a.call('ready');first.advance(2500);l.call('draw');l.call('loaded');first.advance(3000);first.advance(30000);first.advance(650);
+    const expected=a.view().questions;
+    const t=table({saveFile}),back=t.add('L2','louie',l.join.token),other=t.add('A2','ariel',a.join.token);
+    assert.deepEqual(other.view().questions,expected);back.call('roll');assert.equal(back.view().question,expected[back.view().die-1]);
+  }finally{fs.rmSync(dir,{recursive:true,force:true});}
+});
