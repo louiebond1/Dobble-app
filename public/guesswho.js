@@ -2,7 +2,7 @@
 // Faces are numbered photos in /guesswho/NN.webp. Each lists only features that
 // are clearly visible, so the computer can answer questions honestly. To add a
 // face, add the photo and one entry here; set `name` to show a name.
-const F = (id, tags, name) => ({ id, tags: new Set(tags.split(' ').filter(Boolean)), name: name || '#' + id, src: '/guesswho/' + String(id).padStart(2, '0') + '.webp' });
+const F = (id, tags, name) => ({ id, tags: new Set(tags.split(' ').filter(Boolean)), name: name || '#' + id, src: '/guesswho/' + String(id).padStart(2, '0') + '.webp?v=2' });
 const FACES = [
   F(1, 'teeth necklace blonde', 'Sue'), F(2, 'earrings curly grey', 'Grams'), F(3, 'teeth earrings blue', 'Susan'),
   F(4, 'hat sunglasses eyewear facialhair blue', 'Karim'), F(5, 'hat sunglasses eyewear teeth', 'Luca'), F(6, 'facialhair', 'Casey'),
