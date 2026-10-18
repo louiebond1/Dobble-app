@@ -404,7 +404,12 @@ app.addEventListener("submit", async (e) => {
     const data = await api("themes");
     themes = data.themes;
   } catch {}
-  const code = new URLSearchParams(location.search).get("room");
+  const params = new URLSearchParams(location.search);
+  if (params.get("home") === "1") {
+    render();
+    return;
+  }
+  const code = params.get("room");
   if (code && session?.code !== code) {
     page = "join";
     render();
