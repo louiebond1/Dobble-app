@@ -1,1 +1,9 @@
-(()=>{const back=document.getElementById('nav-back');if(!back)return;back.addEventListener('click',()=>{const app=document.getElementById('app');const text=(app?.innerText||'').toLowerCase();const active=/current bid|place bid|your turn|round [0-9]|vote for|auction live/.test(text);if(active&&!window.confirm('Leave this screen? Your current game may continue without you.'))return;if(window.history.length>1){window.history.back()}else{window.location.assign('/')}})})();
+(() => {
+  const back = document.getElementById("nav-back");
+  if (!back) return;
+  back.addEventListener("click", () => {
+    const active = page === "game" && room && !["lobby", "results"].includes(room.status);
+    if (active && !window.confirm("Return to Draft Night home? Your current game may continue without you.")) return;
+    window.location.assign("/draft-night.html?home=1");
+  });
+})();
