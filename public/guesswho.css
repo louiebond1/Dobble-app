@@ -37,3 +37,8 @@ main>.msg:last-child{text-align:center;font-size:12px;opacity:.7}
 @media(max-width:420px){header{padding:10px 12px}header h1{font-size:27px}.back{font-size:13px;padding:9px 11px}.panel{padding:12px}.board{gap:4px;padding:6px;border-radius:14px;border-bottom-width:7px}.face{border-width:2px;border-radius:6px}.face .n{font-size:9px;padding:3px 1px}.qs{max-height:145px}}
 @media(min-width:800px){.qs{grid-template-columns:repeat(3,minmax(0,1fr))}}
 @media(prefers-reduced-motion:reduce){*,*:before,*:after{transition:none!important;animation:none!important}}
+
+/* Keep navigation clear of iPhone status bar / Dynamic Island. */
+header{padding-top:calc(14px + env(safe-area-inset-top, 0px));min-height:calc(68px + env(safe-area-inset-top, 0px))}
+.back{display:inline-flex;align-items:center;justify-content:center;min-height:48px;min-width:78px;touch-action:manipulation}
+@media(max-width:420px){header{padding-top:calc(12px + env(safe-area-inset-top, 0px))}.back{min-height:48px;min-width:78px}}
