@@ -3431,6 +3431,11 @@ app.get('/api/dates/history', (req, res) => {
 require('./lib/draftnight/routes').draftNight(app);
 require('./lib/draft2/routes').draft2(app);
 
+// Guess Who changes often: always revalidate its page, script and styles so phones never keep an old copy.
+app.use(['/guesswho.html', '/guesswho.js', '/guesswho.css'], (req, res, next) => {
+  res.set('Cache-Control', 'no-cache');
+  next();
+});
 app.use(express.static(path.join(__dirname, 'public')));
 
 server.listen(PORT, () => {
