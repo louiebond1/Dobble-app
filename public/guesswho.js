@@ -220,7 +220,8 @@ function render() {
   closeSheet();
   app.innerHTML = '';
   document.body.classList.toggle('has-dock', !S.over);
-  if (!S.over) app.append(opponentBoard());
+  // The computer's board only shows while it is the computer's turn.
+  if (!S.over && S.turn === 'cpu') app.append(opponentBoard());
   if (S.over) {
     const p = el('<div class="panel"></div>');
     p.append(el(`<h2>${S.over.win ? 'You win' : 'You lose'}</h2>`), el(`<p class="msg">${S.over.text}</p>`),
