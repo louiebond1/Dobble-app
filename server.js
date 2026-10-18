@@ -3243,6 +3243,11 @@ app.get('/api/photos', (req, res) => {
   res.json(PHOTOS);
 });
 
+// Public practice deck; does not create, join or mutate the shared two-player match.
+app.get('/api/country-memory/practice', (_req, res) => {
+  res.json(require('./lib/country-memory').cards);
+});
+
 // Raw deck structure (which symbol ids are on each of the 57 cards) so Trial
 // Mode can generate rounds entirely client-side — offline-capable once this
 // and /api/symbols are cached, instead of round-tripping to the server on
@@ -3435,7 +3440,7 @@ require('./lib/draftnight/routes').draftNight(app);
 require('./lib/draft2/routes').draft2(app);
 
 // Guess Who changes often: always revalidate its page, script and styles so phones never keep an old copy.
-app.use(['/guesswho.html', '/guesswho.js', '/guesswho.css', '/country-memory.html', '/country-memory.js', '/country-memory.css', '/party-ui.css'], (req, res, next) => {
+app.use(['/guesswho.html', '/guesswho.js', '/guesswho.css', '/country-memory.html', '/country-memory.js', '/country-memory.css', '/country-memory-practice.html', '/country-memory-practice.js', '/party-ui.css'], (req, res, next) => {
   res.set('Cache-Control', 'no-cache');
   next();
 });
