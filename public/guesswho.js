@@ -39,10 +39,13 @@ function board(opts) {
     c.onclick = () => opts.tap(f.id);
     b.append(c);
   }
+  const away = !!opts.away;
+  awayCards(b, away, away !== lastAway);
+  lastAway = away;
   return b;
 }
 function home() {
-  clearCpuTimers(); duoLeave();
+  clearCpuTimers(); duoLeave(); lastAway = false; flipStack = [];
   S = null; app.innerHTML = '';
   app.append(el(`<div class="panel"><h2>Guess Who?</h2><p class="msg">${FACES.length} faces. Work out their secret face before they work out yours.</p>
     <div class="row"><button id="vs">Play the computer</button><button class="alt" id="ip">Play a friend in person</button></div>
@@ -77,15 +80,58 @@ function pickSecret() {
   app.append(board({ tap: (id) => start(id) }));
 }
 function start(mine) {
-  clearCpuTimers();
+  clearCpuTimers(); lastAway = false; flipStack = [];
   S = { phase: 'play', mine, secret: rnd(FACES).id, down: new Set(), cpuDown: new Set(), cpuLeft: FACES.map((f) => f.id), asked: new Set(), cpuAsked: new Set(), log: [], turn: 'cpu', guessing: false, over: null, cpuMessage: 'Computer is choosing a question…', cpuAnswer: '', lastAnswer: '' };
   render(); later(cpuTurn, 850);
 }
-function toggleCard(id, set, root) {
-  if (set.has(id)) set.delete(id); else set.add(id);
-  const card = root.querySelector('.board:not(.opponent-board) .face[data-face="'+id+'"]');
-  if (card) { card.classList.toggle('down', set.has(id)); card.classList.remove('card-snap'); void card.offsetWidth; card.classList.add('card-snap'); }
+
+// ---- card flip, timed from a 60fps frame breakdown of the reference video ----
+// ~12 frames: card lifts and grows 4-6%, squashes to edge-on over 3 frames, the
+// back opens over ~5 frames with a slight overshoot, then settles.
+const FLIP_OUT = 110, FLIP_IN = 85;
+const reduceMotion = () => window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
+function flipClass(card, cls, on, delay = 0) {
+  if (!card) return;
+  const apply = () => card.classList.toggle(cls, on);
+  if (reduceMotion() || !card.animate) return apply();
+  setTimeout(() => {
+    card.getAnimations().forEach((a) => a.cancel());
+    const out = card.animate([
+      { transform: 'translateY(0) scale(1,1)' },
+      { transform: 'translateY(-3%) scale(1.04,1.06)', offset: 0.5 },
+      { transform: 'translateY(-3%) scale(0.02,1.06)' },
+    ], { duration: FLIP_OUT, easing: 'ease-in', fill: 'forwards' });
+    out.onfinish = () => {
+      apply();
+      const back = card.animate([
+        { transform: 'translateY(-3%) scale(0.02,1.06)' },
+        { transform: 'translateY(-1%) scale(1.03,1.03)', offset: 0.62 },
+        { transform: 'translateY(0) scale(1,1)' },
+      ], { duration: FLIP_IN, easing: 'ease-out' });
+      back.onfinish = () => { out.cancel(); };
+    };
+  }, delay);
 }
+let flipStack = [];
+function toggleCard(id, set, root) {
+  const down = !set.has(id);
+  if (down) { set.add(id); flipStack.push(id); } else { set.delete(id); flipStack = flipStack.filter((x) => x !== id); }
+  flipClass(root.querySelector('.board:not(.opponent-board) .face[data-face="' + id + '"]'), 'down', down);
+}
+function undoFlip(set, root) {
+  const id = flipStack.pop();
+  if (id === undefined) return;
+  set.delete(id);
+  flipClass(root.querySelector('.board:not(.opponent-board) .face[data-face="' + id + '"]'), 'down', false);
+}
+// Turn change: every face-up card flips to its back together (and back again on your turn).
+let lastAway = false;
+function awayCards(boardEl, away, animate) {
+  const cards = [...boardEl.querySelectorAll('.face:not(.down)')];
+  cards.forEach((c) => { if (animate) c.classList.toggle('away', !away); else c.classList.toggle('away', away); });
+  if (animate) cards.forEach((c) => flipClass(c, 'away', away, Math.random() * 70));
+}
+
 function opponentBoard() {
   const wrap = el('<section class="opponent-wrap"><div class="opponent-title">COMPUTER’S BOARD <span id="cpu-count"></span></div></section>');
   const b = el('<div class="opponent-board" aria-label="Computer board facing away"></div>');
@@ -102,6 +148,7 @@ function render() {
     const again = el('<button>Play again</button>'); again.onclick = pickSecret; p.append(again);
   } else if (S.turn === 'eliminate') {
     p.append(el('<h2>Your move</h2><p class="msg">'+S.lastAnswer+' Tap each face you want to put down. Then end your turn.</p>'));
+    const undo = el('<button class="alt undo" aria-label="Undo last flip">↶ Undo</button>'); undo.onclick = () => undoFlip(S.down, app); p.append(undo);
     const done = el('<button class="end-turn">Done flipping · Computer’s turn →</button>'); done.onclick = () => { S.turn='cpu'; S.cpuMessage='Computer is choosing a question…'; render(); later(cpuTurn, 750); }; p.append(done);
   } else if (S.turn === 'you') {
     p.append(el('<h2>Your turn</h2>'));
@@ -119,7 +166,7 @@ function render() {
   if (!S.over && S.turn === 'cpu') p.append(el('<p class="msg cpu-question">'+(S.cpuMessage || 'Computer is thinking…')+'</p>'));
   if (!S.over) app.append(opponentBoard());
   app.append(p);
-  app.append(board({ down: S.down, mine: S.mine, tap: (id) => {
+  app.append(board({ down: S.down, mine: S.mine, away: S.turn === 'cpu' && !S.over, tap: (id) => {
     if (S.over || (S.turn !== 'you' && S.turn !== 'eliminate')) return;
     if (S.guessing) return guess(id);
     toggleCard(id, S.down, app);
@@ -128,7 +175,7 @@ function render() {
 }
 function ask(q) {
   const yes = face(S.secret).tags.has(q.tag);
-  S.asked.add(q.tag);
+  S.asked.add(q.tag); flipStack = [];
   S.log.push(`You: ${q.text} <span class="${yes ? 'yes' : 'no'}">${yes ? 'YES' : 'NO'}</span>`);
   S.lastAnswer = `Answer: <strong class="${yes ? 'yes' : 'no'}">${yes ? 'YES' : 'NO'}</strong>. Your turn to flip down faces.`;
   S.turn = 'eliminate'; render();
@@ -170,8 +217,7 @@ function cpuTurn() {
     removed.forEach((id,i)=>later(()=>{
       if(!S || S.over)return;
       S.cpuDown.add(id);
-      const card=app.querySelector('[data-cpu="'+id+'"]');
-      if(card)card.classList.add('down');
+      flipClass(app.querySelector('[data-cpu="'+id+'"]'), 'down', true);
     },350+i*140));
     later(finishCpu,650+removed.length*140);
   },1400);
@@ -188,7 +234,8 @@ function duoLeave() { if (sock) { sock.emit('gw:leave'); sock.off('gw:state'); }
 function duo(who) {
   if (typeof io === 'undefined') { alert('Could not connect. Reload and try again.'); return; }
   sock = sock || io();
-  D = { who, st: null, down: new Set(), guessing: false, shuffledFor: null };
+  lastAway = false; flipStack = [];
+  D = { who, st: null, down: new Set(), guessing: false, shuffledFor: null, prevStep: null };
   sock.off('gw:state');
   sock.on('gw:state', (st) => { if (!D) return; onDuoState(st); });
   const join = () => sock.emit('gw:join', { who }, (r) => {
@@ -205,6 +252,8 @@ function onDuoState(st) {
   const fresh = st.phase === 'pick' && st.mySecret === null;
   if (fresh && D.shuffledFor !== 'pick') { reshuffle(); D.down.clear(); D.guessing = false; }
   D.shuffledFor = st.phase;
+  if (st.step === 'flip' && D.prevStep !== 'flip') flipStack = [];
+  D.prevStep = st.step;
   D.st = st; duoRender();
 }
 function duoRender() {
@@ -248,6 +297,7 @@ function duoRender() {
       p.append(el('<h2>Your turn</h2>'), el(`<p class="msg cpu-question">You asked: “${esc(st.question)}” — waiting for ${opp}…</p>`));
     } else if (mine && st.step === 'flip') {
       p.append(el('<h2>Your move</h2>'), el(`<p class="msg">${opp} answered <strong class="${lastLog?.yes ? 'yes' : 'no'}">${lastLog?.yes ? 'YES' : 'NO'}</strong>. Tap each face you want to put down, then end your turn.</p>`));
+      const undo = el('<button class="alt undo" aria-label="Undo last flip">↶ Undo</button>'); undo.onclick = () => undoFlip(D.down, app); p.append(undo);
       const done = el(`<button class="end-turn">Done flipping · ${opp}’s turn →</button>`); done.onclick = () => sock.emit('gw:done'); p.append(done);
     } else if (!mine && st.step === 'answer') {
       p.append(el(`<h2>${opp} asks</h2>`), el(`<p class="msg cpu-question">“${esc(st.question)}”</p>`), el('<p class="msg">Answer honestly about your secret face (yellow border).</p>'));
@@ -262,7 +312,7 @@ function duoRender() {
   }
   p.append(back);
   app.append(p);
-  if (showBoard) app.append(board({ down: D.down, mine: st.mySecret, tap: (id) => {
+  if (showBoard) app.append(board({ down: D.down, mine: st.mySecret, away: st.phase === 'play' && st.turn !== st.me && st.step !== 'answer', tap: (id) => {
     if (st.phase === 'pick') { if (st.mySecret === null) sock.emit('gw:pick', { id }); return; }
     if (st.turn !== st.me) return;
     if (D.guessing && st.step === 'ask') { D.guessing = false; return sock.emit('gw:guess', { id }); }
