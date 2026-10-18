@@ -269,7 +269,7 @@ header h1{color:#352533}
  body.has-dock .face{height:100%;aspect-ratio:auto;min-height:0;border-radius:7px}
  body.has-dock .face img{height:calc(100% - 17px);object-fit:contain}
  body.has-dock .face .n{font-size:clamp(8px,2.1vw,11px);padding:2px 0;height:17px}
- body.has-dock .opponent-wrap{display:none}
+ body.has-dock .opponent-wrap{position:absolute;z-index:3;top:calc(70px + env(safe-area-inset-top));right:12px;width:150px;pointer-events:none;opacity:.94}
  .category-btn{min-height:57px;font-size:9px;padding:4px 1px;border-radius:10px}
  .category-icon{font-size:20px}
  .category-dock{gap:4px}
