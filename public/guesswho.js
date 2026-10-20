@@ -98,20 +98,25 @@ function home() {
 }
 // ---- in person: shared board, players ask each other out loud ----
 function inPerson() {
+  closeRoundOverlays(); lastAway = false; flipStack = [];
   reshuffle();
   S = { down: new Set(), mine: null };
   const draw = () => {
     app.innerHTML = '';
-    app.append(el('<div class="panel"><h2>In person</h2><p class="msg">Tap a face to flip it down or up. Ask each other yes/no questions out loud. Tap “Pick my secret” and keep the screen hidden.</p><div class="row"><button id="rs">Pick my secret</button><button class="alt" id="reset">Flip all up</button><button class="alt" id="h">Home</button></div><p class="msg" id="sec"></p></div>'));
+    app.append(el('<div class="panel"><h2>In person</h2><p class="msg">Tap a face to flip it down or up. Ask each other yes/no questions out loud. Tap “Pick my secret” and keep the screen hidden.</p><div class="row"><button id="rs">Pick my secret</button><button class="alt" id="reset">Flip all up</button><button class="alt" id="restart">Restart round</button><button class="alt" id="h">Home</button></div><p class="msg" id="sec"></p></div>'));
     app.append(board({ down: S.down, mine: S.mine, tap: (id) => { toggleCard(id, S.down, app); } }));
     document.getElementById('rs').onclick = () => { const f = rnd(FACES); alert('Your secret face is ' + f.name + '. Memorise it, then press OK.'); };
     document.getElementById('reset').onclick = () => { S.down.clear(); draw(); };
+    document.getElementById('restart').onclick = () => restartRound(inPerson);
     document.getElementById('h').onclick = home;
   };
   draw();
 }
 // ---- vs computer ----
 function pickSecret() {
+  closeRoundOverlays();
+  document.body.classList.remove('has-dock');
+  lastAway = false; flipStack = [];
   reshuffle();
   clearCpuTimers();
   S = { phase: 'pick' };
@@ -219,6 +224,19 @@ function openSheet({ asked, onPick, custom, onGuess }) {
   requestAnimationFrame(() => sh.classList.add('open'));
 }
 function closeSheet() { document.querySelectorAll('.sheet-wrap').forEach((n) => n.remove()); }
+function closeRoundOverlays() {
+  closeSheet();
+  document.querySelectorAll('.category-overlay, .custom-question-dialog').forEach((n) => n.remove());
+}
+function restartRound(restart) {
+  const message = D
+    ? 'Restart the round for both players? You will both pick new secret faces. Your scores stay the same.'
+    : 'Restart this round and start again?';
+  if (!window.confirm(message)) return;
+  closeRoundOverlays();
+  restart();
+}
+
 
 const face = (id) => FACES.find((f) => f.id === id);
 function render() {
@@ -245,6 +263,9 @@ function render() {
     S.enterMine = false;
   }
   if (S.over) return;
+  const top = el('<div class="topline"></div>');
+  top.append(btn('Restart round', 'linkbtn', () => restartRound(pickSecret)));
+  app.prepend(top);
   let d;
   if (S.turn === 'eliminate') {
     d = dock({ pill: 'Your move', qa: S.qa, hint: 'Tap faces to put them down',
@@ -344,6 +365,7 @@ function onDuoState(st) {
     const title=app.querySelector('.board-title');if(title&&st.turn===st.me)title.textContent='Your board · '+D.down.size+' faces down';
     D.st=st;return;
   }
+  if (st.phase !== 'play') D.guessing = false;
   const fresh = st.phase === 'pick' && st.mySecret === null;
   if (fresh && D.shuffledFor !== 'pick') { if(!st.order)reshuffle(); D.down.clear(); D.guessing = false; }
   D.shuffledFor = st.phase;
@@ -352,11 +374,12 @@ function onDuoState(st) {
   D.st = st; duoRender();
 }
 function duoRender() {
-  closeSheet();
+  closeRoundOverlays();
   const st = D.st, me = NAME[st.me], opp = NAME[st.opponent];
   app.innerHTML = '';
   document.body.classList.toggle('has-dock', st.phase === 'play');
   const top = el(`<div class="topline"><span>${NAME.louie} <b>${st.record.louie}</b> – <b>${st.record.ariel}</b> ${NAME.ariel}</span></div>`);
+  if (st.phase !== 'over') top.append(btn('Restart round', 'linkbtn', () => restartRound(() => sock.emit('gw:restart'))));
   top.append(btn('Leave', 'linkbtn', home));
   app.append(top);
   const logQA = (l) => !l ? null : l.wrong ? { who: `${NAME[l.by]} guessed`, text: `Is it ${face(l.guess)?.name || '?'}?`, ans: 'no' } : { who: `${NAME[l.by]} asked`, text: l.q, ans: l.yes ? 'yes' : 'no' };

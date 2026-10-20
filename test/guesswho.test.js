@@ -69,9 +69,44 @@ test("guess who two-player: seats, secrets stay private, turns, answers, guesses
   assert.equal(last("L").record[winnerSeat], 1);
   assert.equal(T.call("gw:again").ok, true);
   assert.equal(last("A").phase, "pick");
+  // Either seated player can abandon a round without changing the score.
+  assert.equal(X.call('gw:restart').ok, false);
+  assert.equal(L.call('gw:pick', {id: 8}).ok, true);
+  assert.equal(A.call('gw:pick', {id: 14}).ok, true);
+  const active = last('L').turn === 'louie' ? L : A;
+  const answering = active === L ? A : L;
+  assert.equal(active.call('gw:ask', {text: 'Hat?'}).ok, true);
+  assert.equal(answering.call('gw:answer', {yes: false}).ok, true);
+  assert.equal(active.call('gw:flip', {id: 2, down: true}).ok, true);
+  assert.equal(answering.call('gw:restart').ok, true);
+  for (const id of ['L', 'A']) {
+    const state = last(id);
+    assert.equal(state.phase, 'pick');
+    assert.equal(state.mySecret, null);
+    assert.equal(state.opponentSecret, null);
+    assert.equal(state.opponentPicked, false);
+    assert.equal(state.turn, null);
+    assert.equal(state.step, 'ask');
+    assert.equal(state.question, '');
+    assert.deepEqual(state.myDown, []);
+    assert.deepEqual(state.opponentDown, []);
+    assert.deepEqual(state.log, []);
+    assert.equal(state.winner, null);
+    assert.equal(state.record[winnerSeat], 1);
+    assert.equal(new Set(state.order).size, 30);
+  }
+  assert.equal(active.call('gw:done').ok, false);
+  assert.equal(active.call('gw:guess', {id: 8}).ok, false);
+  // Restart also works while picking and while the other phone is away.
+  assert.equal(L.call('gw:pick', {id: 8}).ok, true);
+  assert.equal(A.call('gw:restart').ok, true);
+  assert.equal(last('L').mySecret, null);
   // disconnect frees the seat
   sockets.delete("A");
   A.h.disconnect();
   assert.equal(last("L").phase, "waiting");
+  assert.equal(L.call("gw:restart").ok, true);
+  assert.equal(last("L").phase, "waiting");
   assert.equal(X.call("gw:join", { who: "ariel" }).ok, true);
+  assert.equal(last("L").phase, "pick");
 });
