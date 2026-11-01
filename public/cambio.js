@@ -1,9 +1,10 @@
 'use strict';
 const $ = id => document.getElementById(id);
 const socket = io();
-const tableId = /^qa-[a-z0-9-]{6,70}$/.test(new URLSearchParams(location.search).get('table') || '') ? new URLSearchParams(location.search).get('table') : 'main';
+const tableId = /^(?:qa|solo)-[a-z0-9-]{6,70}$/.test(new URLSearchParams(location.search).get('table') || '') ? new URLSearchParams(location.search).get('table') : 'main';
 const storePrefix = `cambio:${tableId}:`;
-const name = p => p === 'louie' ? 'Louie' : 'Ariel';
+let names={louie:'Louie',ariel:tableId.startsWith('solo-')?'🤖 Bot':'Ariel'};
+const name = p => names[p];
 const other = p => p === 'louie' ? 'ariel' : 'louie';
 const rankName = rank => ['', 'Ace', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'Jack', 'Queen', 'King'][rank];
 const label = c => c && !c.hidden ? `${rankName(c.rank)} ${c.suit}` : 'Face-down card';
@@ -127,6 +128,7 @@ function render() {
   $('statusPanel').hidden = s.phase === 'lobby' || result; $('results').hidden = !result;
   document.body.dataset.motion = String(animating); document.body.dataset.pending = pending || '';
   document.body.dataset.phase = s.phase; document.body.dataset.turn = active ? 'mine' : 'theirs'; document.body.dataset.matching = matching;
+  text($('louieScoreName'),name('louie'));text($('arielScoreName'),name('ariel'));$('lobbySoloBtn').hidden=!!s.solo;$('headerSoloBtn').hidden=!!s.solo;$('switchSeat').hidden=!!s.solo;
   text($('roundLabel'), s.round ? `Round ${s.round}` : 'Cambio'); text($('targetLabel'), s.settings.mode === 'target' ? `Play to ${s.settings.limit}` : `${s.settings.limit} rounds`);
   for (const p of ['louie', 'ariel']) text($(p + 'Score'), String(s.scores[p]));
   text($('footnote'), !socket.connected ? 'Reconnecting. Your game is saved.' : !connected ? `Waiting for ${name(opp)} to reconnect.` : s.caller ? `${name(s.caller)} called Cambio · final turn` : 'Lowest total wins · Rules ↗');
@@ -136,7 +138,7 @@ function render() {
     $('readyBtn').disabled = busy || animating || s.ready.includes(me); text($('readyBtn'), s.ready.includes(me) ? 'Ready. Waiting for your partner…' : 'Ready to play'); return;
   }
   if (result) { renderResult(s); return; }
-  text($('myName'), name(me)); text($('oppName'), name(opp)); text($('myAvatar'), name(me)[0]); text($('oppAvatar'), name(opp)[0]);
+  text($('myName'), name(me)); text($('oppName'), name(opp)); text($('myAvatar'), name(me)[0]); text($('oppAvatar'),s.solo?'🤖':name(opp)[0]);
   text($('myStatus'), `${s.hands[me].filter(Boolean).length} cards`); text($('oppStatus'), `${s.hands[opp].filter(Boolean).length} cards`);
   renderHand(s, opp, 'oppHand'); renderHand(s, me, 'myHand');
   card($('discard'), s.discard); if (!s.discard) $('discard').className = 'playing blank';
@@ -272,7 +274,7 @@ async function pump() {
   finally { pumping = false; animating = false; if (wire) state = wire; render(); flushSettings(); }
 }
 function receive(s) {
-  const before = wire; wire = s;
+  const before = wire; wire = s;names=s.names||{louie:'Louie',ariel:'Ariel'};
   if (!before || before.round !== s.round || before.phase !== s.phase || before.turn !== s.turn) { picks = {mine: null, theirs: null}; matching = false; confirmCall = false; }
   if (picks.mine !== null && !s.hands[s.me][picks.mine]) picks.mine = null;
   if (picks.theirs !== null && !s.hands[other(s.me)][picks.theirs]) picks.theirs = null;
@@ -291,5 +293,9 @@ for (const b of document.querySelectorAll('[data-seat]')) b.onclick = () => join
 socket.on('cambio:state', receive);
 socket.on('cambio:seatLost', () => { state = wire = null; messages.length = 0; $('table').hidden = true; $('setup').hidden = false; toast('Your seat opened in another tab. Choose your seat here to return.'); });
 socket.on('disconnect', () => { busy = false; pending = null; render(); });
-socket.on('connect', () => { const last = seat || tabStorage('seat') || storage('seat'); if (last) join(last); });
+socket.on('connect', () => { const last = seat || tabStorage('seat') || storage('seat'); if (tableId.startsWith('solo-'))join('louie');else if (last) join(last); });
 document.addEventListener('visibilitychange', () => { $('motionLayer').hidden = document.hidden; render(); });
+
+function startSolo(){let id;try{id=localStorage.getItem('cambio:solo-table');if(!id){id='solo-'+crypto.randomUUID();localStorage.setItem('cambio:solo-table',id);}}catch{id='solo-'+crypto.randomUUID();}location.assign('/cambio.html?table='+id);}
+$('soloBtn').onclick=startSolo;$('lobbySoloBtn').onclick=startSolo;
+$('headerSoloBtn').onclick=startSolo;

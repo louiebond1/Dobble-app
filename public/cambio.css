@@ -43,3 +43,5 @@ body[data-turn=mine] .yours:before,body[data-turn=theirs] .opponent:before{borde
 /* Keep selection labels inside the card, clear of the activity line. */
 .pick-badge{top:auto;bottom:6px;padding:2px 5px;border-radius:3px;font-size:7px;box-shadow:0 1px 3px #00182066}.event-note{min-height:24px;padding-bottom:3px}
 @media(max-height:780px){.pick-badge{top:auto;bottom:4px;padding:2px 4px;font-size:6px}.event-note{min-height:20px}}
+.solo-start{margin-top:19px;padding:13px 24px;border:1px solid #d8c08e;border-radius:9px;background:linear-gradient(#ebd3a0,#c6a567);color:#2c3529;font-size:14px;font-weight:700;box-shadow:inset 0 1px 0 #fff7da,0 3px 0 #796945,0 6px 13px #001c2766}.solo-start:active{transform:translateY(2px)}
+.header-tools{display:flex;align-items:center;gap:6px}.header-tools .text{font-size:11px;padding:8px 5px}
