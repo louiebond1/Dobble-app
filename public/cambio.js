@@ -13,6 +13,7 @@ let state = null, wire = null, busy = false, animating = false, seat = null, pen
 let picks = {mine: null, theirs: null}, matching = false, confirmCall = false;
 let queuedSettings = null, toastTimer, seenSerial = 0, pumping = false;
 const messages = [];
+let reviewRound = null;
 const storage = (key, value) => { try { if (value === undefined) return localStorage.getItem(storePrefix + key); localStorage.setItem(storePrefix + key, value); } catch {} return null; };
 const tabStorage = (key, value) => { try { if (value === undefined) return sessionStorage.getItem(storePrefix + key); sessionStorage.setItem(storePrefix + key, value); } catch {} return null; };
 const reduced = () => window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
@@ -123,7 +124,7 @@ function renderResult(s) {
 }
 function render() {
   if (!state) return;
-  const s = state, me = s.me, opp = other(me), active = s.turn === me, connected = socket.connected && s.online.includes(opp), result = ['result', 'over'].includes(s.phase);
+  const s = reviewRound === state.round && ['result', 'over'].includes(state.phase) ? {...state, phase: 'reveal'} : state, me = s.me, opp = other(me), active = s.turn === me, connected = socket.connected && s.online.includes(opp), result = ['result', 'over'].includes(s.phase);
   $('setup').hidden = true; $('table').hidden = false; $('lobby').hidden = s.phase !== 'lobby'; $('board').hidden = s.phase === 'lobby' || result;
   $('statusPanel').hidden = s.phase === 'lobby' || result; $('results').hidden = !result;
   document.body.dataset.motion = String(animating); document.body.dataset.pending = pending || '';
@@ -131,7 +132,7 @@ function render() {
   text($('louieScoreName'),name('louie'));text($('arielScoreName'),name('ariel'));$('lobbySoloBtn').hidden=!!s.solo;$('headerSoloBtn').hidden=!!s.solo;$('switchSeat').hidden=!!s.solo;
   text($('roundLabel'), s.round ? `Round ${s.round}` : 'Cambio'); text($('targetLabel'), s.settings.mode === 'target' ? `Play to ${s.settings.limit}` : `${s.settings.limit} rounds`);
   for (const p of ['louie', 'ariel']) text($(p + 'Score'), String(s.scores[p]));
-  text($('footnote'), !socket.connected ? 'Reconnecting. Your game is saved.' : !connected ? `Waiting for ${name(opp)} to reconnect.` : s.caller ? `${name(s.caller)} called Cambio · final turn` : 'Lowest total wins · Rules ↗');
+  text($('footnote'), !socket.connected ? 'Reconnecting. Your game is saved.' : !connected ? `Waiting for ${name(opp)} to reconnect.` : s.caller ? `${name(s.caller)} called Cambio · final turn` : '');
   if (s.phase === 'lobby') {
     setControls([]); text($('presence'), `${s.online.map(name).join(' + ')}${connected ? ' · both here' : ' · waiting for your partner'}`);
     if (!queuedSettings && pending !== 'settings') { if (document.activeElement !== $('limit')) $('limit').value = s.settings.limit; $('mode').value = s.settings.mode; }
@@ -139,7 +140,7 @@ function render() {
   }
   if (result) { renderResult(s); return; }
   text($('myName'), name(me)); text($('oppName'), name(opp)); text($('myAvatar'), name(me)[0]); text($('oppAvatar'),s.solo?'🤖':name(opp)[0]);
-  text($('myStatus'), `${s.hands[me].filter(Boolean).length} cards`); text($('oppStatus'), `${s.hands[opp].filter(Boolean).length} cards`);
+  text($('myStatus'), s.phase === 'reveal' ? `${s.points[me]} points` : `${s.hands[me].filter(Boolean).length} cards`); text($('oppStatus'), s.phase === 'reveal' ? `${s.points[opp]} points` : `${s.hands[opp].filter(Boolean).length} cards`);
   renderHand(s, opp, 'oppHand'); renderHand(s, me, 'myHand');
   card($('discard'), s.discard); if (!s.discard) $('discard').className = 'playing blank';
   const held = s.drawn && (document.hidden || pending === 'discard' || pending === 'replace' ? {hidden: true} : s.drawn);
@@ -150,14 +151,15 @@ function render() {
   const canDraw = connected && active && s.phase === 'draw' && !busy && !animating;
   $('deck').disabled = !canDraw; $('discard').disabled = !canDraw || !s.discard;
   $('deck').classList.toggle('available', canDraw); $('discard').classList.toggle('available', canDraw && !!s.discard);
+  $('matchBtn').hidden = !ownCanMatch(s);
   $('matchBtn').disabled = !connected || busy || animating || !ownCanMatch(s);
   $('matchBtn').setAttribute('aria-pressed', String(matching)); text($('matchBtn'), matching ? 'Cancel match' : s.discard ? `Match ${rankName(s.discard.rank)}` : 'Match discard');
   let heading = active ? 'Your turn' : `${name(opp)}’s turn`, hint = '', steps = [], controls = [];
   const action = (key, title, serverAction, extra = {}, primary = false) => control(key, title, () => act(serverAction, extra), {primary, disabled: !connected});
   if (s.phase === 'initial') {
-    heading = 'Remember these two'; hint = s.ready.includes(me) ? `Your cards are hidden. Waiting for ${name(opp)}.` : 'These are your only starting looks. Memorise your bottom two.';
+    heading = 'Your first look'; hint = s.ready.includes(me) ? `Your cards are hidden. Waiting for ${name(opp)}.` : 'Remember your bottom two. Hide them when you’re ready.';
     controls.push(action('hideStart', s.ready.includes(me) ? 'Cards hidden' : 'Hide my cards', 'ready', {}, true)); controls[0].disabled ||= s.ready.includes(me);
-  } else if (s.phase === 'reveal') { heading = 'Cards on the table'; hint = 'Revealing both hands…'; }
+  } else if (s.phase === 'reveal') { heading = 'The reveal'; hint = 'Take your time. Both hands are open.'; controls.push(control('scores', 'See round scores', () => { reviewRound = null; render(); }, {primary: true})); }
   else if (matching) {
     heading = `Match a ${rankName(s.discard.rank)}`; hint = 'Tap the matching card in YOUR hand. A wrong guess adds a card.';
     controls.push(control('cancelMatch', 'Back to the turn', () => { matching = false; render(); }));
@@ -197,7 +199,7 @@ function render() {
   text($('turnTag'), heading); text($('instruction'), hint);
   const stepKey = steps.join('|'); if ($('swapSteps').dataset.key !== stepKey) { $('swapSteps').dataset.key = stepKey; $('swapSteps').replaceChildren(); for (const item of steps) { const span = document.createElement('span'); span.textContent = item; span.classList.toggle('complete', item.startsWith('✓')); $('swapSteps').append(span); } }
   text($('powerLabel'), ''); setControls(controls);
-  const recent = [...s.events].reverse().find(e => !['turn', 'hideStart', 'deal'].includes(e.kind)); text($('eventNote'), recent?.text || 'The table is ready.');
+  const recent = [...s.events].reverse().find(e => !['turn', 'hideStart', 'deal'].includes(e.kind)); text($('eventNote'), ['initial', 'reveal'].includes(s.phase) ? '' : recent?.text || '');
 }
 function rect(el) { if (!el) return null; const r = el.getBoundingClientRect(); return r.width > 0 && r.height > 0 ? {left: r.left, top: r.top, width: r.width, height: r.height} : null; }
 function handEl(snapshot, owner, index) { return $(owner === snapshot.me ? 'myHand' : 'oppHand').children[index]; }
@@ -222,10 +224,10 @@ async function fly(c, from, target, {delay = 0, duration = 520, turn = 5, lift =
 async function transition(e, before, next) {
   const boxes = capture(before);
   if (e.kind === 'score') {
-    state = {...next, phase: 'reveal'}; render();
+    reviewRound = next.round; state = {...next, phase: 'reveal'}; render();
     const cards = [...$('myHand').children, ...$('oppHand').children];
-    await Promise.all(cards.map((el, i) => animateEl(el, [{transform: 'rotateY(90deg)'}, {transform: 'rotateY(0deg)'}], {duration: 380, delay: i * 55, easing: 'ease-out'})));
-    await sleep(600); state = next; render(); await animateEl($('results'), [{opacity: 0, transform: 'translateY(20px)'}, {opacity: 1, transform: 'translateY(0)'}], {duration: 360, easing: 'ease-out'}); return;
+    await Promise.all(cards.map((el, i) => animateEl(el, [{transform: 'rotateY(90deg)'}, {transform: 'rotateY(0deg)'}], {duration: 500, delay: i * 180, easing: 'ease-out', fill: 'backwards'})));
+    state = next; render(); return;
   }
   state = ['result', 'over'].includes(next.phase) ? {...next, phase: 'settling'} : next; render();
   if (e.kind === 'deal') {
@@ -299,3 +301,24 @@ document.addEventListener('visibilitychange', () => { $('motionLayer').hidden = 
 function startSolo(){let id;try{id=localStorage.getItem('cambio:solo-table');if(!id){id='solo-'+crypto.randomUUID();localStorage.setItem('cambio:solo-table',id);}}catch{id='solo-'+crypto.randomUUID();}location.assign('/cambio.html?table='+id);}
 $('soloBtn').onclick=startSolo;$('lobbySoloBtn').onclick=startSolo;
 $('headerSoloBtn').onclick=startSolo;
+
+function fitTable() {
+  for (const id of ['oppHand', 'myHand']) {
+    const hand = $(id), zone = hand.parentElement;
+    if (!zone.clientHeight) continue;
+    const count = hand.children.length, columns = id === 'oppHand' ? Math.min(4, Math.max(1, count)) : count > 4 ? 3 : 2;
+    const rows = Math.max(1, Math.ceil(count / columns));
+    const available = zone.clientHeight - zone.querySelector('.player').offsetHeight - 24;
+    const width = Math.max(18, Math.min(74, (available - (rows - 1) * 8) / (rows * 1.455), (zone.clientWidth - 30 - (columns - 1) * 12) / columns));
+    hand.style.setProperty('--cw', width + 'px');
+    hand.style.gridTemplateColumns = `repeat(${columns}, var(--cw))`;
+  }
+  const centre = document.querySelector('.centre');
+  if (centre.clientHeight) {
+    const width = Math.max(25, Math.min(76, (centre.clientHeight - 54) / 1.455));
+    $('board').style.setProperty('--pile-width', width + 'px');
+  }
+}
+const tableResize = new ResizeObserver(fitTable);
+for (const el of document.querySelectorAll('.zone, .centre')) tableResize.observe(el);
+new MutationObserver(fitTable).observe($('board'), {childList: true, subtree: true});
