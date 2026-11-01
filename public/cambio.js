@@ -159,7 +159,7 @@ function render() {
   if (s.phase === 'initial') {
     heading = 'Your first look'; hint = s.ready.includes(me) ? `Your cards are hidden. Waiting for ${name(opp)}.` : 'Remember your bottom two. Hide them when you’re ready.';
     controls.push(action('hideStart', s.ready.includes(me) ? 'Cards hidden' : 'Hide my cards', 'ready', {}, true)); controls[0].disabled ||= s.ready.includes(me);
-  } else if (s.phase === 'reveal') { heading = 'The reveal'; hint = 'Take your time. Both hands are open.'; controls.push(control('scores', 'See round scores', () => { reviewRound = null; render(); }, {primary: true})); }
+  } else if (s.phase === 'reveal') { heading = 'The reveal'; hint = 'Take your time. Both hands are open.'; controls.push(control('scores', 'See round scores', () => { reviewRound = null; render(); if (!reduced()) $('results').animate([{opacity: 0, transform: 'translateY(14px)'}, {opacity: 1, transform: 'translateY(0)'}], {duration: 420, easing: 'ease-out'}); }, {primary: true})); }
   else if (matching) {
     heading = `Match a ${rankName(s.discard.rank)}`; hint = 'Tap the matching card in YOUR hand. A wrong guess adds a card.';
     controls.push(control('cancelMatch', 'Back to the turn', () => { matching = false; render(); }));
