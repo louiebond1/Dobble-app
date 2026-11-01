@@ -62,14 +62,14 @@ function setControls(items) {
   }
 }
 function pick(owner, index) {
-  if (!state || busy || animating) return;
+  if (!state || !canChoose(state, owner, index)) return;
   const s = state, mine = owner === s.me, active = s.turn === s.me;
   if (matching || !active || ['draw', 'settling'].includes(s.phase)) {
     if (mine) act('snap', {index, owner}); return;
   }
   if (s.phase === 'holding' && mine) return act('replace', {index});
   if (s.phase === 'self' && mine || s.phase === 'opponent' && !mine || s.phase === 'queen') return act('peek', {index, owner});
-  if (['blind', 'queenSwap'].includes(s.phase)) { picks[mine ? 'mine' : 'theirs'] = picks[mine ? 'mine' : 'theirs'] === index ? null : index; render(); }
+  if (['blind', 'queenSwap'].includes(s.phase)) { picks[mine ? 'mine' : 'theirs'] = picks[mine ? 'mine' : 'theirs'] === index ? null : index; if (picks.mine === null) picks.theirs = null; render(); }
 }
 function ownCanMatch(s) { return MATCH_PHASES.includes(s.phase) && !!s.discard; }
 function canChoose(s, owner, index) {
@@ -79,7 +79,8 @@ function canChoose(s, owner, index) {
   if (s.turn !== s.me || ['draw', 'settling'].includes(s.phase)) return mine && ownCanMatch(s);
   if (s.phase === 'holding' || s.phase === 'self') return mine;
   if (s.phase === 'opponent') return !mine;
-  return ['queen', 'blind', 'queenSwap'].includes(s.phase);
+  if (['blind', 'queenSwap'].includes(s.phase)) return mine || picks.mine !== null;
+  return s.phase === 'queen';
 }
 function visibleCard(s, owner, index) {
   let c = s.hands[owner][index];
@@ -106,7 +107,7 @@ function renderHand(s, owner, id) {
     const lastPeek = [...s.events].reverse().find(e => e.kind === 'peek' || e.kind === 'hide' || e.kind === 'swap' || e.kind === 'discard' || e.kind === 'replace');
     if (s.turn !== s.me && lastPeek?.kind === 'peek' && lastPeek.owner === owner && lastPeek.index === i && ['view', 'queenView'].includes(s.phase)) button.classList.add('being-peeked');
     let badge = button.querySelector('.pick-badge');
-    if (button.classList.contains('selected')) { if (!badge) { badge = document.createElement('span'); badge.className = 'pick-badge'; button.append(badge); } badge.textContent = mine ? 'YOUR PICK' : 'THEIR PICK'; } else badge?.remove();
+    if (button.classList.contains('selected')) { if (!badge) { badge = document.createElement('span'); badge.className = 'pick-badge'; button.append(badge); } badge.textContent = mine ? '1' : '2'; } else badge?.remove();
     button.onclick = () => pick(owner, i);
   }
 }
@@ -133,6 +134,7 @@ function render() {
   text($('roundLabel'), s.round ? `Round ${s.round}` : 'Cambio'); text($('targetLabel'), s.settings.mode === 'target' ? `Play to ${s.settings.limit}` : `${s.settings.limit} rounds`);
   for (const p of ['louie', 'ariel']) text($(p + 'Score'), String(s.scores[p]));
   text($('footnote'), !socket.connected ? 'Reconnecting. Your game is saved.' : !connected ? `Waiting for ${name(opp)} to reconnect.` : s.caller ? `${name(s.caller)} called Cambio · final turn` : '');
+  if (s.phase === 'lobby' || result) document.body.dataset.choose = '';
   if (s.phase === 'lobby') {
     setControls([]); text($('presence'), `${s.online.map(name).join(' + ')}${connected ? ' · both here' : ' · waiting for your partner'}`);
     if (!queuedSettings && pending !== 'settings') { if (document.activeElement !== $('limit')) $('limit').value = s.settings.limit; $('mode').value = s.settings.mode; }
@@ -183,23 +185,30 @@ function render() {
     heading = 'Your private look'; hint = 'Remember that card. Hide it when you are done.';
     controls.push(action('hide', 'Hide card', 'skip', {}, true));
   } else if (s.phase === 'queen') {
-    heading = 'Queen · first, take a look'; hint = 'Tap ONE card on either side. Then choose any two to swap.'; steps = ['1 · Look', '2 · Choose pair', '3 · Swap'];
+    heading = 'Look at one card'; hint = 'Tap any card. Only you will see it.'; steps = ['QUEEN · LOOK'];
     controls.push(action('skip', 'Skip Queen', 'skip'));
   } else if (s.phase === 'queenView') {
-    heading = 'Queen · remember this card'; hint = 'That was your one look. You can swap different cards afterwards.'; steps = ['1 · Look', '2 · Choose pair', '3 · Swap'];
-    controls.push(action('hideQueen', 'Hide & choose cards', 'hideQueen', {}, true));
+    heading = 'Remember this card'; hint = 'Ready? Hide it, then choose your swap.'; steps = ['QUEEN · LOOK'];
+    controls.push(action('hideQueen', 'Hide card & choose mine', 'hideQueen', {}, true));
   } else if (['blind', 'queenSwap'].includes(s.phase)) {
     const both = picks.mine !== null && picks.theirs !== null;
-    heading = both ? 'Swap these two?' : s.phase === 'blind' ? 'Jack · choose two cards' : 'Queen · choose your swap';
-    hint = both ? 'Your two picks are marked. Confirm to move them.' : picks.mine !== null ? `Now choose one of ${name(opp)}’s cards.` : picks.theirs !== null ? 'Now choose one of your cards.' : 'Tap one card on each side, in either order. Both stay face down.';
-    steps = [picks.mine !== null ? '✓ Your card' : '1 · Your card', picks.theirs !== null ? '✓ Their card' : '2 · Their card', '3 · Swap'];
-    controls.push(action('swap', 'Swap selected cards', 'swap', {index: picks.mine, opponentIndex: picks.theirs}, true)); controls[0].disabled ||= !both;
-    controls.push(action('skip', 'Skip swap', 'skip'));
+    heading = both ? 'Swap 1 and 2?' : picks.mine === null ? 'Choose one of your cards' : `Choose one of ${name(opp)}’s`;
+    hint = both ? 'These two will trade places. Tap either pick to change it.' : picks.mine === null ? s.phase === 'queenSwap' ? 'Tap a card below. It can be different from the one you looked at.' : 'Tap a card below to give away.' : 'Tap a card above to take in return.';
+    steps = [s.phase === 'blind' ? 'JACK · BLIND SWAP' : 'QUEEN · SWAP'];
+    if (both) controls.push(action('swap', 'Swap these cards', 'swap', {index: picks.mine, opponentIndex: picks.theirs}, true));
+    controls.push(action('skip', 'Don’t swap', 'skip'));
+
+  }
+  const swapping = active && !matching && ['blind', 'queenSwap'].includes(s.phase);
+  document.body.dataset.choose = swapping ? picks.mine === null ? 'mine' : picks.theirs === null ? 'theirs' : 'pair' : active && !matching && s.phase === 'queen' ? 'look' : '';
+  if (swapping) {
+    text($('myStatus'), picks.mine === null ? 'Choose a card' : '1 · Giving');
+    text($('oppStatus'), picks.mine === null ? `${s.hands[opp].filter(Boolean).length} cards` : picks.theirs === null ? 'Choose a card' : '2 · Receiving');
   }
   text($('turnTag'), heading); text($('instruction'), hint);
   const stepKey = steps.join('|'); if ($('swapSteps').dataset.key !== stepKey) { $('swapSteps').dataset.key = stepKey; $('swapSteps').replaceChildren(); for (const item of steps) { const span = document.createElement('span'); span.textContent = item; span.classList.toggle('complete', item.startsWith('✓')); $('swapSteps').append(span); } }
   text($('powerLabel'), ''); setControls(controls);
-  const recent = [...s.events].reverse().find(e => !['turn', 'hideStart', 'deal'].includes(e.kind)); text($('eventNote'), ['initial', 'reveal'].includes(s.phase) ? '' : recent?.text || '');
+  const recent = [...s.events].reverse().find(e => !['turn', 'hideStart', 'deal'].includes(e.kind)); text($('eventNote'), ['initial', 'reveal', 'queen', 'queenView', 'queenSwap', 'blind'].includes(s.phase) ? '' : recent?.text || '');
 }
 function rect(el) { if (!el) return null; const r = el.getBoundingClientRect(); return r.width > 0 && r.height > 0 ? {left: r.left, top: r.top, width: r.width, height: r.height} : null; }
 function handEl(snapshot, owner, index) { return $(owner === snapshot.me ? 'myHand' : 'oppHand').children[index]; }
