@@ -1375,6 +1375,7 @@ function startRound(code) {
 
 const PARTY_MATCH_DIR=process.env.RAILWAY_VOLUME_MOUNT_PATH || (process.env.RAILWAY_ENVIRONMENT_ID ? '/data' : STATS_DIR);
 io.on('connection', require('./lib/guesswho').guessWho(io,{saveFile:path.join(PARTY_MATCH_DIR,'guesswho-match.json')}));
+io.on('connection', require('./lib/cambio').cambio(io,{saveFile:path.join(PARTY_MATCH_DIR,'cambio-match.json')}));
 io.on('connection', require('./lib/country-memory').countryMemory(io, {saveFile:path.join(PARTY_MATCH_DIR,'country-memory-match.json')}));
 
 io.on('connection', (socket) => {
