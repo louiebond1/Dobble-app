@@ -125,6 +125,7 @@ function render() {
   const s = state, me = s.me, opp = other(me), active = s.turn === me, connected = socket.connected && s.online.includes(opp), result = ['result', 'over'].includes(s.phase);
   $('setup').hidden = true; $('table').hidden = false; $('lobby').hidden = s.phase !== 'lobby'; $('board').hidden = s.phase === 'lobby' || result;
   $('statusPanel').hidden = s.phase === 'lobby' || result; $('results').hidden = !result;
+  document.body.dataset.motion = String(animating); document.body.dataset.pending = pending || '';
   document.body.dataset.phase = s.phase; document.body.dataset.turn = active ? 'mine' : 'theirs'; document.body.dataset.matching = matching;
   text($('roundLabel'), s.round ? `Round ${s.round}` : 'Cambio'); text($('targetLabel'), s.settings.mode === 'target' ? `Play to ${s.settings.limit}` : `${s.settings.limit} rounds`);
   for (const p of ['louie', 'ariel']) text($(p + 'Score'), String(s.scores[p]));
@@ -205,7 +206,8 @@ function capture(snapshot) {
 }
 async function animateEl(el, frames, options) {
   if (!el || reduced() || document.hidden || !el.animate) return;
-  const animation = el.animate(frames, options); try { await animation.finished; } catch {}
+  const animation = el.animate(frames, options); let watchdog;
+  try { await Promise.race([animation.finished, new Promise(resolve => { watchdog = setTimeout(resolve, (options.duration || 0) + (options.delay || 0) + 120); })]); } catch {} finally { clearTimeout(watchdog); animation.cancel?.(); }
 }
 async function fly(c, from, target, {delay = 0, duration = 520, turn = 5, lift = 28} = {}) {
   const to = rect(target); if (!from || !to || reduced() || document.hidden) return;
