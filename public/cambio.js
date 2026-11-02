@@ -5,15 +5,20 @@ const tableId = /^(?:qa|solo)-[a-z0-9-]{6,70}$/.test(new URLSearchParams(locatio
 const storePrefix = `cambio:${tableId}:`;
 let names={louie:'Louie',ariel:tableId.startsWith('solo-')?'🤖 Bot':'Ariel'};
 const name = p => names[p];
+const initial = p => (names[p] || '?').replace(/[^A-Za-z]/g, '')[0]?.toUpperCase() || '?';
 const other = p => p === 'louie' ? 'ariel' : 'louie';
 const rankName = rank => ['', 'Ace', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'Jack', 'Queen', 'King'][rank];
 const label = c => c && !c.hidden ? `${rankName(c.rank)} ${c.suit}` : 'Face-down card';
 const MATCH_PHASES = ['draw', 'holding', 'self', 'opponent', 'view', 'blind', 'queen', 'queenView', 'queenSwap', 'settling'];
 let state = null, wire = null, busy = false, animating = false, seat = null, pending = null;
 let picks = {mine: null, theirs: null}, matching = false, confirmCall = false;
-let queuedSettings = null, toastTimer, seenSerial = 0, pumping = false;
+let readyQueued = false, queuedSettings = null, toastTimer, seenSerial = 0, pumping = false;
 const messages = [];
 let reviewRound = null;
+const flags = new Map(); let flagTimer = null;
+function flag(owner, index, text, tone = '', ms = 2200) { if (owner == null || index == null) return; flags.set(owner + ':' + index, {text, tone, until: Date.now() + ms}); clearTimeout(flagTimer); flagTimer = setTimeout(render, ms + 30); }
+function flagFor(owner, index) { const f = flags.get(owner + ':' + index); if (f && f.until > Date.now()) return f; flags.delete(owner + ':' + index); return null; }
+const POWER_HINT = {7: 'look at one of your cards', 8: 'look at one of your cards', 9: 'look at one of their cards', 10: 'look at one of their cards', 11: 'blind swap a card', 12: 'look at any card, then swap'};
 const storage = (key, value) => { try { if (value === undefined) return localStorage.getItem(storePrefix + key); localStorage.setItem(storePrefix + key, value); } catch {} return null; };
 const tabStorage = (key, value) => { try { if (value === undefined) return sessionStorage.getItem(storePrefix + key); sessionStorage.setItem(storePrefix + key, value); } catch {} return null; };
 const reduced = () => window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
@@ -96,18 +101,25 @@ function renderHand(s, owner, id) {
   while (hand.children.length > s.hands[owner].length) hand.lastElementChild.remove();
   // Four normal cards stay in a stable 2×2 layout. Penalties spread into an extra column.
   hand.classList.toggle('expanded', s.hands[owner].length > 4);
+  hand.classList.toggle('mine', mine);
   for (let i = 0; i < s.hands[owner].length; i++) {
     let button = hand.children[i]; if (!button) { button = document.createElement('button'); hand.append(button); }
     const c = visibleCard(s, owner, i); card(button, c);
     button.classList.remove('available', 'selected', 'peek-active', 'being-peeked');
+    // Your first four cards keep their 2×2 places; penalty cards stack to the right.
+    if (mine) { button.style.gridColumn = String(i < 4 ? i % 2 + 1 : 3 + Math.floor((i - 4) / 2)); button.style.gridRow = String(i < 4 ? Math.floor(i / 2) + 1 : (i - 4) % 2 + 1); } else { button.style.gridColumn = ''; button.style.gridRow = ''; }
     button.setAttribute('aria-label', `${mine ? 'Your' : "Opponent's"} card ${i + 1}${c && !c.hidden ? ': ' + label(c) : ''}`);
     button.disabled = !canChoose(s, owner, i); if (!button.disabled) button.classList.add('available');
     if (['blind', 'queenSwap'].includes(s.phase) && picks[mine ? 'mine' : 'theirs'] === i) button.classList.add('selected');
     if (s.peek?.who === owner && s.peek.index === i) button.classList.add('peek-active');
     const lastPeek = [...s.events].reverse().find(e => e.kind === 'peek' || e.kind === 'hide' || e.kind === 'swap' || e.kind === 'discard' || e.kind === 'replace');
-    if (s.turn !== s.me && lastPeek?.kind === 'peek' && lastPeek.owner === owner && lastPeek.index === i && ['view', 'queenView'].includes(s.phase)) button.classList.add('being-peeked');
+    let note = flagFor(owner, i);
+    if (s.turn !== s.me && lastPeek?.kind === 'peek' && lastPeek.owner === owner && lastPeek.index === i && ['view', 'queenView'].includes(s.phase)) { button.classList.add('being-peeked'); note = {text: 'Looking', tone: 'watch'}; }
+    if (s.peek?.who === owner && s.peek.index === i && s.turn === s.me) note = {text: 'Only you', tone: 'watch'};
+    let tag = button.querySelector('.card-flag');
+    if (note && !button.classList.contains('selected')) { if (!tag) { tag = document.createElement('span'); tag.className = 'card-flag'; button.append(tag); } tag.textContent = note.text; tag.dataset.tone = note.tone || ''; } else tag?.remove();
     let badge = button.querySelector('.pick-badge');
-    if (button.classList.contains('selected')) { if (!badge) { badge = document.createElement('span'); badge.className = 'pick-badge'; button.append(badge); } badge.textContent = mine ? '1' : '2'; } else badge?.remove();
+    if (button.classList.contains('selected')) { if (!badge) { badge = document.createElement('span'); badge.className = 'pick-badge'; button.append(badge); } badge.textContent = mine ? 'Give' : 'Take'; } else badge?.remove();
     button.onclick = () => pick(owner, i);
   }
 }
@@ -121,7 +133,7 @@ function renderResult(s) {
     for (const owner of ['louie', 'ariel']) { const panel = document.createElement('div'); panel.textContent = name(owner); const b = document.createElement('b'); b.textContent = s.points[owner]; panel.append(b); const small = document.createElement('small'); small.textContent = `${s.scores[owner]} total`; panel.append(small); const hand = document.createElement('div'); hand.className = 'hand result-hand'; for (const c of s.hands[owner]) if (c) { const el = document.createElement('div'); card(el, c); hand.append(el); } panel.append(hand); scores.append(panel); }
     $('results').append(scores); const history = document.createElement('details'); const summary = document.createElement('summary'); summary.textContent = 'Round history'; history.append(summary); const table = document.createElement('table'); table.innerHTML = '<thead><tr><th>Round</th><th>Louie</th><th>Ariel</th></tr></thead>'; const body = document.createElement('tbody'); for (const row of s.history) { const tr = document.createElement('tr'); for (const val of [row.round, row.louie, row.ariel]) { const td = document.createElement('td'); td.textContent = val; tr.append(td); } body.append(tr); } table.append(body); history.append(table); $('results').append(history);
   }
-  setControls([control('next', s.ready.includes(s.me) ? 'Ready. Waiting for your partner…' : s.phase === 'over' ? 'Play again' : 'Next round', () => act('ready'), {primary: true, disabled: s.ready.includes(s.me)}), control('reset', 'New match', () => act('configure'))]);
+  setControls([control('next', s.ready.includes(s.me) ? 'Ready. Waiting for your partner…' : s.phase === 'over' ? 'Play again' : 'Next round', () => act('ready'), {primary: true, disabled: s.ready.includes(s.me)}), control('reset', 'New match', () => $('resetDialog').showModal())]);
 }
 function render() {
   if (!state) return;
@@ -133,16 +145,16 @@ function render() {
   document.body.dataset.phase = s.phase; document.body.dataset.turn = active ? 'mine' : 'theirs'; document.body.dataset.matching = matching;
   text($('louieScoreName'),name('louie'));text($('arielScoreName'),name('ariel'));$('lobbySoloBtn').hidden=!!s.solo;$('headerSoloBtn').hidden=!!s.solo;$('switchSeat').hidden=!!s.solo;
   text($('roundLabel'), s.round ? `Round ${s.round}` : 'Cambio'); text($('targetLabel'), s.settings.mode === 'target' ? `Play to ${s.settings.limit}` : `${s.settings.limit} rounds`);
-  for (const p of ['louie', 'ariel']) text($(p + 'Score'), String(s.scores[p]));
-  text($('footnote'), !socket.connected ? 'Reconnecting. Your game is saved.' : !connected ? `Waiting for ${name(opp)} to reconnect.` : s.caller ? `${name(s.caller)} called Cambio · final turn` : '');
+  for (const p of ['louie', 'ariel']) text($(p + 'Score'), String(s.phase === 'reveal' && s.points ? s.scores[p] - s.points[p] : s.scores[p]));
+  text($('footnote'), !socket.connected ? 'Reconnecting. Your game is saved.' : !connected ? `Waiting for ${name(opp)} to reconnect.` : '');
   if (s.phase === 'lobby' || result) document.body.dataset.choose = '';
   if (s.phase === 'lobby') {
     setControls([]); text($('presence'), `${s.online.map(name).join(' + ')}${connected ? ' · both here' : ' · waiting for your partner'}`);
     if (!queuedSettings && pending !== 'settings') { if (document.activeElement !== $('limit')) $('limit').value = s.settings.limit; $('mode').value = s.settings.mode; }
-    $('readyBtn').disabled = busy || animating || s.ready.includes(me); text($('readyBtn'), s.ready.includes(me) ? 'Ready. Waiting for your partner…' : 'Ready to play'); return;
+    $('readyBtn').disabled = animating || s.ready.includes(me) || readyQueued; text($('readyBtn'), s.ready.includes(me) ? 'Ready. Waiting for your partner…' : 'Ready to play'); return;
   }
   if (result) { renderResult(s); return; }
-  text($('myName'), name(me)); text($('oppName'), name(opp)); text($('myAvatar'), name(me)[0]); text($('oppAvatar'),s.solo?'🤖':name(opp)[0]);
+  text($('myName'), name(me)); text($('oppName'), name(opp)); text($('myAvatar'), initial(me)); text($('oppAvatar'), initial(opp));
   text($('myStatus'), s.phase === 'reveal' ? `${s.points[me]} points` : `${s.hands[me].filter(Boolean).length} cards`); text($('oppStatus'), s.phase === 'reveal' ? `${s.points[opp]} points` : `${s.hands[opp].filter(Boolean).length} cards`);
   renderHand(s, opp, 'oppHand'); renderHand(s, me, 'myHand');
   card($('discard'), s.discard); if (!s.discard) $('discard').className = 'playing blank';
@@ -154,10 +166,16 @@ function render() {
   const canDraw = connected && active && s.phase === 'draw' && !busy && !animating;
   $('deck').disabled = !canDraw; $('discard').disabled = !canDraw || !s.discard;
   $('deck').classList.toggle('available', canDraw); $('discard').classList.toggle('available', canDraw && !!s.discard);
-  $('matchBtn').hidden = !ownCanMatch(s);
+  $('matchBtn').style.visibility = ownCanMatch(s) && s.phase !== 'reveal' ? 'visible' : 'hidden';
   $('matchBtn').disabled = !connected || busy || animating || !ownCanMatch(s);
   $('matchBtn').setAttribute('aria-pressed', String(matching)); text($('matchBtn'), matching ? 'Cancel match' : s.discard ? `Match ${rankName(s.discard.rank)}` : 'Match discard');
-  let heading = active ? 'Your turn' : `${name(opp)}’s turn`, hint = '', steps = [], controls = [];
+  const finalTurn = !!s.caller && s.turn !== s.caller && s.phase !== 'reveal';
+  let heading = active ? finalTurn ? 'Your final turn' : 'Your turn' : finalTurn ? `${name(opp)}’s final turn` : `${name(opp)}’s turn`, hint = '', steps = [], controls = [];
+  for (const [who, el] of [[me, 'myTurn'], [opp, 'oppTurn']]) {
+    const playing = s.turn === who && !['initial', 'reveal'].includes(s.phase);
+    text($(el), s.caller === who && s.phase !== 'reveal' ? 'Called Cambio' : playing ? who === me ? 'Your turn' : 'Playing' : '');
+    $(el).dataset.tone = s.caller === who && s.phase !== 'reveal' ? 'call' : playing ? 'turn' : '';
+  }
   const action = (key, title, serverAction, extra = {}, primary = false) => control(key, title, () => act(serverAction, extra), {primary, disabled: !connected});
   if (s.phase === 'initial') {
     heading = 'Your first look'; hint = s.ready.includes(me) ? `Your cards are hidden. Waiting for ${name(opp)}.` : 'Remember your bottom two. Hide them when you’re ready.';
@@ -170,15 +188,16 @@ function render() {
     heading = s.caller && s.turn !== s.caller ? 'Last chance to match' : `${name(other(s.turn))} is next`;
     hint = s.caller && s.turn !== s.caller ? 'Tap your matching card now. The hands reveal automatically.' : `You can still tap your own ${rankName(s.discard?.rank)} to match.`;
   } else if (!active) {
-    const descriptions = {draw: 'is choosing a card.', holding: 'drew a card. Watch where it goes.', self: 'is choosing one of their cards to look at.', opponent: 'is choosing one of your cards to look at.', view: 'is memorising a card.', blind: 'is choosing two cards for a blind swap.', queen: 'has a Queen: one look, then a swap.', queenView: 'is taking their one private look.', queenSwap: 'is choosing two cards to swap.'};
-    hint = `${name(opp)} ${descriptions[s.phase] || 'is playing.'}${s.discard ? ' You can match from your own hand.' : ' Watch their turn.'}`;
+    const descriptions = {draw: 'is choosing a card.', holding: s.fromDiscard ? 'took the discard and must swap it in.' : 'drew a card. Watch where it goes.', self: 'is choosing one of their cards to look at.', opponent: 'will look at one of your cards.', view: 'is looking at a card.', blind: 'is choosing two cards for a blind swap.', queen: 'has a Queen: one look, then a swap.', queenView: 'is taking their one private look.', queenSwap: 'is choosing two cards to swap.'};
+    hint = `${name(opp)} ${descriptions[s.phase] || 'is playing.'}${s.discard ? ` Got a ${rankName(s.discard.rank)}? Tap it to match.` : ''}`;
   } else if (s.phase === 'draw') {
-    hint = s.discard ? 'Tap the deck to draw, or take the face-up discard.' : 'You start. Tap the deck to draw the first card.';
+    hint = finalTurn ? `${name(opp)} called Cambio. Draw, use any power, then the hands are revealed.` : s.discard ? 'Draw from the deck, or take the face-up discard to swap it in.' : 'You start. Tap the deck to draw the first card.';
     if (confirmCall) { heading = 'Call Cambio?'; hint = `${name(opp)} gets one final turn, including swaps.`; controls.push(action('yesCall', 'Yes, call Cambio', 'call', {}, true), control('noCall', 'Keep playing', () => { confirmCall = false; render(); })); }
     else controls.push(action('draw', 'Draw a card', 'draw', {}, true), ...(!s.caller ? [control('call', 'Call Cambio', () => { confirmCall = true; render(); }, {disabled: !connected})] : []));
   } else if (s.phase === 'holding') {
-    heading = `You drew ${label(s.drawn)}`; hint = s.fromDiscard ? 'Choose one of your cards to replace. You must keep this pickup.' : 'Tap one of your cards to keep it there, or put your draw down.';
-    if (!s.fromDiscard) controls.push(action('discard', 'Put it down', 'discard', {}, true));
+    const power = !s.fromDiscard && POWER_HINT[s.drawn?.rank];
+    heading = `You ${s.fromDiscard ? 'took' : 'drew'} ${label(s.drawn)}`; hint = s.fromDiscard ? 'Tap one of your cards to swap it out. A discard pickup must be kept.' : power ? `Tap one of your cards to swap it in, or discard it to ${power}.` : 'Tap one of your cards to swap it in, or discard it.';
+    if (!s.fromDiscard) controls.push(action('discard', power ? `Discard & ${{7: 'look', 8: 'look', 9: 'look', 10: 'look', 11: 'swap', 12: 'use Queen'}[s.drawn.rank]}` : 'Discard it', 'discard', {}, true));
   } else if (s.phase === 'self' || s.phase === 'opponent') {
     heading = s.phase === 'self' ? 'Look at one of yours' : 'Look at one of theirs'; hint = 'Tap ONE highlighted card. Only you will see its face.';
     controls.push(action('skip', 'Skip the look', 'skip'));
@@ -209,7 +228,8 @@ function render() {
   text($('turnTag'), heading); text($('instruction'), hint);
   const stepKey = steps.join('|'); if ($('swapSteps').dataset.key !== stepKey) { $('swapSteps').dataset.key = stepKey; $('swapSteps').replaceChildren(); for (const item of steps) { const span = document.createElement('span'); span.textContent = item; span.classList.toggle('complete', item.startsWith('✓')); $('swapSteps').append(span); } }
   text($('powerLabel'), ''); setControls(controls);
-  const recent = [...s.events].reverse().find(e => !['turn', 'hideStart', 'deal'].includes(e.kind)); text($('eventNote'), ['initial', 'reveal', 'queen', 'queenView', 'queenSwap', 'blind'].includes(s.phase) ? '' : recent?.text || '');
+  const recent = [...s.events].reverse().find(e => !['turn', 'hideStart', 'deal'].includes(e.kind)); const showRecent = !['initial', 'reveal', 'queen', 'queenView', 'queenSwap', 'blind'].includes(s.phase) || ['snap', 'penalty'].includes(recent?.kind);
+  text($('eventNote'), showRecent ? recent?.text || '' : ''); $('eventNote').dataset.kind = showRecent ? recent?.kind || '' : '';
 }
 function rect(el) { if (!el) return null; const r = el.getBoundingClientRect(); return r.width > 0 && r.height > 0 ? {left: r.left, top: r.top, width: r.width, height: r.height} : null; }
 function handEl(snapshot, owner, index) { return $(owner === snapshot.me ? 'myHand' : 'oppHand').children[index]; }
@@ -252,15 +272,20 @@ async function transition(e, before, next) {
     await fly(e.card, boxes.drawn, $('discard'), {duration: 540, turn: 11});
   } else if (e.kind === 'replace') {
     await Promise.all([fly({hidden: true}, boxes.drawn, handEl(next, e.actor, e.index), {duration: 550, turn: -7}), fly(e.card, boxes.hands[e.actor][e.index], $('discard'), {duration: 580, turn: 9, lift: 45})]);
+    flag(e.actor, e.index, e.actor === next.me ? 'New card' : 'Replaced');
   } else if (e.kind === 'swap') {
     await Promise.all([fly({hidden: true}, boxes.hands[e.actor][e.index], handEl(next, other(e.actor), e.opponentIndex), {duration: 650, turn: -12, lift: 45}), fly({hidden: true}, boxes.hands[other(e.actor)][e.opponentIndex], handEl(next, e.actor, e.index), {duration: 650, turn: 12, lift: -35})]);
+    flag(e.actor, e.index, 'Swapped', 'swap', 2600); flag(other(e.actor), e.opponentIndex, 'Swapped', 'swap', 2600);
   } else if (e.kind === 'snap') {
     await fly(e.card, boxes.hands[e.actor][e.index], $('discard'), {duration: 460, turn: -8, lift: 40});
-    await animateEl($('discard'), [{transform: 'scale(1.04)'}, {transform: 'scale(1)'}], {duration: 180});
+    flag(e.actor, e.index, 'Matched', 'good');
+    await Promise.all([animateEl($('discard'), [{transform: 'scale(1.08)'}, {transform: 'scale(1)'}], {duration: 260}), animateEl($('eventNote'), [{transform: 'scale(1.1)'}, {transform: 'scale(1)'}], {duration: 300})]);
   } else if (e.kind === 'penalty') {
     const chosen = handEl(next, e.actor, e.index), from = boxes.hands[e.actor][e.index];
     if (from && !document.hidden) { const proof = document.createElement('div'); card(proof, e.card); proof.classList.add('flying-card'); proof.style.cssText = `left:${from.left}px;top:${from.top}px;width:${from.width}px;height:${from.height}px;`; $('motionLayer').append(proof); chosen.style.visibility = 'hidden'; await animateEl(proof, [{transform: 'rotateY(80deg)'}, {transform: 'rotateY(0) translateX(-4px)'}, {transform: 'translateX(5px)'}, {transform: 'translateX(-4px)'}, {transform: 'rotateY(80deg)'}], {duration: 600}); proof.remove(); chosen.style.visibility = ''; }
-    if (e.penaltyIndex != null) await fly({hidden: true}, boxes.deck, handEl(next, e.actor, e.penaltyIndex), {duration: 500, turn: 7});
+    if (e.actor === next.me) matching = false;
+    flag(e.actor, e.index, 'No match', 'bad');
+    if (e.penaltyIndex != null) { await fly({hidden: true}, boxes.deck, handEl(next, e.actor, e.penaltyIndex), {duration: 500, turn: 7}); flag(e.actor, e.penaltyIndex, '+1 penalty', 'bad'); }
   } else if (e.kind === 'peek') {
     const chosen = handEl(next, e.owner, e.index);
     await animateEl(chosen, [{transform: 'translateY(0) rotateY(75deg)'}, {transform: 'translateY(-9px) rotateY(0deg) scale(1.12)'}], {duration: 370, easing: 'cubic-bezier(.2,.8,.2,1)'});
@@ -294,10 +319,16 @@ function receive(s) {
   const events = s.events.filter(e => e.id > seenSerial); seenSerial = s.serial;
   messages.push({snapshot: s, events}); pump();
 }
-function flushSettings() { if (queuedSettings && !busy && !animating && wire?.phase === 'lobby') { const next = queuedSettings; queuedSettings = null; act('settings', next); } }
-function settings() { const limit = Number($('limit').value); if (!Number.isSafeInteger(limit) || limit < 1) return; queuedSettings = {mode: $('mode').value, limit}; flushSettings(); }
+// A Ready tap that lands while settings are still saving waits for them instead of being dropped.
+
+function flushSettings() {
+  if (busy || animating || wire?.phase !== 'lobby') { if (wire && wire.phase !== 'lobby') readyQueued = false; return; }
+  if (queuedSettings) { const next = queuedSettings; queuedSettings = null; act('settings', next); return; }
+  if (readyQueued) { readyQueued = false; act('ready'); }
+}
+function settings() { const limit = Number($('limit').value); if (!Number.isSafeInteger(limit) || limit < 1) return; if (!queuedSettings && wire && wire.settings.mode === $('mode').value && wire.settings.limit === limit) return; queuedSettings = {mode: $('mode').value, limit}; flushSettings(); }
 $('mode').onchange = settings; $('limit').oninput = settings; $('limit').onchange = settings;
-$('readyBtn').onclick = () => act('ready'); $('deck').onclick = () => act('draw'); $('discard').onclick = () => act('take');
+$('readyBtn').onclick = () => { settings(); if (busy || queuedSettings) { readyQueued = true; render(); } else act('ready'); }; $('deck').onclick = () => act('draw'); $('discard').onclick = () => act('take');
 $('matchBtn').onclick = () => { if (!busy && !animating) { matching = !matching; render(); } };
 $('rulesBtn').onclick = () => $('rules').showModal(); $('closeRules').onclick = () => $('rules').close();
 $('switchSeat').onclick = () => { $('table').hidden = true; $('setup').hidden = false; };
@@ -316,17 +347,20 @@ function fitTable() {
   for (const id of ['oppHand', 'myHand']) {
     const hand = $(id), zone = hand.parentElement;
     if (!zone.clientHeight) continue;
-    const count = hand.children.length, columns = id === 'oppHand' ? Math.min(4, Math.max(1, count)) : count > 4 ? 3 : 2;
-    const rows = Math.max(1, Math.ceil(count / columns));
+    const count = hand.children.length, columns = id === 'oppHand' ? Math.min(6, Math.max(1, count)) : count > 4 ? 2 + Math.ceil((count - 4) / 2) : 2;
+    const rows = id === 'oppHand' ? Math.max(1, Math.ceil(count / columns)) : count > 2 ? 2 : 1;
     const available = zone.clientHeight - zone.querySelector('.player').offsetHeight - 24;
     const width = Math.max(18, Math.min(74, (available - (rows - 1) * 8) / (rows * 1.455), (zone.clientWidth - 30 - (columns - 1) * 12) / columns));
     hand.style.setProperty('--cw', width + 'px');
+    hand.classList.toggle('small-cards', width < 44);
     hand.style.gridTemplateColumns = `repeat(${columns}, var(--cw))`;
   }
   const centre = document.querySelector('.centre');
   if (centre.clientHeight) {
-    const width = Math.max(25, Math.min(76, (centre.clientHeight - 54) / 1.455));
+    // Short screens size the piles from the board (the centre row is auto there), so hands get the space.
+    const short = innerHeight <= 700, width = Math.max(25, Math.min(76, short ? ($('board').clientHeight * .27 - 46) / 1.455 : (centre.clientHeight - 54) / 1.455));
     $('board').style.setProperty('--pile-width', width + 'px');
+    $('board').classList.toggle('small-piles', width < 56);
   }
 }
 const tableResize = new ResizeObserver(fitTable);

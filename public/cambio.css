@@ -88,3 +88,43 @@ html,body{background:#182c26}#app{background:radial-gradient(ellipse at 50% 35%,
 .playing.available{outline:1px solid #e0d5ab77;outline-offset:3px;box-shadow:0 1px 0 #aaa99f,0 2px 0 #dedbd0,2px 5px 5px #001a22a0}.playing.selected{outline:2px solid #f0d996;outline-offset:4px;transform:translateY(-5px);box-shadow:0 2px 0 #dedbd0,3px 9px 8px #001a2280}.pick-badge{top:-8px;bottom:auto;left:auto;right:-8px;transform:none;width:23px;height:23px;border-radius:50%;display:grid;place-items:center;padding:0;background:#f0db9e;color:#293c2d;font-size:13px;font-weight:750;border:2px solid #f8edce;box-shadow:0 2px 4px #001a2260}
 .zone{transition:opacity .25s}.zone .player small{transition:color .2s}body[data-choose=mine] .yours .player small,body[data-choose=theirs] .opponent .player small,body[data-choose=pair] .player small{color:#f1dc9e;font-weight:650}body[data-choose=mine] .opponent{opacity:.65}body[data-choose=theirs] .yours .playing:not(.selected),body[data-choose=pair] .hand .playing:not(.selected){opacity:.65}body[data-choose]:not([data-choose=""]) .centre{opacity:.6}body[data-choose=mine] .yours .playing.available,body[data-choose=theirs] .opponent .playing.available{outline-color:#ebd79c;outline-offset:4px}
 @media(max-height:700px){.status-panel{min-height:78px;padding:8px 0 4px}.turn-title{font-size:21px}.swap-steps{margin-bottom:4px}.status-panel #instruction{font-size:12px;min-height:32px}.pick-badge{width:20px;height:20px;font-size:11px;top:-6px;right:-6px}}
+
+/* Clarity pass: who is playing, what just happened, and stable controls. */
+html,body{overscroll-behavior:none}body{touch-action:manipulation}
+body:has(#table:not([hidden])){overflow:hidden}
+.turn-pill{font-size:11px;font-weight:650;letter-spacing:.02em;line-height:1;padding:4px 8px;border-radius:999px;white-space:nowrap}
+.turn-pill:empty{display:none}
+.turn-pill[data-tone=turn]{background:#eee4c9;color:#24382b}
+.turn-pill[data-tone=call]{background:#c9644f;color:#fff6e8}
+.player .avatar{transition:box-shadow .25s}
+body[data-turn=mine] .yours .avatar,body[data-turn=theirs] .opponent .avatar{box-shadow:0 0 0 2px #203e33,0 0 0 4px #eee4c9}
+body[data-phase=initial] .avatar,body[data-phase=reveal] .avatar{box-shadow:none!important}
+.match-trigger{flex-shrink:0}
+.card-flag{position:absolute;z-index:6;left:50%;bottom:-9px;transform:translateX(-50%);white-space:nowrap;padding:3px 6px;border-radius:4px;font-size:10px;font-weight:700;line-height:1.1;letter-spacing:.01em;background:#eee4c9;color:#24382b;box-shadow:0 2px 4px #00180f55;pointer-events:none;animation:flag-in .2s ease-out}
+.card-flag[data-tone=bad]{background:#c9644f;color:#fff6e8}
+.card-flag[data-tone=good]{background:#a8cf8e;color:#1b3220}
+.card-flag[data-tone=swap]{background:#f0d996;color:#2b3324}
+.card-flag[data-tone=watch]{background:#24382b;color:#f5efdd;border:1px solid #eee4c9aa}
+@keyframes flag-in{from{opacity:0;translate:0 4px}to{opacity:1;translate:0 0}}
+.playing.being-peeked{outline:2px dashed #eee4c9;outline-offset:3px}
+.pick-badge{width:auto;min-width:23px;height:auto;padding:3px 7px;border-radius:999px;font-size:11px;top:-10px;right:-10px}
+#eventNote[data-kind=snap]{color:#bfe3a6;font-weight:600}#eventNote[data-kind=penalty]{color:#f4a690;font-weight:600}#eventNote[data-kind=call]{color:#f4c3a0;font-weight:600}
+.status-panel{min-height:96px}
+@media(max-height:700px){.status-panel{min-height:76px}.turn-pill{font-size:10px;padding:3px 6px}.card-flag{font-size:9px;padding:2px 4px;bottom:-7px}}
+/* Small cards drop the decorative seal so backs stay clean at any size. */
+.hand.small-cards .playing.back .back-seal{font-size:0;height:26%;width:70%}.hand.small-cards .playing.back:after{display:none}
+.hand.small-cards .card-flag{font-size:9px;padding:2px 4px}
+/* Short phones: give the cards the height, not the chrome. */
+@media(max-height:700px){
+  #board{grid-template-rows:minmax(0,1fr) auto minmax(0,1.9fr);gap:4px;padding:2px 0}
+  .pile-labels{margin-top:5px}.pile-labels span{font-size:8px}
+  #eventNote{min-height:16px;font-size:11px;margin-top:2px}
+}
+@media(max-height:620px){
+  header{height:32px;min-height:32px}
+  .matchbar{min-height:34px;padding:0 0 4px}.matchbar>div:first-child>span{font-size:17px}.matchbar small{display:none}.totals b{font-size:18px}
+  .status-panel{min-height:62px;padding:5px 0 2px}.turn-title{font-size:19px}.status-panel #instruction{font-size:12px;line-height:1.3;min-height:31px;margin-top:3px}.swap-steps{margin-bottom:2px}
+  .player{min-height:22px}.zone{gap:4px}
+  .actions{min-height:48px;padding:3px 0}.actions button{min-height:42px;padding:9px 15px}
+}
+#board.small-piles .piles #deck>span{font-size:0;height:24%;width:62%}#board.small-piles .piles #deck:after{display:none}#board.small-piles .piles #deck>small{white-space:nowrap;bottom:auto;top:50%;transform:translateY(-50%);font-size:9px;font-weight:650;background:#71393f;padding:1px 4px;border-radius:3px}#board.small-piles .piles #deck>span{display:none}#board.small-piles .pile-labels{margin-top:9px}
