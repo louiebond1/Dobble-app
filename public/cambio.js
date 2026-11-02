@@ -126,6 +126,7 @@ function renderResult(s) {
 function render() {
   if (!state) return;
   const s = reviewRound === state.round && ['result', 'over'].includes(state.phase) ? {...state, phase: 'reveal'} : state, me = s.me, opp = other(me), active = s.turn === me, connected = socket.connected && s.online.includes(opp), result = ['result', 'over'].includes(s.phase);
+  $('resetBtn').hidden = false; $('resetBtn').disabled = busy || animating || !socket.connected;
   $('setup').hidden = true; $('table').hidden = false; $('lobby').hidden = s.phase !== 'lobby'; $('board').hidden = s.phase === 'lobby' || result;
   $('statusPanel').hidden = s.phase === 'lobby' || result; $('results').hidden = !result;
   document.body.dataset.motion = String(animating); document.body.dataset.pending = pending || '';
@@ -331,3 +332,7 @@ function fitTable() {
 const tableResize = new ResizeObserver(fitTable);
 for (const el of document.querySelectorAll('.zone, .centre')) tableResize.observe(el);
 new MutationObserver(fitTable).observe($('board'), {childList: true, subtree: true});
+
+$('resetBtn').onclick = () => $('resetDialog').showModal();
+$('cancelReset').onclick = () => $('resetDialog').close();
+$('confirmReset').onclick = () => { if (busy || animating || !socket.connected) return; $('resetDialog').close(); reviewRound = null; act('reset'); };

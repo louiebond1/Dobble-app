@@ -53,3 +53,5 @@ test('rounds start with an empty discard and only the starter can draw', () => {
   assert.equal(g.turn,'ariel'); assert.deepEqual(g.discard,[]); assert.equal(g.deck.length,44);
   assert.throws(()=>action(g,'louie','draw')); action(g,'ariel','draw'); assert.equal(g.phase,'holding');
 });
+
+test('reset is allowed mid-turn and clears the entire match while keeping seats and settings',()=>{for(const phase of ['initial','holding','queenView','settling','result']){const g=game();g.phase=phase;g.tokens={louie:'L',ariel:'A'};g.settings={mode:'rounds',limit:7};g.scores={louie:20,ariel:30};g.history=[{round:1}];g.peek={who:'louie',index:0,card:c(2)};g.drawn=c(4);g.settleUntil=9999;action(g,'ariel','reset');assert.equal(g.phase,'lobby');assert.equal(g.round,0);assert.deepEqual(g.scores,{louie:0,ariel:0});assert.deepEqual(g.history,[]);assert.deepEqual(g.hands,{louie:[],ariel:[]});assert.equal(g.peek,null);assert.equal(g.drawn,null);assert.equal(g.settleUntil,null);assert.deepEqual(g.tokens,{louie:'L',ariel:'A'});assert.deepEqual(g.settings,{mode:'rounds',limit:7});assert.equal(settle(g,99999),false);}});
