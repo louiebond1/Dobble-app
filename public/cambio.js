@@ -170,9 +170,9 @@ function render() {
     hint = s.caller && s.turn !== s.caller ? 'Tap your matching card now. The hands reveal automatically.' : `You can still tap your own ${rankName(s.discard?.rank)} to match.`;
   } else if (!active) {
     const descriptions = {draw: 'is choosing a card.', holding: 'drew a card. Watch where it goes.', self: 'is choosing one of their cards to look at.', opponent: 'is choosing one of your cards to look at.', view: 'is memorising a card.', blind: 'is choosing two cards for a blind swap.', queen: 'has a Queen: one look, then a swap.', queenView: 'is taking their one private look.', queenSwap: 'is choosing two cards to swap.'};
-    hint = `${name(opp)} ${descriptions[s.phase] || 'is playing.'} You can match from your own hand.`;
+    hint = `${name(opp)} ${descriptions[s.phase] || 'is playing.'}${s.discard ? ' You can match from your own hand.' : ' Watch their turn.'}`;
   } else if (s.phase === 'draw') {
-    hint = 'Tap the deck to draw, or take the face-up discard.';
+    hint = s.discard ? 'Tap the deck to draw, or take the face-up discard.' : 'You start. Tap the deck to draw the first card.';
     if (confirmCall) { heading = 'Call Cambio?'; hint = `${name(opp)} gets one final turn, including swaps.`; controls.push(action('yesCall', 'Yes, call Cambio', 'call', {}, true), control('noCall', 'Keep playing', () => { confirmCall = false; render(); })); }
     else controls.push(action('draw', 'Draw a card', 'draw', {}, true), ...(!s.caller ? [control('call', 'Call Cambio', () => { confirmCall = true; render(); }, {disabled: !connected})] : []));
   } else if (s.phase === 'holding') {

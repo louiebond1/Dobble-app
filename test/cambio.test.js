@@ -41,3 +41,15 @@ test('adapter automatically advances turns and pauses settlement across disconne
 test('QA tables are isolated from the real Louie/Ariel match', () => { const h = harness(), real = h.client('real'), qa = h.client('qa'); real.send('cambio:join', {who: 'louie'}); qa.send('cambio:join', {who: 'louie', table: 'qa-isolated-test'}); assert.deepEqual(h.views.get('real').online, ['louie']); assert.deepEqual(h.views.get('qa').online, ['louie']); assert.equal(h.send(qa, 'qa', 'settings', {mode: 'rounds', limit: 2}).ok, true); assert.equal(h.views.get('real').settings.mode, 'target'); });
 
 test('an early settlement timer re-arms instead of silently freezing the turn', () => { const h = harness(), l = h.client('L'), a = h.client('A'); l.send('cambio:join', {who: 'louie'}); a.send('cambio:join', {who: 'ariel'}); for (const [cl, id] of [[l, 'L'], [a, 'A'], [l, 'L'], [a, 'A']]) h.send(cl, id, 'ready'); h.send(l, 'L', 'draw'); h.send(l, 'L', 'replace', {index: 0}); h.fireEarly(); assert.equal(h.views.get('L').phase, 'settling'); h.tick(1000); assert.equal(h.views.get('L').phase, 'draw'); assert.equal(h.views.get('L').turn, 'ariel'); });
+
+test('rounds start with an empty discard and only the starter can draw', () => {
+  const g=game(); assert.equal(g.turn,'louie'); assert.equal(g.deck.length,44); assert.deepEqual(g.discard,[]);
+  assert.equal(view(g,'ariel',[]).discard,null);
+  assert.throws(()=>action(g,'ariel','draw')); assert.throws(()=>action(g,'louie','take')); assert.throws(()=>action(g,'ariel','snap',{index:0}));
+  action(g,'louie','draw'); assert.equal(g.deck.length,43); assert.deepEqual(g.discard,[]);
+  assert.deepEqual(view(g,'ariel',[]).drawn,{hidden:true});
+  action(g,'louie','replace',{index:0}); assert.equal(g.discard.length,1);
+  deal(g,()=>.4); action(g,'louie','ready'); action(g,'ariel','ready');
+  assert.equal(g.turn,'ariel'); assert.deepEqual(g.discard,[]); assert.equal(g.deck.length,44);
+  assert.throws(()=>action(g,'louie','draw')); action(g,'ariel','draw'); assert.equal(g.phase,'holding');
+});
