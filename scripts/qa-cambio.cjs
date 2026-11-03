@@ -12,7 +12,7 @@ async function session(browser, url, [w, h], errors) {
   const ctx = await browser.newContext({viewport: {width: w, height: h}, deviceScaleFactor: 2, isMobile: true, hasTouch: true});
   const p = await ctx.newPage(); p.on('pageerror', e => errors.push(e.message)); await p.goto(url); return p;
 }
-const idle = p => p.waitForFunction(() => typeof wire !== 'undefined' && wire && state && !animating && !busy && !pumping && !messages.length, null, {timeout: 15000});
+const idle = p => p.waitForFunction(() => typeof wire !== 'undefined' && wire && state && !animating && !busy && !pumping && !messages.length && !document.querySelector('[data-hold="1"]'), null, {timeout: 15000});
 const until = (p, fn, arg) => p.waitForFunction(fn, arg, {timeout: 15000}).then(() => idle(p));
 const w = p => p.evaluate(() => JSON.parse(JSON.stringify(wire)));
 const tap = async (p, sel) => { await idle(p); await p.locator(sel).click(); };
@@ -107,6 +107,7 @@ async function twoPlayer(browser, base, size) {
   await until(L, () => reviewRound === wire.round);
   assert((await faces(L, 'oppHand')).every(f => f !== 'back'), 'both hands revealed');
   assert(await L.locator('#louieScore').textContent() === '0', 'totals wait for the score screen');
+  assert(/points$/.test(await L.locator('#myStatus').textContent()) && /points$/.test(await L.locator('#oppStatus').textContent()), 'points shown once hands are turned');
   await fit(L, 'reveal ' + tag); await shot(L, `${tag}-09-reveal`);
   const r1 = await w(L);
   // Louie: 2♣ 9♣ 7♥ 3♣ + penalty 6♦ = 27. Ariel: K♥ 2♦ 5♠ with 6♠ matched away = 6.
@@ -115,7 +116,7 @@ async function twoPlayer(browser, base, size) {
   await A.locator('#actions [data-key=scores]').click();
 
   // Round 2: Ariel starts. Louie refreshes mid-round and gets the right seat and game back.
-  await stackOn(base, {louie: ['1♠', '2♠', '3♠', '4♠'], ariel: ['1♥', '2♥', '3♥', '4♥'], draws: ['10♣', '9♦']});
+  await stackOn(base, {louie: ['1♠', '2♠', '3♠', '4♠'], ariel: ['1♥', '2♥', '3♥', '4♥'], draws: ['10♣', '12♣', '5♦', '9♦']});
   await control(L, 'next'); await control(A, 'next');
   await until(A, () => wire.phase === 'initial' && wire.round === 2);
   await control(L, 'hideStart'); await control(A, 'hideStart');
@@ -127,6 +128,25 @@ async function twoPlayer(browser, base, size) {
   await until(A, () => wire.phase === 'opponent'); await tap(A, theirs(2)); await until(A, () => wire.phase === 'view');
   assert((await faces(A, 'oppHand'))[2] === '3♠' && (await faces(L, 'myHand')).every(f => f === 'back'), '10 shows one opponent card privately');
   await control(A, 'hide'); await until(L, () => wire.phase === 'draw' && wire.turn === 'louie');
+  // Queen, looking at your OWN card, then swapping a different one of yours.
+  await tap(L, '#deck'); await until(L, () => wire.phase === 'holding'); await control(L, 'discard');
+  await until(L, () => wire.phase === 'queen');
+  assert((await L.locator('#swapSteps').textContent()).includes('Look') && await L.locator('#swapSteps .now').textContent() === 'Look', 'Queen step bar starts on Look');
+  assert(await L.locator('#myStatus').textContent() === 'Tap one to look' && await L.locator('#oppStatus').textContent() === 'Tap one to look', 'both hands invite the Queen look');
+  assert(!(await L.locator(mine(0)).isDisabled()) && !(await L.locator(theirs(0)).isDisabled()), 'own and opponent cards can both be looked at');
+  await tap(L, mine(0)); await until(L, () => wire.phase === 'queenView');
+  assert(JSON.stringify(await faces(L, 'myHand')) === JSON.stringify(['1♠', 'back', 'back', 'back']) && (await faces(L, 'oppHand')).every(f => f === 'back'), 'Queen own look reveals exactly that card');
+  assert((await faces(A, 'oppHand')).every(f => f === 'back'), 'opponent cannot see the Queen look');
+  await shot(L, `${tag}-11a-queen-own-look`);
+  await control(L, 'hideQueen'); await until(L, () => wire.phase === 'queenSwap');
+  assert((await faces(L, 'myHand')).every(f => f === 'back'), 'own Queen card hidden again');
+  assert(await L.locator('#swapSteps .now').textContent() === 'Yours', 'step bar moves to Yours');
+  await tap(L, mine(3)); assert(await L.locator('#swapSteps .now').textContent() === 'Theirs', 'step bar moves to Theirs');
+  await tap(L, theirs(0)); assert(await L.locator('#swapSteps .now').textContent() === 'Swap', 'step bar moves to Swap');
+  await shot(L, `${tag}-11b-queen-own-swap`);
+  await control(L, 'swap'); await until(A, () => wire.turn === 'ariel' && wire.phase === 'draw');
+  await tap(A, '#deck'); await until(A, () => wire.phase === 'holding'); await control(A, 'discard');
+  await until(L, () => wire.phase === 'draw' && wire.turn === 'louie');
   await control(L, 'call'); await control(L, 'yesCall');
   await until(A, () => wire.turn === 'ariel' && wire.phase === 'draw');
   await tap(A, '#deck'); await until(A, () => wire.phase === 'holding'); await control(A, 'discard');
@@ -134,7 +154,8 @@ async function twoPlayer(browser, base, size) {
   if ((await w(A)).phase === 'opponent') await control(A, 'skip'); else await control(A, 'hide');
   await until(L, () => wire.phase === 'over'); await control(L, 'scores');
   const over = await w(L);
-  assert(over.scores.louie === 27 + 10 && over.scores.ariel === 6 + 10, 'cumulative scores ' + JSON.stringify(over.scores));
+  // Louie 1♠ 2♠ 3♠ + 1♥ = 7; Ariel 4♠ 2♥ 3♥ 4♥ = 13.
+  assert(over.scores.louie === 27 + 7 && over.scores.ariel === 6 + 13, 'cumulative scores ' + JSON.stringify(over.scores));
   await shot(L, `${tag}-11-match-over`);
 
   // Reset during play needs confirmation and returns both players to setup with zero scores.

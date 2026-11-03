@@ -14,7 +14,7 @@ let state = null, wire = null, busy = false, animating = false, seat = null, pen
 let picks = {mine: null, theirs: null}, matching = false, confirmCall = false;
 let readyQueued = false, queuedSettings = null, toastTimer, seenSerial = 0, pumping = false;
 const messages = [];
-let reviewRound = null;
+let reviewRound = null, revealing = new Set(), flipping = 0;
 const flags = new Map(); let flagTimer = null;
 function flag(owner, index, text, tone = '', ms = 2200) { if (owner == null || index == null) return; flags.set(owner + ':' + index, {text, tone, until: Date.now() + ms}); clearTimeout(flagTimer); flagTimer = setTimeout(render, ms + 30); }
 function flagFor(owner, index) { const f = flags.get(owner + ':' + index); if (f && f.until > Date.now()) return f; flags.delete(owner + ':' + index); return null; }
@@ -33,6 +33,9 @@ function join(who) {
 }
 function act(action, extra = {}) {
   if (busy || animating || !wire || !socket.connected) return;
+  // Hiding turns the card over the moment you tap, before the server answers.
+  if (['skip', 'hideQueen'].includes(action) && state?.peek && state.turn === state.me) { const p = state.peek; flip(handEl(state, p.who, p.index), p.card, BACK, {duration: 400}); }
+  if (action === 'ready' && state?.phase === 'initial') [2, 3].forEach((i, k) => { const c = state.hands[state.me]?.[i]; if (c && !c.hidden) flip(handEl(state, state.me, i), c, BACK, {delay: k * 140}); });
   busy = true; pending = action; render();
   socket.timeout(6000).emit('cambio:action', {action, revision: wire.revision, phase: wire.phase, round: wire.round, ply: wire.ply, discardGeneration: wire.discardGeneration, topCard: wire.discard ? `${wire.discard.rank}${wire.discard.suit}` : null, settingsKey: `${wire.settings.mode}:${wire.settings.limit}`, ...extra}, (error, result) => {
     busy = false; pending = null;
@@ -40,8 +43,12 @@ function act(action, extra = {}) {
     render(); flushSettings();
   });
 }
-function card(el, c) {
-  const face = c ? c.hidden ? 'back' : `${c.rank}${c.suit}` : 'empty';
+const faceKey = c => c ? c.hidden ? 'back' : `${c.rank}${c.suit}` : 'empty';
+const BACK = {hidden: true};
+// While a card is mid-flip or a pile is waiting for a landing, render() leaves it alone.
+function card(el, c, force = false) {
+  if (!el || el.dataset.hold === '1' && !force) return;
+  const face = faceKey(c);
   if (el.dataset.face === face) return;
   el.dataset.face = face; el.replaceChildren(); el.className = 'playing';
   el.setAttribute('aria-label', c ? label(c) : 'Empty card slot');
@@ -78,7 +85,7 @@ function pick(owner, index) {
 }
 function ownCanMatch(s) { return MATCH_PHASES.includes(s.phase) && !!s.discard; }
 function canChoose(s, owner, index) {
-  if (busy || animating || !socket.connected || !s.online.includes(other(s.me)) || !s.hands[owner][index]) return false;
+  if (busy || animating || flipping || !socket.connected || !s.online.includes(other(s.me)) || !s.hands[owner][index]) return false;
   const mine = owner === s.me;
   if (matching) return mine && ownCanMatch(s);
   if (s.turn !== s.me || ['draw', 'settling'].includes(s.phase)) return mine && ownCanMatch(s);
@@ -155,10 +162,11 @@ function render() {
   }
   if (result) { renderResult(s); return; }
   text($('myName'), name(me)); text($('oppName'), name(opp)); text($('myAvatar'), initial(me)); text($('oppAvatar'), initial(opp));
-  text($('myStatus'), s.phase === 'reveal' ? `${s.points[me]} points` : `${s.hands[me].filter(Boolean).length} cards`); text($('oppStatus'), s.phase === 'reveal' ? `${s.points[opp]} points` : `${s.hands[opp].filter(Boolean).length} cards`);
+  const tally = who => s.phase === 'reveal' ? revealing.has(who) ? 'Revealing…' : `${s.points[who]} points` : `${s.hands[who].filter(Boolean).length} cards`;
+  text($('myStatus'), tally(me)); text($('oppStatus'), tally(opp));
   renderHand(s, opp, 'oppHand'); renderHand(s, me, 'myHand');
   card($('discard'), s.discard); if (!s.discard) $('discard').className = 'playing blank';
-  const held = s.drawn && (document.hidden || pending === 'discard' || pending === 'replace' ? {hidden: true} : s.drawn);
+  const held = s.drawn && (document.hidden ? {hidden: true} : s.drawn);
   card($('drawn'), held); if (!held) $('drawn').className = 'playing blank';
   $('discard').setAttribute('aria-label', `Discard pile${s.discard ? ': ' + label(s.discard) : ''}`);
   $('drawn').setAttribute('aria-label', held ? `${name(s.turn)}'s drawn card${!held.hidden ? ': ' + label(held) : ''}` : 'Drawn card area');
@@ -188,7 +196,7 @@ function render() {
     heading = s.caller && s.turn !== s.caller ? 'Last chance to match' : `${name(other(s.turn))} is next`;
     hint = s.caller && s.turn !== s.caller ? 'Tap your matching card now. The hands reveal automatically.' : `You can still tap your own ${rankName(s.discard?.rank)} to match.`;
   } else if (!active) {
-    const descriptions = {draw: 'is choosing a card.', holding: s.fromDiscard ? 'took the discard and must swap it in.' : 'drew a card. Watch where it goes.', self: 'is choosing one of their cards to look at.', opponent: 'will look at one of your cards.', view: 'is looking at a card.', blind: 'is choosing two cards for a blind swap.', queen: 'has a Queen: one look, then a swap.', queenView: 'is taking their one private look.', queenSwap: 'is choosing two cards to swap.'};
+    const descriptions = {draw: 'is choosing a card.', holding: s.fromDiscard ? 'took the discard and must swap it in.' : 'drew a card. Watch where it goes.', self: 'is choosing one of their cards to look at.', opponent: 'will look at one of your cards.', view: 'is looking at a card.', blind: 'is choosing two cards for a blind swap.', queen: 'played a Queen: one private look at any card, then a swap if they like.', queenView: 'is taking their one private look.', queenSwap: 'is choosing two cards to swap.'};
     hint = `${name(opp)} ${descriptions[s.phase] || 'is playing.'}${s.discard ? ` Got a ${rankName(s.discard.rank)}? Tap it to match.` : ''}`;
   } else if (s.phase === 'draw') {
     hint = finalTurn ? `${name(opp)} called Cambio. Draw, use any power, then the hands are revealed.` : s.discard ? 'Draw from the deck, or take the face-up discard to swap it in.' : 'You start. Tap the deck to draw the first card.';
@@ -199,34 +207,50 @@ function render() {
     heading = `You ${s.fromDiscard ? 'took' : 'drew'} ${label(s.drawn)}`; hint = s.fromDiscard ? 'Tap one of your cards to swap it out. A discard pickup must be kept.' : power ? `Tap one of your cards to swap it in, or discard it to ${power}.` : 'Tap one of your cards to swap it in, or discard it.';
     if (!s.fromDiscard) controls.push(action('discard', power ? `Discard & ${{7: 'look', 8: 'look', 9: 'look', 10: 'look', 11: 'swap', 12: 'use Queen'}[s.drawn.rank]}` : 'Discard it', 'discard', {}, true));
   } else if (s.phase === 'self' || s.phase === 'opponent') {
-    heading = s.phase === 'self' ? 'Look at one of yours' : 'Look at one of theirs'; hint = 'Tap ONE highlighted card. Only you will see its face.';
+    heading = s.phase === 'self' ? 'Look at one of your cards' : `Look at one of ${name(opp)}’s cards`; hint = `Tap one ${s.phase === 'self' ? 'of your cards below' : 'of their cards above'}. Only you will see it.`;
+    text($(s.phase === 'self' ? 'myStatus' : 'oppStatus'), 'Tap one to look');
     controls.push(action('skip', 'Skip the look', 'skip'));
   } else if (s.phase === 'view') {
-    heading = 'Your private look'; hint = 'Remember that card. Hide it when you are done.';
+    heading = 'Remember this card'; hint = s.peek?.card ? `It’s the ${label(s.peek.card)}. Hide it when you’ve got it.` : 'Hide it when you’ve got it.';
     controls.push(action('hide', 'Hide card', 'skip', {}, true));
   } else if (s.phase === 'queen') {
-    heading = 'Look at one card'; hint = 'Tap any card. Only you will see it.'; steps = ['QUEEN · LOOK'];
+    heading = 'Look at any one card'; hint = `Yours or ${name(opp)}’s, your choice. Only you will see it.`;
+    text($('myStatus'), 'Tap one to look'); text($('oppStatus'), 'Tap one to look');
     controls.push(action('skip', 'Skip Queen', 'skip'));
   } else if (s.phase === 'queenView') {
-    heading = 'Remember this card'; hint = 'Ready? Hide it, then choose your swap.'; steps = ['QUEEN · LOOK'];
-    controls.push(action('hideQueen', 'Hide card & choose mine', 'hideQueen', {}, true));
+    heading = 'Remember this card'; hint = `${s.peek?.card ? `It’s the ${label(s.peek.card)}. ` : ''}Next you may swap any of yours with any of ${name(opp)}’s, not only this one.`;
+    controls.push(action('hideQueen', 'Hide it & choose swap', 'hideQueen', {}, true));
   } else if (['blind', 'queenSwap'].includes(s.phase)) {
-    const both = picks.mine !== null && picks.theirs !== null;
-    heading = both ? 'Swap 1 and 2?' : picks.mine === null ? 'Choose one of your cards' : `Choose one of ${name(opp)}’s`;
-    hint = both ? 'These two will trade places. Tap either pick to change it.' : picks.mine === null ? s.phase === 'queenSwap' ? 'Tap a card below. It can be different from the one you looked at.' : 'Tap a card below to give away.' : 'Tap a card above to take in return.';
-    steps = [s.phase === 'blind' ? 'JACK · BLIND SWAP' : 'QUEEN · SWAP'];
-    if (both) controls.push(action('swap', 'Swap these cards', 'swap', {index: picks.mine, opponentIndex: picks.theirs}, true));
+    const both = picks.mine !== null && picks.theirs !== null, jack = s.phase === 'blind';
+    heading = both ? 'Swap these two?' : picks.mine === null ? 'Pick one of yours to give' : `Pick one of ${name(opp)}’s to take`;
+    hint = both ? `“Give” goes to ${name(opp)}. “Take” comes to you. Tap a pick to change it.` : picks.mine === null ? jack ? 'Tap one of your cards below. Neither card is shown.' : 'Tap any of your cards below. It doesn’t have to be the one you looked at.' : 'Tap one of their cards above.';
+    if (both) controls.push(action('swap', 'Swap them', 'swap', {index: picks.mine, opponentIndex: picks.theirs}, true));
     controls.push(action('skip', 'Don’t swap', 'skip'));
 
+  }
+  if (active && !matching && ['queen', 'queenView', 'queenSwap', 'blind'].includes(s.phase)) {
+    const labels = s.phase === 'blind' ? ['Yours', 'Theirs', 'Swap'] : ['Look', 'Yours', 'Theirs', 'Swap'];
+    const at = s.phase === 'blind' || s.phase === 'queenSwap' ? (picks.mine === null ? 0 : picks.theirs === null ? 1 : 2) + (s.phase === 'queenSwap' ? 1 : 0) : 0;
+    steps = [s.phase === 'blind' ? 'Jack' : 'Queen', ...labels.map((l, i) => `${i < at ? '✓' : i === at ? '•' : '·'}${i + 1} ${l}`)];
   }
   const swapping = active && !matching && ['blind', 'queenSwap'].includes(s.phase);
   document.body.dataset.choose = swapping ? picks.mine === null ? 'mine' : picks.theirs === null ? 'theirs' : 'pair' : active && !matching && s.phase === 'queen' ? 'look' : '';
   if (swapping) {
-    text($('myStatus'), picks.mine === null ? 'Choose a card' : '1 · Giving');
-    text($('oppStatus'), picks.mine === null ? `${s.hands[opp].filter(Boolean).length} cards` : picks.theirs === null ? 'Choose a card' : '2 · Receiving');
+    text($('myStatus'), picks.mine === null ? 'Tap one to give' : 'Giving 1');
+    text($('oppStatus'), picks.mine === null ? `${s.hands[opp].filter(Boolean).length} cards` : picks.theirs === null ? 'Tap one to take' : 'Taking 1');
   }
+  // Instructions ease in when they change instead of snapping.
+  const changed = $('turnTag').textContent !== heading, hintChanged = $('instruction').textContent !== hint;
   text($('turnTag'), heading); text($('instruction'), hint);
-  const stepKey = steps.join('|'); if ($('swapSteps').dataset.key !== stepKey) { $('swapSteps').dataset.key = stepKey; $('swapSteps').replaceChildren(); for (const item of steps) { const span = document.createElement('span'); span.textContent = item; span.classList.toggle('complete', item.startsWith('✓')); $('swapSteps').append(span); } }
+  if (!motionOff() && changed) $('turnTag').animate([{opacity: 0, transform: 'translateY(5px)'}, {opacity: 1, transform: 'translateY(0)'}], {duration: 240, easing: 'ease-out'});
+  if (!motionOff() && (changed || hintChanged)) $('instruction').animate([{opacity: 0}, {opacity: 1}], {duration: 260, delay: changed ? 60 : 0, easing: 'ease-out', fill: 'backwards'});
+  const stepKey = steps.join('|'); if ($('swapSteps').dataset.key !== stepKey) {
+    $('swapSteps').dataset.key = stepKey; $('swapSteps').replaceChildren();
+    steps.forEach((item, i) => { const span = document.createElement('span');
+      if (i === 0) { span.className = 'step-kind'; span.textContent = item; }
+      else { const mark = item[0]; span.className = mark === '✓' ? 'done' : mark === '•' ? 'now' : 'todo'; span.textContent = item.slice(item.indexOf(' ') + 1); span.dataset.n = item.slice(1, item.indexOf(' ')); }
+      $('swapSteps').append(span); });
+  }
   text($('powerLabel'), ''); setControls(controls);
   const recent = [...s.events].reverse().find(e => !['turn', 'hideStart', 'deal'].includes(e.kind)); const showRecent = !['initial', 'reveal', 'queen', 'queenView', 'queenSwap', 'blind'].includes(s.phase) || ['snap', 'penalty'].includes(recent?.kind);
   text($('eventNote'), showRecent ? recent?.text || '' : ''); $('eventNote').dataset.kind = showRecent ? recent?.kind || '' : '';
@@ -238,64 +262,138 @@ function capture(snapshot) {
   if (snapshot) for (const owner of ['louie', 'ariel']) boxes.hands[owner] = snapshot.hands[owner].map((_, i) => rect(handEl(snapshot, owner, i)));
   return boxes;
 }
+const motionOff = () => reduced() || document.hidden;
+function settled(animation, ms) { let timer; return Promise.race([animation.finished.catch(() => {}), new Promise(resolve => { timer = setTimeout(resolve, ms); })]).finally(() => clearTimeout(timer)); }
 async function animateEl(el, frames, options) {
-  if (!el || reduced() || document.hidden || !el.animate) return;
-  const animation = el.animate(frames, options); let watchdog;
-  try { await Promise.race([animation.finished, new Promise(resolve => { watchdog = setTimeout(resolve, (options.duration || 0) + (options.delay || 0) + 120); })]); } catch {} finally { clearTimeout(watchdog); animation.cancel?.(); }
+  if (!el || motionOff() || !el.animate) return;
+  const animation = el.animate(frames, options);
+  try { await settled(animation, (options.duration || 0) + (options.delay || 0) + 150); } finally { animation.cancel?.(); }
 }
-async function fly(c, from, target, {delay = 0, duration = 520, turn = 5, lift = 28} = {}) {
-  const to = rect(target); if (!from || !to || reduced() || document.hidden) return;
-  const floating = document.createElement('div'); card(floating, c); floating.classList.add('flying-card'); floating.style.cssText = `left:${from.left}px;top:${from.top}px;width:${from.width}px;height:${from.height}px;`;
-  $('motionLayer').append(floating); const previousVisibility = target.style.visibility; target.style.visibility = 'hidden';
-  const dx = to.left - from.left, dy = to.top - from.top;
-  try { await animateEl(floating, [{transform: 'translate(0,0) rotate(0deg)', opacity: 1}, {transform: `translate(${dx * .48}px,${dy * .48 - lift}px) rotate(${turn}deg) scale(1.08)`, offset: .48, opacity: 1}, {transform: `translate(${dx}px,${dy}px) rotate(0deg) scale(${to.width / from.width},${to.height / from.height})`, opacity: 1}], {duration, delay, easing: 'cubic-bezier(.22,.68,.18,1)', fill: 'both'}); }
-  finally { target.style.visibility = previousVisibility; floating.remove(); }
+function hold(el, c) { if (!el) return; el.dataset.hold = '1'; card(el, c, true); }
+function release(el) { if (el) delete el.dataset.hold; }
+// A real two-sided turn: the old face rotates away edge-on, the new face rotates in.
+async function flip(el, from, to, {delay = 0, duration = 440, lift = 0} = {}) {
+  if (!el) return;
+  if (motionOff()) { release(el); return; }
+  hold(el, from); flipping++;
+  try {
+  const half = duration / 2, up = `translateY(${-lift}px) scale(${lift ? 1.06 : 1.02})`;
+  const a = el.animate([{transform: 'translateY(0) rotateY(0deg) scale(1)'}, {transform: `${up} rotateY(90deg)`}], {duration: half, delay, easing: 'cubic-bezier(.5,0,.9,.6)', fill: 'forwards'});
+  await settled(a, half + delay + 150);
+  card(el, to, true);
+  const b = el.animate([{transform: `${up} rotateY(-90deg)`}, {transform: 'translateY(0) rotateY(0deg) scale(1)'}], {duration: half, easing: 'cubic-bezier(.15,.6,.3,1)', fill: 'forwards'});
+  a.cancel();
+  await settled(b, half + 150); b.cancel();
+  } finally { release(el); flipping--; if (!pumping) render(); }
+}
+// Cards travel on an arc, from centre to centre. `start` is the side showing as it leaves;
+// when it differs from `c` the card turns over mid-air. Piles keep showing `under` until it lands.
+async function fly(c, from, target, {delay = 0, duration = 600, turn = 6, lift = 34, start = c, under, land} = {}) {
+  const to = rect(target);
+  if (!from || !to || motionOff()) return;
+  const el = document.createElement('div'); card(el, start); el.classList.add('flying-card');
+  el.style.cssText = `left:${from.left}px;top:${from.top}px;width:${from.width}px;height:${from.height}px;`;
+  $('motionLayer').append(el);
+  const pile = under !== undefined, visibility = target.style.visibility;
+  if (pile) hold(target, under); else target.style.visibility = 'hidden';
+  const dx = to.left + to.width / 2 - from.left - from.width / 2, dy = to.top + to.height / 2 - from.top - from.height / 2;
+  const sx = to.width / from.width, sy = to.height / from.height, peak = (1 + sx) / 2 * 1.1;
+  const begin = 'translate(0,0) rotate(0deg) scale(1)', end = `translate(${dx}px,${dy}px) rotate(0deg) scale(${sx},${sy})`;
+  const mid = `translate(${dx / 2}px,${dy / 2 - lift}px) rotate(${turn}deg) scale(${peak})`;
+  try {
+    if (faceKey(start) === faceKey(c)) {
+      await settled(el.animate([{transform: begin}, {transform: mid, offset: .5}, {transform: end}], {duration, delay, easing: 'cubic-bezier(.33,.75,.25,1)', fill: 'forwards'}), duration + delay + 150);
+    } else {
+      const half = duration / 2;
+      const a = el.animate([{transform: `${begin} rotateY(0deg)`}, {transform: `${mid} rotateY(90deg)`}], {duration: half, delay, easing: 'cubic-bezier(.45,.1,.7,.6)', fill: 'forwards'});
+      await settled(a, half + delay + 150); card(el, c);
+      const b = el.animate([{transform: `${mid} rotateY(-90deg)`}, {transform: `${end} rotateY(0deg)`}], {duration: half, easing: 'cubic-bezier(.2,.55,.25,1)', fill: 'forwards'});
+      a.cancel(); await settled(b, half + 150);
+    }
+    if (pile) card(target, land === undefined ? c : land, true);
+  } finally {
+    el.remove();
+    if (pile) release(target); else target.style.visibility = visibility;
+  }
+  target.animate?.([{transform: 'scale(1.06)'}, {transform: 'scale(1)'}], {duration: 180, easing: 'ease-out'});
 }
 async function transition(e, before, next) {
-  const boxes = capture(before);
+  const boxes = capture(before), me = next.me, mineEvent = e.actor === me;
   if (e.kind === 'score') {
     reviewRound = next.round; state = {...next, phase: 'reveal'}; render();
-    const cards = [...$('myHand').children, ...$('oppHand').children];
-    await Promise.all(cards.map((el, i) => animateEl(el, [{transform: 'rotateY(90deg)'}, {transform: 'rotateY(0deg)'}], {duration: 500, delay: i * 180, easing: 'ease-out', fill: 'backwards'})));
-    state = next; render(); return;
+    // Every card starts face-down, then they turn over one at a time: theirs, then yours.
+    const order = [...$('oppHand').children, ...$('myHand').children].filter(el => el.dataset.face && !['back', 'empty'].includes(el.dataset.face));
+    const owners = order.map(el => el.parentElement.id === 'myHand' ? me : other(me));
+    const faces = order.map((el, i) => next.hands[owners[i]][[...el.parentElement.children].indexOf(el)]);
+    order.forEach(el => hold(el, BACK));
+    revealing = new Set(motionOff() ? [] : [me, other(me)]); render();
+    // Each player's points appear only once their whole hand has turned over.
+    await Promise.all([other(me), me].map(async who => {
+      await Promise.all(order.map((el, i) => owners[i] === who ? flip(el, BACK, faces[i], {delay: 250 + i * 160, duration: 460, lift: 6}) : null));
+      revealing.delete(who); render();
+      animateEl($(who === me ? 'myStatus' : 'oppStatus'), [{transform: 'scale(1.35)', opacity: 0}, {transform: 'scale(1)', opacity: 1}], {duration: 360, easing: 'cubic-bezier(.2,1.4,.4,1)'});
+    }));
+    revealing.clear(); state = next; render(); return;
   }
   state = ['result', 'over'].includes(next.phase) ? {...next, phase: 'settling'} : next; render();
   if (e.kind === 'deal') {
-    const from = rect($('deck')); const jobs = [];
-    for (const [side, owner] of [other(next.me), next.me].entries()) for (let i = 0; i < next.hands[owner].length; i++) jobs.push(fly({hidden: true}, from, handEl(next, owner, i), {duration: 410, delay: (i * 2 + side) * 65, turn: side ? -7 : 7}));
+    const from = rect($('deck')), jobs = [], bottom = [2, 3].map(i => handEl(next, me, i));
+    bottom.forEach(el => hold(el, BACK));
+    for (const [side, owner] of [other(me), me].entries()) for (let i = 0; i < next.hands[owner].length; i++) jobs.push(fly(BACK, from, handEl(next, owner, i), {duration: 460, delay: (i * 2 + side) * 90, turn: side ? -8 : 8, lift: 20}));
     await Promise.all(jobs);
-    for (const el of $('myHand').children) if (el.querySelector('.real-face')) await animateEl(el, [{transform: 'rotateY(90deg)'}, {transform: 'rotateY(0deg)'}], {duration: 200});
+    await Promise.all(bottom.map((el, k) => flip(el, BACK, next.hands[me][k + 2]?.hidden ? BACK : next.hands[me][k + 2], {delay: 120 + k * 160, lift: 8})));
   } else if (e.kind === 'draw') {
-    await fly({hidden: true}, boxes[e.from] || rect($(e.from)), $('drawn'), {duration: 540, turn: -10});
-    if (next.turn === next.me) await animateEl($('drawn'), [{transform: 'rotateY(75deg)'}, {transform: 'rotateY(0deg)'}], {duration: 230});
+    const fromDiscard = e.from === 'discard', taken = fromDiscard ? before.discard : null;
+    if (fromDiscard && taken) {
+      await fly(taken, boxes.discard, $('drawn'), {turn: -8, under: null});
+      if (!mineEvent) await flip($('drawn'), taken, BACK);
+    } else {
+      await fly(BACK, boxes.deck, $('drawn'), {turn: -9, under: null, land: BACK});
+      if (mineEvent && next.drawn && !next.drawn.hidden) await flip($('drawn'), BACK, next.drawn, {lift: 10});
+    }
   } else if (e.kind === 'discard') {
-    await fly(e.card, boxes.drawn, $('discard'), {duration: 540, turn: 11});
+    await fly(e.card, boxes.drawn, $('discard'), {turn: 10, start: mineEvent ? e.card : BACK, under: before.discard});
   } else if (e.kind === 'replace') {
-    await Promise.all([fly({hidden: true}, boxes.drawn, handEl(next, e.actor, e.index), {duration: 550, turn: -7}), fly(e.card, boxes.hands[e.actor][e.index], $('discard'), {duration: 580, turn: 9, lift: 45})]);
-    flag(e.actor, e.index, e.actor === next.me ? 'New card' : 'Replaced');
+    const held = mineEvent && before.drawn && !before.drawn.hidden ? before.drawn : BACK;
+    await Promise.all([
+      fly(BACK, boxes.drawn, handEl(next, e.actor, e.index), {turn: -7, start: held}),
+      fly(e.card, boxes.hands[e.actor][e.index], $('discard'), {delay: 90, turn: 9, lift: 48, start: BACK, under: before.discard})]);
+    flag(e.actor, e.index, mineEvent ? 'New card' : 'Replaced');
   } else if (e.kind === 'swap') {
-    await Promise.all([fly({hidden: true}, boxes.hands[e.actor][e.index], handEl(next, other(e.actor), e.opponentIndex), {duration: 650, turn: -12, lift: 45}), fly({hidden: true}, boxes.hands[other(e.actor)][e.opponentIndex], handEl(next, e.actor, e.index), {duration: 650, turn: 12, lift: -35})]);
+    await Promise.all([
+      fly(BACK, boxes.hands[e.actor][e.index], handEl(next, other(e.actor), e.opponentIndex), {duration: 720, turn: -12, lift: 50}),
+      fly(BACK, boxes.hands[other(e.actor)][e.opponentIndex], handEl(next, e.actor, e.index), {duration: 720, turn: 12, lift: -40})]);
     flag(e.actor, e.index, 'Swapped', 'swap', 2600); flag(other(e.actor), e.opponentIndex, 'Swapped', 'swap', 2600);
   } else if (e.kind === 'snap') {
-    await fly(e.card, boxes.hands[e.actor][e.index], $('discard'), {duration: 460, turn: -8, lift: 40});
+    await fly(e.card, boxes.hands[e.actor][e.index], $('discard'), {duration: 560, turn: -8, lift: 46, start: BACK, under: before.discard});
     flag(e.actor, e.index, 'Matched', 'good');
-    await Promise.all([animateEl($('discard'), [{transform: 'scale(1.08)'}, {transform: 'scale(1)'}], {duration: 260}), animateEl($('eventNote'), [{transform: 'scale(1.1)'}, {transform: 'scale(1)'}], {duration: 300})]);
+    await Promise.all([animateEl($('discard'), [{transform: 'scale(1.12) rotate(-2deg)'}, {transform: 'scale(1)'}], {duration: 320, easing: 'cubic-bezier(.2,1.4,.4,1)'}), animateEl($('eventNote'), [{transform: 'scale(1.12)'}, {transform: 'scale(1)'}], {duration: 320})]);
   } else if (e.kind === 'penalty') {
-    const chosen = handEl(next, e.actor, e.index), from = boxes.hands[e.actor][e.index];
-    if (from && !document.hidden) { const proof = document.createElement('div'); card(proof, e.card); proof.classList.add('flying-card'); proof.style.cssText = `left:${from.left}px;top:${from.top}px;width:${from.width}px;height:${from.height}px;`; $('motionLayer').append(proof); chosen.style.visibility = 'hidden'; await animateEl(proof, [{transform: 'rotateY(80deg)'}, {transform: 'rotateY(0) translateX(-4px)'}, {transform: 'translateX(5px)'}, {transform: 'translateX(-4px)'}, {transform: 'rotateY(80deg)'}], {duration: 600}); proof.remove(); chosen.style.visibility = ''; }
-    if (e.actor === next.me) matching = false;
+    // The wrong card turns up for both players, shakes, turns back down, then the penalty card arrives.
+    const chosen = handEl(next, e.actor, e.index);
+    if (mineEvent) matching = false;
+    if (chosen && !motionOff()) {
+      hold(chosen, BACK);
+      await flip(chosen, BACK, e.card, {lift: 10}); hold(chosen, e.card);
+      await animateEl(chosen, [{transform: 'translateX(0)'}, {transform: 'translateX(-6px) rotate(-3deg)'}, {transform: 'translateX(6px) rotate(3deg)'}, {transform: 'translateX(-4px) rotate(-2deg)'}, {transform: 'translateX(0)'}], {duration: 420});
+      await flip(chosen, e.card, BACK, {delay: 250});
+    }
     flag(e.actor, e.index, 'No match', 'bad');
-    if (e.penaltyIndex != null) { await fly({hidden: true}, boxes.deck, handEl(next, e.actor, e.penaltyIndex), {duration: 500, turn: 7}); flag(e.actor, e.penaltyIndex, '+1 penalty', 'bad'); }
+    if (e.penaltyIndex != null) { await fly(BACK, boxes.deck, handEl(next, e.actor, e.penaltyIndex), {turn: 7}); flag(e.actor, e.penaltyIndex, '+1 penalty', 'bad'); }
   } else if (e.kind === 'peek') {
     const chosen = handEl(next, e.owner, e.index);
-    await animateEl(chosen, [{transform: 'translateY(0) rotateY(75deg)'}, {transform: 'translateY(-9px) rotateY(0deg) scale(1.12)'}], {duration: 370, easing: 'cubic-bezier(.2,.8,.2,1)'});
-  } else if (e.kind === 'hide' || e.kind === 'hideStart') {
-    const cards = e.kind === 'hideStart' ? [...$(e.actor === next.me ? 'myHand' : 'oppHand').children].slice(2) : [...$('myHand').children, ...$('oppHand').children];
-    await Promise.all(cards.map(el => animateEl(el, [{transform: 'rotateY(75deg)'}, {transform: 'rotateY(0deg)'}], {duration: 240})));
+    if (mineEvent && next.peek?.card) await flip(chosen, BACK, next.peek.card, {lift: 12, duration: 480});
+    else await animateEl(chosen, [{transform: 'translateY(0)'}, {transform: 'translateY(-10px) scale(1.06)'}, {transform: 'translateY(-5px)'}], {duration: 420, easing: 'ease-out'});
+  } else if (e.kind === 'hide') {
+    const p = before.peek;
+    const el = p && handEl(before, p.who, p.index);
+    if (mineEvent && p?.card && el?.dataset.hold !== '1' && el.dataset.face !== 'back') await flip(el, p.card, BACK, {duration: 400});
+  } else if (e.kind === 'hideStart') {
+    if (mineEvent) await Promise.all([2, 3].map((i, k) => { const c = before.hands[me]?.[i]; const el = handEl(next, me, i); return c && !c.hidden && el?.dataset.hold !== '1' && el.dataset.face !== 'back' ? flip(el, c, BACK, {delay: k * 140}) : null; }));
   } else if (e.kind === 'call') {
-    await animateEl($('statusPanel'), [{boxShadow: '0 0 0 0 #e6ba5970', transform: 'scale(.98)'}, {boxShadow: '0 0 0 12px #e6ba5900', transform: 'scale(1)'}], {duration: 650});
+    await animateEl($('statusPanel'), [{transform: 'scale(.96)', opacity: .6}, {transform: 'scale(1.04)', opacity: 1, offset: .5}, {transform: 'scale(1)'}], {duration: 560, easing: 'ease-out'});
   } else if (e.kind === 'turn') {
-    await animateEl($('statusPanel'), [{opacity: .45, transform: 'translateY(4px)'}, {opacity: 1, transform: 'translateY(0)'}], {duration: 220});
+    await animateEl($('statusPanel'), [{opacity: .4, transform: 'translateY(6px)'}, {opacity: 1, transform: 'translateY(0)'}], {duration: 260, easing: 'ease-out'});
   }
 }
 async function pump() {

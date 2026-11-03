@@ -128,3 +128,17 @@ body[data-phase=initial] .avatar,body[data-phase=reveal] .avatar{box-shadow:none
   .actions{min-height:48px;padding:3px 0}.actions button{min-height:42px;padding:9px 15px}
 }
 #board.small-piles .piles #deck>span{font-size:0;height:24%;width:62%}#board.small-piles .piles #deck:after{display:none}#board.small-piles .piles #deck>small{white-space:nowrap;bottom:auto;top:50%;transform:translateY(-50%);font-size:9px;font-weight:650;background:#71393f;padding:1px 4px;border-radius:3px}#board.small-piles .piles #deck>span{display:none}#board.small-piles .pile-labels{margin-top:9px}
+/* Queen / Jack step bar: where you are in the power, at a glance. */
+.swap-steps{order:-1;display:flex;align-items:center;justify-content:center;gap:6px;margin:0 0 8px;flex-wrap:nowrap}
+.swap-steps span{display:inline-flex;align-items:center;gap:5px;padding:4px 9px 4px 5px;border:0;border-radius:999px;background:#ffffff0f;color:#b7c8b8;font-size:11px;font-weight:600;letter-spacing:0;line-height:1;white-space:nowrap;transition:background .25s,color .25s}
+.swap-steps span:before{content:attr(data-n);display:grid;place-items:center;width:16px;height:16px;border-radius:50%;background:#ffffff1c;font-size:10px}
+.swap-steps span.done{color:#e6d8b7}.swap-steps span.done:before{content:'✓';background:#a8cf8e;color:#1b3220}
+.swap-steps span.now{background:#eee4c9;color:#24382b}.swap-steps span.now:before{background:#24382b;color:#eee4c9}
+.swap-steps span.step-kind{background:none;padding:0 4px 0 0;color:#e6d8b7;font-family:Georgia,serif;font-size:14px;font-style:italic;font-weight:400}.swap-steps span.step-kind:before{display:none}
+body[data-choose=look] .playing.available{outline:2px solid #eee4c9cc;outline-offset:4px}
+body[data-choose=look] .yours .player small,body[data-choose=look] .opponent .player small{color:#f1dc9e;font-weight:650}
+.flying-card{transition:none!important}
+@media(max-width:360px){.swap-steps{gap:4px}.swap-steps span{font-size:10px;padding:3px 7px 3px 4px}}
+/* Reserve the step row so cards never shift when a power starts or ends. */
+.swap-steps,.swap-steps:empty{display:flex;min-height:24px}.swap-steps:empty{visibility:hidden}
+@media(max-height:700px){.swap-steps,.swap-steps:empty{min-height:20px;margin-bottom:4px}.swap-steps span{padding:2px 7px 2px 3px}.swap-steps span:before{width:14px;height:14px}}
