@@ -31,3 +31,9 @@ The app uses one server replica with a persistent `/data` volume. Multiple repli
 `npm test` runs the full existing regression suite. Browser QA uses isolated `?table=qa-...` tables, never the couple’s main match. Both player views were checked through manual chain creation and locking, own-chain correct guesses and hint-driven turn swapping. Physical phones were not available.
 
 Local font source: Google Fonts Kalam, licensed under SIL OFL; license included under `public/fonts/Kalam-OFL.txt`. The shipped TTF is subset to Latin characters.
+
+## Main page revision
+
+The welcome and setup steps now share one page, matching the supplied letter-tile reference: green/cream styling, raised WORD CHAIN tiles, blue/pink identity buttons, chain length and starting player. There is no mode picker or proposal/approval button group. Each player taps Start Game once to confirm the exact settings. A player may confirm before their partner arrives. When both have confirmed the same settings and are connected, the server starts creation atomically. Changes clear previous consent. Concurrent identical confirmations are safe; different concurrent settings must be reviewed again. Active games resume directly after refresh. Handwritten manual chains are the only mode offered by the main page; older server endpoints remain for compatibility.
+
+Three additional tests cover changed-setting consent, readiness before a partner joins and simultaneous Start Game taps. All 14 Word Chain tests pass.

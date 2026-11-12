@@ -5,13 +5,15 @@
   const prefix = `wordchain:${table}:`;
   const storage = (key, value) => { try { if (value === undefined) return localStorage.getItem(prefix + key); localStorage.setItem(prefix + key, value); } catch {} return null; };
   const tabSeat = value => { try { if (value === undefined) return sessionStorage.getItem(prefix + 'seat'); sessionStorage.setItem(prefix + 'seat', value); } catch {} return null; };
-  let s = null, seat = null, busy = false, joined = false, toastTimer, draftTimer, draftDirty = false, editorKey = '', settingsDirty = false, count = 8, lastBoard = '', seenRevision = -1;
+  let s = null, seat = null, busy = false, joined = false, toastTimer, draftTimer, draftDirty = false, editorKey = '', settingsDirty = false, count = 8, lastBoard = '', seenRevision = -1, joiningWho = null;
   function toast(message) { $('toast').textContent = message; $('toast').classList.add('visible'); clearTimeout(toastTimer); toastTimer = setTimeout(() => $('toast').classList.remove('visible'), 4000); }
   function join(who) {
     if (!socket.connected) { toast('Connecting. Try again in a moment.'); return; }
-    seat = who;
+    joiningWho = who; render();
     socket.timeout(7000).emit('wordchain:join', {who, table, token: storage('token:' + who)}, (error, r) => {
-      if (error || !r?.ok) { joined = false; toast(r?.error || 'Could not connect. Try again.'); return; }
+      joiningWho = null;
+      if (error || !r?.ok) { toast(r?.error || 'Could not connect. Try again.'); render(); return; }
+      seat = who;
       storage('token:' + who, r.token); storage('seat', who); tabSeat(who); storage('lastPlayer', who); joined = true; render();
     });
   }
@@ -30,20 +32,21 @@
   const text = (id, value) => { if ($(id).textContent !== value) $(id).textContent = value; };
   function paintCounts() {
     $('counts').replaceChildren(...[5,6,7,8,9,10].map(n => {
-      const b = document.createElement('button'); b.type = 'button'; b.textContent = n; b.setAttribute('aria-pressed', String(n === count)); b.disabled = busy || !s || s.online.length !== 2;
+      const b = document.createElement('button'); b.type = 'button'; b.textContent = n; b.setAttribute('aria-pressed', String(n === count)); b.disabled = busy;
       b.onclick = () => { count = n; settingsDirty = true; paintCounts(); renderSetup(); }; return b;
     }));
   }
   function renderSetup() {
-    const both = s.online.length === 2;
-    if (!settingsDirty) { count = s.settings.count; $('mode').value = s.settings.mode; $('starter').value = s.settings.starter; }
-    $('settingsFields').disabled = busy || !both;
-    show('starterField', true);
-    text('modeNote', $('mode').value === 'manual' ? 'Write a chain for each other. First to solve theirs wins.' : 'Two different chains. Neither of you knows the answers.');
-    text('presence', both ? `${names[seat]} + ${names[seat === 'louie' ? 'ariel' : 'louie']}. Both here.` : `Waiting for ${names[seat === 'louie' ? 'ariel' : 'louie']} to join…`);
-    text('agreement', s.agreed.length ? `${s.agreed.map(p => names[p]).join(' + ')} agreed${settingsDirty ? ' to the previous settings' : ''}.` : 'Both players need to agree.');
-    $('propose').disabled = busy || !both; $('agree').disabled = busy || !both || settingsDirty || s.agreed.includes(seat);
-    $('start').disabled = busy || !both || settingsDirty || s.agreed.length !== 2;
+    if (s && joined && !settingsDirty) { count=s.settings.count; $('starter').value=s.settings.starter; }
+    $('settingsFields').disabled=busy;
+    for(const b of document.querySelectorAll('[data-seat]')) {
+      b.setAttribute('aria-pressed',String(joined && seat===b.dataset.seat));
+      b.disabled=busy || !!joiningWho;
+    }
+    $('start').disabled=busy || !!joiningWho || !socket.connected || !joined;
+    const partner=seat==='louie'?'ariel':'louie';
+    const mine=joined && s?.agreed.includes(seat) && !settingsDirty;
+    text('homeStatus', joiningWho ? `Taking ${names[joiningWho]}’s seat…` : !joined ? 'Choose your name to play.' : mine ? `You’re ready. Waiting for ${names[partner]}…` : s?.agreed.includes(partner) && !settingsDirty ? `${names[partner]} is ready. Tap Start Game.` : s?.online.includes(partner) ? 'Both here. Let’s play.' : `Waiting for ${names[partner]} to join.`);
     paintCounts();
   }
   function currentDraft() { return [...$('wordInputs').querySelectorAll('input')].map(el => el.value); }
@@ -78,8 +81,9 @@
   }
   function render() {
     show('connection', !socket.connected);
-    show('welcome', !joined); show('game', joined && !!s);
-    if (!s || !joined) return;
+    const home=!joined || !s || s.phase==='setup';
+    show('home',home); show('game',!home); document.body.classList.toggle('on-home',home); text('brand',home?'A + L':'Word Chain');
+    if(home){renderSetup();return;}
     text('round', `ROUND ${s.round || 1} · ${s.settings.count} WORDS`); text('score', `Louie ${s.scores.louie} : ${s.scores.ariel} Ariel`);
     document.body.dataset.turn = s.phase === 'play' ? s.turn : '';
     const boardKey = JSON.stringify(s.boards);
@@ -96,8 +100,7 @@
     }
     lastBoard = boardKey;
     show('turn', s.phase==='play');
-    ['setup','creation','play','results'].forEach(id => show(id, s.phase === ({creation:'create',results:'result'}[id] || id)));
-    if (s.phase === 'setup') renderSetup();
+    ['creation','play','results'].forEach(id => show(id, s.phase === ({creation:'create',results:'result'}[id] || id)));
     if (s.phase === 'create') {
       text('createTitle',s.canCreate ? `Make ${names[seat==='louie'?'ariel':'louie']}’s chain.` : 'Your chain is locked.');
       text('createNote',s.canCreate ? 'Write a chain for your partner to solve. Each pair must make a familiar phrase, like BIRD → BATH → TIME.' : 'Waiting for your partner to lock theirs. Your answers stay hidden.');
@@ -126,13 +129,11 @@
     }
   }
   document.querySelectorAll('[data-seat]').forEach(b => b.onclick = () => join(b.dataset.seat));
-  $('mode').onchange = $('starter').onchange = () => { settingsDirty = true; renderSetup(); };
-  $('settingsForm').onsubmit = e => { e.preventDefault(); act('settings', {count, mode:$('mode').value, starter:$('starter').value}, () => { settingsDirty = false; }); };
-  $('agree').onclick = () => act('agree'); $('start').onclick = () => act('start');
+  $('starter').onchange = () => { settingsDirty=true; renderSetup(); };
+  $('start').onclick = () => act('readyToStart',{count,starter:$('starter').value},()=>{settingsDirty=false;render();});
   $('editor').onsubmit = e => { e.preventDefault(); clearTimeout(draftTimer); act('lock', {words:currentDraft(), confirmed:$('confirmChain').checked}, () => { $('wordInputs').replaceChildren(); $('preview').replaceChildren(); editorKey=''; draftDirty=false; }); };
   $('guessForm').onsubmit = e => { e.preventDefault(); const guess=$('guess').value.trim(); if (!guess) { toast('Enter a guess first.'); $('guess').focus(); return; } act('guess', {guess}, () => { $('guess').value=''; if (s.phase === 'play' && s.turn === seat) $('guess').focus(); }); };
   $('hint').onclick = () => act('hint'); $('dispute').onclick = () => act('dispute'); $('approve').onclick = () => act('judge',{approve:true}); $('reject').onclick = () => act('judge',{approve:false}); $('rematch').onclick = () => act('rematch');
-  $('switch').onclick = () => { socket.disconnect(); joined=false; seat=null; s=null; tabSeat(''); storage('seat',''); socket.connect(); render(); };
   $('rulesOpen').onclick = () => $('rules').showModal(); $('rulesClose').onclick = () => $('rules').close();
   socket.on('connect', () => { const saved = seat || tabSeat() || storage('seat') || (()=>{try{return localStorage.getItem('cambio:main:seat') || localStorage.getItem('cambio:seat');}catch{return null;}})(); if (names[saved]) join(saved); render(); });
   socket.on('disconnect', () => { busy=false; render(); });
