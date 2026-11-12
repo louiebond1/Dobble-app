@@ -1,77 +1,24 @@
 'use strict';
-const {test} = require('node:test');
-const assert = require('node:assert/strict');
-const fs = require('fs'), os = require('os'), path = require('path'), http = require('http');
-const {Server} = require('socket.io');
-const {io:client} = require('../node_modules/socket.io/client-dist/socket.io.js');
-const {fresh, move, view, normalise} = require('../lib/word-chain/engine');
-const {wordChain} = require('../lib/word-chain/socket');
-function game(mode = 'competitive') {
-  const g = fresh(); move(g,'louie',{action:'settings',mode,count:5,starter:'ariel'}); move(g,'ariel',{action:'agree'}); move(g,'louie',{action:'start'});
-  if(mode==='manual')move(g,'louie',{action:'lock',words:['BIRD','BATH','TIME','LIMIT','BREAK'],confirmed:true});
-  return g;
-}
-test('both agree to settings; settings lock; correct keeps turn and final word wins',()=>{
-  const g=fresh(); assert.throws(()=>move(g,'louie',{action:'start'}),/agree/);
-  Object.assign(g,game()); const who=g.turn; assert.throws(()=>move(g,who,{action:'settings'}),/locked/);
-  while(g.phase==='play'){move(g,who,{action:'guess',guess:'  '+g.words[g.index].toLowerCase()+'  '});assert.equal(g.turn,who);}
-  assert.equal(g.winner,who);assert.equal(g.scores[who],1);assert.equal(g.correct[who],4);
-});
-test('wrong guesses and sequential hints pass turns; never hint final letter',()=>{
-  const g=game(); g.words=['BIRD','BATH','TIME','LIMIT','BREAK'];
-  move(g,'ariel',{action:'guess',guess:'bad'});assert.equal(g.turn,'louie');assert.equal(g.index,1);
-  assert.throws(()=>move(g,'ariel',{action:'guess',guess:'BATH'}),/partner/);
-  move(g,'louie',{action:'hint'});assert.equal(g.turn,'ariel');assert.equal(view(g,'ariel',[]).board[1].text,'B A _ _');
-  move(g,'ariel',{action:'hint'}); assert.equal(g.turn,'louie');assert.equal(view(g,'ariel',[]).canHint,false);
-  assert.throws(()=>move(g,'louie',{action:'hint'}),/One letter/);assert.throws(()=>move(g,'louie',{action:'guess',guess:' '}),/Enter/);
-});
-test('views never contain hidden answers, lengths of future words, tokens or catalogue',()=>{
-  const g=game();g.words=['BIRD','BATH','TIME','LIMIT','BREAK'];g.tokens={louie:'private-token'};
-  for(const p of ['louie','ariel']){const v=view(g,p,[]),json=JSON.stringify(v);for(const secret of ['BATH','TIME','LIMIT','BREAK','private-token'])assert.ok(!json.includes(secret));assert.deepEqual(v.board[2],{text:'T',status:'future'});}
-});
-test('manual drafts private and resume; host cannot guess; controlled alternative becomes official',()=>{
-  const g=game('manual');assert.equal(g.turn,'ariel');
-  assert.throws(()=>move(g,'louie',{action:'guess',guess:'BATH'}),/partner/);
-  move(g,'ariel',{action:'guess',guess:'BOX'});move(g,'ariel',{action:'dispute'});
-  assert.throws(()=>move(g,'ariel',{action:'judge',approve:true}),/review/);
-  move(g,'louie',{action:'judge',approve:true});assert.equal(g.words[1],'BOX');assert.equal(g.index,2);assert.equal(g.correct.ariel,1);
-  const draft=fresh();move(draft,'louie',{action:'settings',count:5,starter:'random',mode:'manual'});move(draft,'ariel',{action:'agree'});move(draft,'louie',{action:'start'});move(draft,'louie',{action:'draft',words:['BIRD','','','','']});
-  assert.deepEqual(view(draft,'louie',[]).draft,['BIRD','','','','']);assert.equal(view(draft,'ariel',[]).draft,undefined);
-  for(const words of [['A','','','',''],['BIRD','BIRD','BATH','TIME','LIMIT'],['BIRD','B4TH','TIME','LIMIT','BREAK']])assert.throws(()=>move(draft,'louie',{action:'lock',confirmed:true,words}));
-});
-test('normalisation only ignores whitespace, case and minor punctuation',()=>{assert.equal(normalise('  o’clock '),normalise("O'CLOCK"));assert.notEqual(normalise('BATH'),normalise('BATHE'));});
-test('rematch waits for both; swaps creator; retains settings and scores',()=>{
-  const g=game('manual');while(g.phase==='play')move(g,'ariel',{action:'guess',guess:g.words[g.index]});
-  move(g,'louie',{action:'rematch'});assert.equal(g.phase,'result');move(g,'ariel',{action:'rematch'});assert.equal(g.phase,'setup');assert.equal(g.creator,'ariel');assert.equal(g.scores.ariel,1);assert.equal(g.settings.count,5);assert.deepEqual(g.agreed,[]);
-});
+const {test}=require('node:test'),assert=require('node:assert/strict'),fs=require('fs'),os=require('os'),path=require('path'),http=require('http'),crypto=require('crypto');
+const {Server}=require('socket.io'),{io:client}=require('../node_modules/socket.io/client-dist/socket.io.js');
+const {fresh,move,view,normalise,upgrade}=require('../lib/word-chain/engine'),{wordChain}=require('../lib/word-chain/socket'),legacy=require('../lib/word-chain/legacy-engine');
+const A=['BIRD','BATH','TIME','LIMIT','BREAK'],B=['SNOW','BALL','ROOM','SERVICE','CHARGE'];
+function game(mode='manual'){const g=fresh();move(g,'louie',{action:'settings',mode,count:5,starter:'louie'});move(g,'ariel',{action:'agree'});move(g,'louie',{action:'start'});if(mode==='manual'){move(g,'louie',{action:'lock',words:A,confirmed:true});move(g,'ariel',{action:'lock',words:B,confirmed:true});}return g;}
+test('both settings agreements required; both create for the other and lock before play',()=>{const g=fresh();assert.throws(()=>move(g,'louie',{action:'start'}),/agree/);move(g,'louie',{action:'agree'});move(g,'ariel',{action:'agree'});move(g,'louie',{action:'start'});move(g,'louie',{action:'draft',words:['B','','','','','','','']});assert.equal(view(g,'ariel',[]).draft.length,0);assert.equal(view(g,'louie',[]).draft[0],'B');assert.throws(()=>move(g,'louie',{action:'lock',words:A,confirmed:true}),/number/);g.settings.count=5;move(g,'louie',{action:'lock',words:A,confirmed:true});assert.equal(g.phase,'create');assert.equal(view(g,'louie',[]).canCreate,false);assert.equal(view(g,'louie',[]).draft,undefined);assert.throws(()=>move(g,'louie',{action:'lock',words:A,confirmed:true}),/locked/);move(g,'ariel',{action:'lock',words:B,confirmed:true});assert.equal(g.phase,'play');assert.deepEqual(g.players.louie.words,B);assert.deepEqual(g.players.ariel.words,A);});
+test('correct keeps turn on own chain; wrong and hints pass without advancing partner',()=>{const g=game();move(g,'louie',{action:'guess',guess:' ball '});assert.equal(g.turn,'louie');assert.equal(g.players.louie.index,2);assert.equal(g.players.ariel.index,1);move(g,'louie',{action:'guess',guess:'bad'});assert.equal(g.turn,'ariel');move(g,'ariel',{action:'hint'});assert.equal(g.turn,'louie');assert.equal(g.players.ariel.revealed,2);assert.equal(g.players.louie.revealed,1);assert.equal(view(g,'louie',[]).boards.ariel[1].text,'B A _ _');assert.throws(()=>move(g,'ariel',{action:'guess',guess:'BATH'}),/partner/);});
+test('cannot reveal final letter, guess empty or edit locked settings',()=>{const g=game();g.players.louie.revealed=3;assert.equal(view(g,'louie',[]).canHint,false);assert.throws(()=>move(g,'louie',{action:'hint'}),/One letter/);assert.throws(()=>move(g,'louie',{action:'guess',guess:' '}),/Enter/);assert.throws(()=>move(g,'louie',{action:'settings'}),/locked/);});
+test('both board projections exclude all hidden answers, future lengths, tokens and drafts',()=>{const g=game();g.tokens.louie='private-token';for(const who of ['louie','ariel']){const v=view(g,who,[]),json=JSON.stringify(v);for(const word of ['BATH','TIME','LIMIT','BREAK','BALL','ROOM','SERVICE','CHARGE','private-token'])assert.ok(!json.includes(word),word);assert.deepEqual(v.boards.ariel[2],{text:'T',status:'future'});assert.deepEqual(v.boards.louie[2],{text:'R',status:'future'});assert.equal(v.draft,undefined);}});
+test('first to finish their own chain wins; both complete and unfinished chains revealed honestly',()=>{const g=game();for(const guess of B.slice(1))move(g,'louie',{action:'guess',guess});assert.equal(g.phase,'result');assert.equal(g.winner,'louie');assert.equal(g.scores.louie,1);assert.equal(g.players.louie.correct,4);const v=view(g,'ariel',[]);assert.equal(v.boards.louie[4].status,'complete');assert.deepEqual(v.boards.ariel[4],{text:'BREAK',status:'unreached'});assert.equal(v.totalGuesses,4);});
+test('ready-made mode deals different server-held chains',()=>{const g=game('competitive');assert.notDeepEqual(g.players.louie.words,g.players.ariel.words);assert.equal(g.players.louie.words.length,5);assert.equal(g.players.ariel.words.length,5);});
+test('only the author can approve an alternative; review cannot expose future answers',()=>{const g=game();move(g,'louie',{action:'guess',guess:'BELL'});move(g,'louie',{action:'dispute'});assert.equal(view(g,'ariel',[]).canJudge,true);assert.throws(()=>move(g,'louie',{action:'judge',approve:true}),/review/);assert.throws(()=>move(g,'ariel',{action:'guess',guess:'BATH'}),/decision/);move(g,'ariel',{action:'judge',approve:true});assert.equal(g.turn,'louie');assert.equal(g.players.louie.words[1],'BELL');assert.equal(g.players.louie.index,2);assert.equal(g.players.ariel.index,1);assert.equal(g.players.louie.correct,1);assert.equal(view(g,'louie',[]).boards.louie[3].text,'S');});
+test('manual validation and deterministic answer checking',()=>{assert.equal(normalise(' o’clock '),normalise("O'CLOCK"));assert.notEqual(normalise('BATH'),normalise('BATHE'));for(const words of [['BIRD','BIRD','TIME','LIMIT','BREAK'],['BIRD','B4TH','TIME','LIMIT','BREAK'],['BIRD','','TIME','LIMIT','BREAK']]){const g=fresh();Object.assign(g,{phase:'create',settings:{...g.settings,count:5}});assert.throws(()=>move(g,'louie',{action:'lock',words,confirmed:true}));}});
+test('rematches wait for both and preserve scores and settings',()=>{const g=game();for(const guess of B.slice(1))move(g,'louie',{action:'guess',guess});move(g,'louie',{action:'rematch'});assert.equal(g.phase,'result');move(g,'ariel',{action:'rematch'});assert.equal(g.phase,'setup');assert.equal(g.scores.louie,1);assert.equal(g.settings.count,5);assert.deepEqual(g.agreed,[]);move(g,'louie',{action:'agree'});move(g,'ariel',{action:'agree'});move(g,'louie',{action:'start'});assert.equal(g.round,2);assert.equal(g.phase,'create');assert.deepEqual(g.locked,[]);});
+test('legacy rounds finish without data loss and upgrade on next setup',()=>{const g=legacy.fresh();g.tokens={louie:'token'};legacy.move(g,'louie',{action:'settings',mode:'competitive',count:5,starter:'louie'});legacy.move(g,'ariel',{action:'agree'});legacy.move(g,'louie',{action:'start'});assert.equal(upgrade(g).version,1);assert.ok(view(g,'louie',[]).legacy);while(g.phase==='play')move(g,'louie',{action:'guess',guess:g.words[g.index]});move(g,'louie',{action:'rematch'});move(g,'ariel',{action:'rematch'});assert.equal(g.version,2);assert.equal(g.tokens.louie,'token');assert.equal(g.scores.louie,1);assert.equal(g.settings.count,5);});
 async function host(file){const server=http.createServer(),io=new Server(server);io.on('connection',wordChain(io,{saveFile:file}));await new Promise(r=>server.listen(0,'127.0.0.1',r));return {url:'http://127.0.0.1:'+server.address().port,close:()=>new Promise(r=>io.close(()=>server.close(()=>r())))};}
 async function connect(url,who,token){const socket=client(url,{transports:['websocket'],forceNew:true});const c={socket,state:null};socket.on('wordchain:state',s=>c.state=s);await new Promise((r,j)=>{socket.once('connect',r);socket.once('connect_error',j);});c.join=await socket.emitWithAck('wordchain:join',{who,token});return c;}
-const pause=()=>new Promise(r=>setTimeout(r,90));
-async function action(c,p){await pause();return c.socket.emitWithAck('wordchain:action',{revision:c.state.revision,id:require('crypto').randomUUID(),...p});}
-async function waitFor(fn){for(let i=0;i<100;i++){if(fn())return;await new Promise(r=>setTimeout(r,10));}throw Error('State did not synchronise');}
-test('two independent sockets: authority, replay safety, disconnect, takeover and persisted restart',async t=>{
-  const dir=fs.mkdtempSync(path.join(os.tmpdir(),'word-chain-')),file=path.join(dir,'match.json');let h=await host(file);const clients=[];t.after(async()=>{clients.forEach(c=>c.socket.disconnect());await h.close();fs.rmSync(dir,{recursive:true,force:true});});
-  const l=await connect(h.url,'louie'),a=await connect(h.url,'ariel');clients.push(l,a);assert.ok(l.join.ok&&a.join.ok);await waitFor(()=>l.state?.online.length===2&&a.state);
-  assert.ok((await action(l,{action:'settings',count:5,starter:'ariel',mode:'manual'})).ok);
-  await waitFor(()=>a.state.revision===l.state.revision);assert.ok((await action(a,{action:'agree'})).ok);await waitFor(()=>a.state.revision===l.state.revision);
-  assert.ok((await action(l,{action:'start'})).ok);await waitFor(()=>a.state.phase==='create');
-  assert.ok((await action(l,{action:'draft',words:['BIRD','BATH','','','']})).ok);assert.equal(a.state.draft,undefined);
-  assert.ok((await action(l,{action:'lock',words:['BIRD','BATH','TIME','LIMIT','BREAK'],confirmed:true})).ok);await waitFor(()=>a.state.phase==='play');
-  assert.ok(!JSON.stringify(a.state).includes('BATH'));assert.ok(!JSON.stringify(l.state).includes('BATH'));
-  const duplicate={action:'guess',guess:'BATH',revision:a.state.revision,id:crypto.randomUUID()};await pause();assert.ok((await a.socket.emitWithAck('wordchain:action',duplicate)).ok);assert.ok((await a.socket.emitWithAck('wordchain:action',duplicate)).ok);await waitFor(()=>l.state.index===2);assert.equal(a.state.index,2);
-  assert.equal((await action(l,{action:'guess',guess:'TIME'})).ok,false);
-  const stale={action:'hint',revision:a.state.revision-1,id:crypto.randomUUID()};await pause();assert.equal((await a.socket.emitWithAck('wordchain:action',stale)).ok,false);
-  l.socket.disconnect();await waitFor(()=>a.state.online.length===1);assert.equal((await action(a,{action:'guess',guess:'TIME'})).ok,false);
-  const l2=await connect(h.url,'louie',l.join.token);clients.push(l2);await waitFor(()=>a.state.online.length===2);assert.equal(l2.state.index,2);
-  const thief=await connect(h.url,'louie');clients.push(thief);assert.equal(thief.join.ok,false);
-  const a2=await connect(h.url,'ariel',a.join.token);clients.push(a2);await waitFor(()=>a2.state);assert.equal((await action(a,{action:'hint'})).ok,false);
-  const revision=a2.state.revision;clients.forEach(c=>c.socket.disconnect());await h.close();h=await host(file);
-  const restored=await connect(h.url,'ariel',a.join.token);clients.push(restored);await waitFor(()=>restored.state);assert.equal(restored.state.index,2);assert.equal(restored.state.revision,revision);assert.equal(restored.state.totalGuesses,1);
-});
-test('simultaneous requests consume exactly one turn and preserve shared hints',async t=>{
-  const h=await host();const l=await connect(h.url,'louie'),a=await connect(h.url,'ariel');t.after(async()=>{l.socket.disconnect();a.socket.disconnect();await h.close();});await waitFor(()=>l.state?.online.length===2&&a.state);
-  await action(l,{action:'settings',count:10,starter:'louie',mode:'competitive'});await waitFor(()=>l.state.revision===a.state.revision);await action(a,{action:'agree'});await waitFor(()=>l.state.revision===a.state.revision);await action(l,{action:'start'});await waitFor(()=>a.state.phase==='play');
-  const rev=l.state.revision;await pause();
-  const results=await Promise.all([l.socket.emitWithAck('wordchain:action',{action:'hint',revision:rev,id:crypto.randomUUID()}),a.socket.emitWithAck('wordchain:action',{action:'guess',guess:'not the answer',revision:rev,id:crypto.randomUUID()})]);
-  assert.equal(results.filter(r=>r.ok).length,1);await waitFor(()=>a.state.revision===rev+1);assert.equal(a.state.turn,'ariel');assert.equal(a.state.hints,1);assert.deepEqual(a.state.board,l.state.board);
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));async function until(fn){for(let i=0;i<100;i++){if(fn())return;await sleep(10);}throw Error('State did not sync');}
+async function act(c,p){await sleep(90);return c.socket.emitWithAck('wordchain:action',{revision:c.state.revision,round:c.state.round,draftVersion:c.state.draftVersion,id:crypto.randomUUID(),...p});}
+test('two independent clients: parallel lock, own chains, replay, stale actions, disconnect, takeover and restart',async t=>{const dir=fs.mkdtempSync(path.join(os.tmpdir(),'chain-v2-')),file=path.join(dir,'match.json');let h=await host(file);const clients=[];t.after(async()=>{clients.forEach(c=>c.socket.disconnect());await h.close();fs.rmSync(dir,{recursive:true,force:true});});const l=await connect(h.url,'louie'),a=await connect(h.url,'ariel');clients.push(l,a);await until(()=>l.state?.online.length===2&&a.state);assert.ok((await act(l,{action:'settings',count:5,mode:'manual',starter:'louie'})).ok);await until(()=>a.state.revision===l.state.revision);assert.ok((await act(a,{action:'agree'})).ok);await until(()=>a.state.revision===l.state.revision);assert.ok((await act(l,{action:'start'})).ok);await until(()=>a.state.phase==='create');const rev=l.state.revision;await sleep(90);const locks=await Promise.all([l.socket.emitWithAck('wordchain:action',{action:'lock',words:A,confirmed:true,revision:rev,round:1,draftVersion:0,id:crypto.randomUUID()}),a.socket.emitWithAck('wordchain:action',{action:'lock',words:B,confirmed:true,revision:rev,round:1,draftVersion:0,id:crypto.randomUUID()})]);assert.ok(locks.every(r=>r.ok),JSON.stringify(locks));await until(()=>l.state.phase==='play'&&a.state.phase==='play');assert.equal(l.state.boards.louie[0].text,'SNOW');assert.equal(a.state.boards.ariel[0].text,'BIRD');assert.ok(!JSON.stringify(l.state).includes('BALL'));
+ const duplicate={action:'guess',guess:'BALL',revision:l.state.revision,id:crypto.randomUUID()};await sleep(90);assert.ok((await l.socket.emitWithAck('wordchain:action',duplicate)).ok);assert.ok((await l.socket.emitWithAck('wordchain:action',duplicate)).ok);await until(()=>a.state.indices.louie===2);assert.equal(a.state.indices.ariel,1);assert.equal((await act(a,{action:'guess',guess:'BATH'})).ok,false);assert.equal((await act(l,{action:'hint',revision:l.state.revision-1})).ok,false);
+ a.socket.disconnect();await until(()=>l.state.online.length===1);assert.equal((await act(l,{action:'guess',guess:'ROOM'})).ok,false);const a2=await connect(h.url,'ariel',a.join.token);clients.push(a2);await until(()=>l.state.online.length===2);const thief=await connect(h.url,'louie');clients.push(thief);assert.equal(thief.join.ok,false);const l2=await connect(h.url,'louie',l.join.token);clients.push(l2);await until(()=>l2.state);assert.equal((await act(l,{action:'hint'})).ok,false);clients.forEach(c=>c.socket.disconnect());await h.close();h=await host(file);const restored=await connect(h.url,'louie',l.join.token);clients.push(restored);await until(()=>restored.state);assert.equal(restored.state.indices.louie,2);assert.equal(restored.state.indices.ariel,1);assert.equal(restored.state.totalGuesses,1);
 });
