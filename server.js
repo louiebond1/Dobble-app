@@ -1375,6 +1375,7 @@ function startRound(code) {
 
 const PARTY_MATCH_DIR=process.env.RAILWAY_VOLUME_MOUNT_PATH || (process.env.RAILWAY_ENVIRONMENT_ID ? '/data' : STATS_DIR);
 io.on('connection', require('./lib/guesswho').guessWho(io,{saveFile:path.join(PARTY_MATCH_DIR,'guesswho-match.json')}));
+io.on('connection', require('./lib/word-chain/socket').wordChain(io,{saveFile:path.join(PARTY_MATCH_DIR,'word-chain-match.json')}));
 io.on('connection', require('./lib/cambio').cambio(io,{saveFile:path.join(PARTY_MATCH_DIR,'cambio-match.json')}));
 io.on('connection', require('./lib/country-memory').countryMemory(io, {saveFile:path.join(PARTY_MATCH_DIR,'country-memory-match.json')}));
 
@@ -3329,6 +3330,8 @@ app.get('/scramble', (req, res) => {
 app.get('/ttt', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'ttt.html'));
 });
+
+app.get('/word-chain', (_req, res) => res.sendFile(path.join(__dirname, 'public', 'word-chain.html')));
 
 app.get('/gofish', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'gofish.html'));
