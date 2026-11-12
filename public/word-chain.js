@@ -19,7 +19,7 @@
     if (busy || !s || !joined || !socket.connected) return;
     busy = true; render();
     const id = crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2);
-    socket.timeout(7000).emit('wordchain:action', {action, revision: s.revision, id, ...extra}, (error, r) => {
+    socket.timeout(7000).emit('wordchain:action', {action, revision:s.revision, round:s.round, draftVersion:s.draftVersion, id, ...extra}, (error, r) => {
       busy = false;
       if (error || !r?.ok) toast(r?.error || 'Connection interrupted. Your game is saved. Reconnect to check the board.');
       render();
@@ -38,8 +38,8 @@
     const both = s.online.length === 2;
     if (!settingsDirty) { count = s.settings.count; $('mode').value = s.settings.mode; $('starter').value = s.settings.starter; }
     $('settingsFields').disabled = busy || !both;
-    show('starterField', $('mode').value === 'competitive');
-    text('modeNote', $('mode').value === 'manual' ? `${names[s.creator]} writes and hosts. ${names[s.creator === 'louie' ? 'ariel' : 'louie']} solves. Roles swap next round.` : 'Both guess. Wrong or reveal means swap turns. A fresh chain each round.');
+    show('starterField', true);
+    text('modeNote', $('mode').value === 'manual' ? 'Write a chain for each other. First to solve theirs wins.' : 'Two different chains. Neither of you knows the answers.');
     text('presence', both ? `${names[seat]} + ${names[seat === 'louie' ? 'ariel' : 'louie']}. Both here.` : `Waiting for ${names[seat === 'louie' ? 'ariel' : 'louie']} to join…`);
     text('agreement', s.agreed.length ? `${s.agreed.map(p => names[p]).join(' + ')} agreed${settingsDirty ? ' to the previous settings' : ''}.` : 'Both players need to agree.');
     $('propose').disabled = busy || !both; $('agree').disabled = busy || !both || settingsDirty || s.agreed.includes(seat);
@@ -53,12 +53,12 @@
     [...$('wordInputs').querySelectorAll('.join-words')].forEach((el, i) => { el.textContent = `${words[i].toUpperCase() || '…'} + ${words[i+1].toUpperCase() || '…'}`; });
   }
   function saveDraft() {
-    if (!draftDirty || busy || !joined || !socket.connected || s?.phase !== 'create' || s.creator !== seat) return;
+    if (!draftDirty || busy || !joined || !socket.connected || s?.phase !== 'create' || !s.canCreate) return;
     const words = currentDraft();
     act('draft', {words}, () => { if (JSON.stringify(words) === JSON.stringify(currentDraft())) { draftDirty = false; text('saved', 'Draft saved. Only you can see it.'); } });
   }
   function renderEditor() {
-    const key = `${s.round}:${s.creator}:${s.settings.count}`;
+    const key = `${s.round}:${seat}:${s.settings.count}`;
     if (key !== editorKey) {
       editorKey = key; draftDirty = false; $('confirmChain').checked = false;
       $('wordInputs').replaceChildren(...Array.from({length:s.settings.count}, (_, i) => {
@@ -74,42 +74,55 @@
     $('lock').disabled = busy || !socket.connected;
   }
   function paintBoard(id, board) {
-    $(id).replaceChildren(...board.map(w => { const li = document.createElement('li'); li.textContent = w.text; li.className = w.status; if (w.status === 'current') li.setAttribute('aria-current','step'); return li; }));
+    $(id).replaceChildren(...board.map(w => { const li = document.createElement('li'); li.textContent = w.text; li.className = w.status; if(w.text.length>13) li.classList.add('long-word'); if (w.status === 'current') li.setAttribute('aria-current','step'); return li; }));
   }
   function render() {
     show('connection', !socket.connected);
     show('welcome', !joined); show('game', joined && !!s);
     if (!s || !joined) return;
-    text('round', s.round ? `Round ${s.round}` : 'Your table'); text('score', `LOUIE ${s.scores.louie} | ARIEL ${s.scores.ariel}`);
+    text('round', `ROUND ${s.round || 1} · ${s.settings.count} WORDS`); text('score', `Louie ${s.scores.louie} : ${s.scores.ariel} Ariel`);
+    document.body.dataset.turn = s.phase === 'play' ? s.turn : '';
+    const boardKey = JSON.stringify(s.boards);
+    for (const player of ['louie','ariel']) {
+      const active = s.phase === 'play' && s.turn === player;
+      const status = !s.online.includes(player) ? 'Offline · saved' : s.phase === 'play' ? active ? 'Your turn' : 'Waiting' : s.phase === 'result' ? s.winner === player ? 'Round winner' : 'Next one’s yours' : s.phase === 'create' ? s.locked.includes(player) ? 'Chain locked' : 'Writing a chain' : s.agreed.includes(player) ? 'Ready to play' : 'At the table';
+      text(player+'Status',status); text(player+'Wins',`${s.scores[player]} won`);
+      $(player+'Side').classList.toggle('active',active);
+      $(player+'Side').setAttribute('aria-label',`${names[player]}${seat===player?' (you)':''}, ${status}`);
+      show(player+'Board',['play','result'].includes(s.phase)); show(player+'Progress',['play','result'].includes(s.phase));
+      if(boardKey !== lastBoard) paintBoard(player+'Board',s.boards[player]);
+      const solved=s.boards[player].filter(w=>w.status==='complete').length;
+      text(player+'Progress',`${solved} of ${s.settings.count}`);
+    }
+    lastBoard = boardKey;
+    show('turn', s.phase==='play');
     ['setup','creation','play','results'].forEach(id => show(id, s.phase === ({creation:'create',results:'result'}[id] || id)));
     if (s.phase === 'setup') renderSetup();
     if (s.phase === 'create') {
-      const host = seat === s.creator;
-      text('createTitle', host ? 'Create your chain.' : `${names[s.creator]} is creating…`);
-      text('createNote', host ? 'Each neighbouring pair should make a familiar phrase. Use single words, like BIRD → BATH → TIME.' : 'Your first word will appear when the host locks it in.');
-      show('editor', host); if (host) renderEditor();
+      text('createTitle',s.canCreate ? `Make ${names[seat==='louie'?'ariel':'louie']}’s chain.` : 'Your chain is locked.');
+      text('createNote',s.canCreate ? 'Write a chain for your partner to solve. Each pair must make a familiar phrase, like BIRD → BATH → TIME.' : 'Waiting for your partner to lock theirs. Your answers stay hidden.');
+      show('editor',s.canCreate); if(s.canCreate) renderEditor();
     }
     if (s.phase === 'play') {
       const active = s.turn === seat, manual = s.settings.mode === 'manual', both = s.online.length === 2, can = active && both && !s.dispute && socket.connected && !busy;
-      text('turn', `${names[s.turn].toUpperCase()}’S TURN`); $('turn').classList.toggle('mine', active);
-      text('role', manual ? `${names[s.creator]} hosts · ${names[s.turn]} solves` : 'Correct means keep going.');
-      const boardKey = JSON.stringify(s.board); if (boardKey !== lastBoard) { paintBoard('board', s.board); lastBoard = boardKey; }
+      text('turn', `${names[s.turn]}’s turn`);
+      show('role',!!s.legacy); text('role',s.legacy ? 'Finishing your shared round. Two chains start next round.' : '');
       text('message', both ? s.message : 'Paused. Waiting for your partner to reconnect.');
       show('guessForm', active); show('thinking', !active || !!s.dispute);
-      text('thinking', s.dispute ? 'Waiting for the host’s decision…' : `${names[s.turn]} is thinking…`);
-      text('prompt', `What comes after ${s.board[s.index - 1]?.text}?`);
+      text('thinking', s.dispute ? 'Waiting for your partner’s decision…' : `${names[s.turn]} is thinking…`);
+      text('prompt', `What follows ${s.boards[seat][s.indices[seat]-1]?.text}, ${names[seat]}?`);
       $('guess').disabled = !can; $('guessBtn').disabled = !can; $('hint').disabled = !can || !s.canHint;
-      text('hintNote', !s.canHint ? 'One letter left. Have a guess.' : manual ? 'A hint reveals one letter. The final letter is yours to guess.' : 'Reveal a letter and pass the turn.');
+      text('hintNote', !s.canHint ? 'One letter left. Have a guess.' : 'Reveal a letter and pass the turn.');
       show('dispute', s.canDispute); $('dispute').disabled = busy || !both;
-      show('judging', !!s.dispute && seat === s.creator); text('disputedGuess', s.dispute ? `${names[s.dispute.who]} guessed “${s.dispute.guess}”.` : '');
+      show('judging', s.canJudge); text('disputedGuess', s.dispute ? `${names[s.dispute.who]} guessed “${s.dispute.guess}”.` : '');
       $('approve').disabled = $('reject').disabled = busy || !both;
     }
     if (s.phase === 'result') {
-      text('winner', `${names[s.winner]} wins.`); text('finishedBy', `${names[s.winner]} completed the final word.`); paintBoard('fullChain', s.board);
+      text('winner', `${names[s.winner]} wins.`); text('finishedBy', `${names[s.winner]} completed the final word.`);
       const rows = [['Total guesses', s.totalGuesses],['Louie’s correct guesses',s.correct.louie],['Ariel’s correct guesses',s.correct.ariel],['Letters revealed',s.hints]];
       $('stats').replaceChildren(...rows.flatMap(([label,value]) => { const dt=document.createElement('dt'),dd=document.createElement('dd');dt.textContent=label;dd.textContent=value;return [dt,dd]; }));
       $('rematch').disabled = busy || s.ready.includes(seat) || s.online.length !== 2;
-      text('rematchNote', s.ready.includes(seat) ? 'Rematch requested. Waiting for your partner…' : s.ready.length ? `${names[s.ready[0]]} wants to play again.` : 'Both tap Play Again. The chain creator swaps next round.');
+      text('rematchNote', s.ready.includes(seat) ? 'Rematch requested. Waiting for your partner…' : s.ready.length ? `${names[s.ready[0]]} wants to play again.` : 'Both tap Play Again. Make fresh chains for each other.');
     }
   }
   document.querySelectorAll('[data-seat]').forEach(b => b.onclick = () => join(b.dataset.seat));
@@ -127,7 +140,7 @@
   socket.on('wordchain:state', next => {
     const previous=s; s=next; joined=true; seat=next.me;
     if (next.revision !== seenRevision) {
-      if (previous?.phase === 'play' && next.index !== previous.index && !matchMedia('(prefers-reduced-motion: reduce)').matches) navigator.vibrate?.(15);
+      if (previous?.phase === 'play' && next.indices?.[seat] !== previous.indices?.[seat] && !matchMedia('(prefers-reduced-motion: reduce)').matches) navigator.vibrate?.(15);
       seenRevision=next.revision;
     }
     render();

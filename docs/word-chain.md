@@ -1,30 +1,33 @@
 # Word Chain
 
-Access `/word-chain` or the Word Chain tile on the home menu. Existing Express + Socket.IO server, two named seats and atomic JSON saves on the existing Railway `/data` volume. No new dependencies or paid APIs.
+Open `/word-chain` or the home menu tile. The existing Express + Socket.IO server and Railway `/data` volume handle both phones. No AI API, paid service or new package dependency.
 
-## Rules decision
+## Two chains, side by side
 
-The request included incompatible rules: the manual chain author cannot fairly compete in guessing against someone who has never seen their answers. Two explicit modes resolve this:
+The reference is now implemented literally: Louie solves the blue left chain; Ariel solves the pink right chain. Both boards remain visible, with a cream shell, local licensed Kalam chalk handwriting, restrained board texture, a turn pill, progress count and shared bottom controls. Future words show only their initials. Active words show known letters and blanks. Columns never stack, including on narrow phones; longer rounds scroll naturally.
 
-- **Head to head** (default): both players guess, a correct answer keeps the turn, a wrong answer or letter hint passes it. Final word wins. Twelve handwritten server-only chains, truncated to the agreed 5–10 words; no repeat until the catalogue is exhausted.
-- **Make a chain**: one host writes and judges; the other solves. Wrong guesses and hints keep the solver active. Host/solver roles swap after both request a rematch. The host cannot guess. Session scores in this mode record completed chains, not comparative difficulty.
+Default **Make chains for each other**: both players privately write a chain for their partner. Louie writes Ariel’s answers; Ariel writes Louie’s answers. Neither solves their own authored chain. Both must lock before play starts. Drafts resume after refresh. Both authors confirm the phrase associations themselves; there is no semantic validation claim.
 
-Both agree to setup. Settings changes clear previous agreement. Rematches keep settings and scores but require fresh agreement before Start Game. Creator alternates for every rematch.
+Optional **Ready-made chains** deals two different handwritten server-held chains. Word count (5–10, default 8) includes the starting word. Both players agree to the same settings and starting player.
+
+A correct guess advances only that player’s chain and keeps the turn. A wrong guess or letter reveal passes the turn; the other player resumes their own chain. Hints reveal sequential letters, never the final letter. Whoever completes their own final word first wins. Both chains reveal at the result; unfinished words are not marked as solved. Scores count rounds won. Both consent to a rematch and confirm settings again; both write new chains.
 
 ## Privacy and authority
 
-`lib/word-chain/engine.js` returns an explicit allowlisted projection. During play neither player receives answers beyond completed words. Only the current word exposes its length; future words expose just an initial. Host draft is available only to that seat during creation, then removed from both wire projections and editor DOM. Answers and catalogue are outside `public/`.
+`engine.js` exposes allowlisted projections for both boards, with no future answer or length leakage. Full answers and catalogue live outside `public/`. Each author sees only their own unfinished draft during creation. Locked answers disappear from both gameplay projections and editor DOM. The guessing player never receives their answer list.
 
-Normalisation ignores case, outer whitespace and minor punctuation; no fuzzy matching. Manual disputes concern only the last incorrect guess on the current word. Host approval explicitly replaces that word with the proposed alternative only if it matches the visible prefix. No future answers are exposed. Players judge the phrase connections themselves.
+Minor punctuation, whitespace and case are normalised; no fuzzy matching. A manual review concerns only the latest wrong guess before another move. Only that chain’s author can judge it. Approval explicitly substitutes the current answer if it matches all shown letters and returns the correct guesser’s turn. It never exposes a future answer. All play pauses during review.
 
-All moves are checked on the server. Socket-bound seat identity and secret reconnect tokens follow Cambio's established pattern. One active connection per seat: a second tab with the token takes over and disables the old tab; a device without the token cannot claim an existing seat. Settings, turns, draft, receipts and scores are saved before broadcast. Revisions reject stale moves; request IDs make duplicate delivery idempotent. Losing either player pauses play without resetting it. Host can save/lock while the solver is offline.
+Socket-bound identities, persisted reconnect tokens, one current connection per player, request receipts, revision checks and transactional atomic saves follow existing app patterns. Concurrent creation uses per-author draft versions plus the round number, so one author saving cannot invalidate the other author’s simultaneous lock. Stale updates on the same draft are rejected. Losing either phone pauses play. Duplicate submissions cannot advance twice. Reconnect and server restart preserve progress and scores.
 
-Saved files use atomic rename and owner-only file mode. This uses the existing single Railway replica with mounted `/data`; horizontal scaling would require shared storage and a cross-process lock before enabling multiple replicas. Existing player identification is deliberately lightweight rather than an account system. Keep original phone storage for reconnect tokens.
+`legacy-engine.js` lets an already-running v1 shared round finish without clearing it. Its next setup upgrades to two chains with the same tokens, scores and word count. New/setup games start directly on version 2.
+
+The app uses one server replica with a persistent `/data` volume. Multiple replicas would require a shared transactional store and cross-process coordination. Keep the original phone storage for seat tokens, as with Cambio.
 
 ## Verification
 
-`node --test test/word-chain.test.js` covers both modes, both-player consent, correct/wrong/hint rules, final-word results, hidden-answer projections, alternatives, invalid chains, rematches, server restart recovery, disconnected players, seat theft, same-seat takeover, stale moves, duplicate delivery and simultaneous requests using independent Socket.IO clients.
+`node --test test/word-chain.test.js`: 11 tests cover simultaneous locks from independent sockets, both chains, turn rules, hints, privacy, deterministic validation, manual alternatives, first-to-finish, rematches, legacy migration, replay safety, stale moves, disconnection, seat takeover and saved restart recovery.
 
-Run `npm test` for the existing regression suite. Browser checks use an isolated `?table=qa-...` so they never touch the couple's main match.
+`npm test` runs the full existing regression suite. Browser QA uses isolated `?table=qa-...` tables, never the couple’s main match. Both player views were checked through manual chain creation and locking, own-chain correct guesses and hint-driven turn swapping. Physical phones were not available.
 
-Browser verification completed in both player tabs on an isolated table: shared settings, manual draft recovery after refresh, lock, hints, four correct guesses, shared results, mutual rematch and creator swap. Competitive wrong guesses and hints were verified to swap turns in the live UI. Physical phones were not available for testing.
+Local font source: Google Fonts Kalam, licensed under SIL OFL; license included under `public/fonts/Kalam-OFL.txt`. The shipped TTF is subset to Latin characters.
