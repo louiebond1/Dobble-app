@@ -1,12 +1,13 @@
 <!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><meta name="theme-color" content="#fcf5e9"><title>Word Chain · Our Favourite Things</title><link rel="icon" href="/favicon.ico"><link rel="manifest" href="/manifest.webmanifest"><link rel="stylesheet" href="/word-chain.css"></head>
-<body><main>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><meta name="theme-color" content="#fcf5e9"><title>Word Chain · Our Favourite Things</title><link rel="icon" href="/favicon.ico"><link rel="manifest" href="/manifest.webmanifest"><link rel="stylesheet" href="/word-chain.css"><link rel="stylesheet" href="/thanksgiving.css?v=1"><script src="/thanksgiving.js?v=1"></script></head>
+<body data-feast-game="word"><main>
 <header><a href="/">‹ Games</a><span class="brand" id="brand">A + L</span><button id="rulesOpen" class="text info-button" aria-label="How to play"><span aria-hidden="true">i</span></button></header>
+<div class="feast-toolbar"><button class="feast-switch" type="button" aria-pressed="false"><span aria-hidden="true">🦃</span> Thanksgiving mode</button><span class="feast-state" aria-hidden="true"><span class="classic-only">Classic</span><span class="feast-only">Feast mode!</span></span></div>
 <div id="connection" role="status" class="connection" hidden>Reconnecting. Your chain is saved.</div>
 <section id="home" class="home-screen">
 <h1 class="sr-only">Word Chain</h1>
 <div class="tile-hero" aria-hidden="true"><div class="tile-row word-row"><span>W</span><span>O</span><span>R</span><span>D</span></div><div class="tile-row chain-row"><span>C</span><span>H</span><span>A</span><span>I</span><span>N</span></div><span class="tile-flourish"><i></i><i></i><i></i></span></div>
-<div class="home-tagline"><svg viewBox="0 0 280 20" aria-hidden="true"><path d="M7 15 Q135 -3 273 9"/></svg><p>Just the two of us</p></div>
+<div class="feast-only pie-title">🥧 Pumpkin Pie Word Chain</div><div class="home-tagline"><svg viewBox="0 0 280 20" aria-hidden="true"><path d="M7 15 Q135 -3 273 9"/></svg><p>Just the two of us</p></div>
 <h2 class="who-title">Who’s playing?</h2>
 <div class="home-players" role="group" aria-label="Choose your player"><button type="button" data-seat="louie" class="identity louie-seat" aria-pressed="false"><span class="selection-mark" aria-hidden="true"></span><span>I’m Louie</span><svg viewBox="0 0 150 14" aria-hidden="true"><path d="M8 10 Q70 -1 142 7"/></svg></button><button type="button" data-seat="ariel" class="identity ariel-seat" aria-pressed="false"><span class="selection-mark" aria-hidden="true"></span><span>I’m Ariel</span><svg viewBox="0 0 150 14" aria-hidden="true"><path d="M8 9 Q76 1 142 7"/></svg></button></div>
 <div class="home-settings"><fieldset id="settingsFields"><legend class="sr-only">Game settings</legend><label id="lengthLabel">Chain length</label><div id="counts" class="segments" role="group" aria-labelledby="lengthLabel"></div><label for="starter">Who starts?</label><select id="starter"><option value="random">Random</option><option value="louie">Louie</option><option value="ariel">Ariel</option></select></fieldset></div>

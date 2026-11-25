@@ -134,17 +134,7 @@
   </style>
   <script>
     (() => {
-      const today = new Date();
-      const year = today.getFullYear();
-      const novemberFirst = new Date(year, 10, 1);
-      const thanksgivingDay = 22 + (4 - novemberFirst.getDay() + 7) % 7;
-      const start = new Date(year, 10, thanksgivingDay - 1);
-      const end = new Date(year, 10, thanksgivingDay + 4);
-
-      if (today >= start && today < end) {
-        document.documentElement.classList.add('thanksgiving');
-        document.querySelector('meta[name="theme-color"]').content = '#43203f';
-        document.addEventListener('DOMContentLoaded', () => {
+      document.addEventListener('DOMContentLoaded', () => {
           const game = document.querySelector('.turkey-hunt');
           const plates = Array.from(game.querySelectorAll('.hunt-plates button'));
           const scores = Array.from(game.querySelectorAll('.hunt-score span'));
@@ -222,15 +212,17 @@
           });
           reset();
           game.hidden = false;
-        });
-      }
+      });
     })();
   </script>
+  <link rel="stylesheet" href="/thanksgiving.css?v=1">
+  <script src="/thanksgiving.js?v=1"></script>
 </head>
-<body>
+<body data-feast-game="dobble">
   <div class="wrap">
+    <div class="feast-toolbar"><button class="feast-switch" type="button" aria-pressed="false"><span aria-hidden="true">🦃</span> Thanksgiving mode</button><span class="feast-state" aria-hidden="true"><span class="classic-only">Classic</span><span class="feast-only">Feast mode!</span></span></div>
     <div class="brand-mark">A + L</div>
-    <h1>💘 Our Favourite Things</h1>
+    <h1><span class="classic-only">💘 Our Favourite Things</span><span class="feast-only">🦃 Our Favourite Feast</span></h1>
     <p class="subtitle">Games, memories &amp; date nights — made just for us</p>
 
     <section class="turkey-hunt" aria-labelledby="turkey-hunt-title" hidden>
@@ -269,7 +261,7 @@
     <a href="#" class="feature-card" id="spotMatchCard">
       <div class="feature-card-emoji">🎴</div>
       <div class="feature-card-body">
-        <div class="feature-card-title">SPOT THE MATCH</div>
+        <div class="feature-card-title"><span class="classic-only">SPOT THE MATCH</span><span class="feast-only">TURKEY DOBBLE</span></div>
         <div class="feature-card-sub">Our Dobble-style card game — tap to play</div>
       </div>
       <div class="feature-card-arrow">›</div>
@@ -282,7 +274,7 @@
       <div class="panel-eyebrow">
         <span class="panel-eyebrow-emoji">🎴</span>
         <div>
-          <div class="panel-eyebrow-title">Spot The Match</div>
+          <div class="panel-eyebrow-title"><span class="classic-only">Spot The Match</span><span class="feast-only">Turkey Dobble</span></div>
           <div class="panel-eyebrow-sub">Our Dobble-style card game — scan to join on your phone</div>
         </div>
       </div>
@@ -310,12 +302,12 @@
       <div class="feature-cards">
         <a href="/word-chain" class="feature-card">
           <div class="feature-card-emoji" aria-hidden="true">Aa</div>
-          <div class="feature-card-body"><div class="feature-card-title">WORD CHAIN</div><div class="feature-card-sub">Guess the next word. Get it right and keep going.</div></div>
+          <div class="feature-card-body"><div class="feature-card-title"><span class="classic-only">WORD CHAIN</span><span class="feast-only">PUMPKIN PIE WORD CHAIN</span></div><div class="feature-card-sub">Guess the next word. Get it right and keep going.</div></div>
           <div class="feature-card-arrow">›</div>
         </a>
         <a href="/cambio.html" class="feature-card">
           <div class="feature-card-emoji">♠️</div>
-          <div class="feature-card-body"><div class="feature-card-title">CAMBIO</div><div class="feature-card-sub">Four secret cards. A little memory, a little mischief. Louie vs Ariel.</div></div>
+          <div class="feature-card-body"><div class="feature-card-title"><span class="classic-only">CAMBIO</span><span class="feast-only">TURKEY CAMBIO</span></div><div class="feature-card-sub">Four secret cards. A little memory, a little mischief. Louie vs Ariel.</div></div>
           <div class="feature-card-arrow">›</div>
         </a>
         <a href="/draft-night.html" class="feature-card">

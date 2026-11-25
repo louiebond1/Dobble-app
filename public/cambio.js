@@ -54,11 +54,22 @@ function card(el, c, force = false) {
   el.setAttribute('aria-label', c ? label(c) : 'Empty card slot');
   if (el.tagName !== 'BUTTON') el.setAttribute('role', 'img');
   if (!c) { el.classList.add('empty'); return; }
-  if (c.hidden) { el.classList.add('back'); const seal = document.createElement('span'); seal.className = 'back-seal'; seal.textContent = 'A + L'; el.append(seal); return; }
+  if (c.hidden) { el.classList.add('back'); const seal = document.createElement('span'); seal.className = 'back-seal'; seal.innerHTML = '<span class="classic-only">A + L</span><span class="feast-only" aria-hidden="true">🦃</span>'; el.append(seal); return; }
   if (['♥', '♦'].includes(c.suit)) el.classList.add('red');
   const faceArt = document.createElement('span'); faceArt.className = 'real-face'; faceArt.setAttribute('aria-hidden', 'true');
   faceArt.style.backgroundPosition = `${(c.rank - 1) / 12 * 100}% ${{'♣': 0, '♦': 1, '♥': 2, '♠': 3}[c.suit] / 3 * 100}%`;
-  el.append(faceArt);
+  const feastArt = document.createElement('span');
+  feastArt.className = 'feast-face feast-only';
+  feastArt.setAttribute('aria-hidden', 'true');
+  const rank = ({1: 'A', 11: 'J', 12: 'Q', 13: 'K'})[c.rank] || c.rank;
+  const feastSuit = {'♣': '🌽', '♦': '🍁', '♥': '🥧', '♠': '🎃'}[c.suit];
+  for (const [className, value] of [['feast-card-rank', rank + c.suit], ['feast-card-art', c.rank === 13 ? '🦃' : feastSuit]]) {
+    const detail = document.createElement('span');
+    detail.className = className;
+    detail.textContent = value;
+    feastArt.append(detail);
+  }
+  el.append(faceArt, feastArt);
   if (c.rank === 13 && ['♥', '♦'].includes(c.suit)) { const badge = document.createElement('span'); badge.className = 'value-badge'; badge.textContent = '−1'; el.append(badge); }
 }
 function text(el, value) { if (el.textContent !== value) { el.textContent = value; } }

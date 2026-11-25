@@ -374,7 +374,11 @@ function renderCard(el, cardSymbols, { onTap } = {}) {
       img.loading = 'eager';
       img.fetchPriority = 'high';
       img.addEventListener('load', () => img.classList.add('loaded'), { once: true });
-      img.addEventListener('error', () => img.replaceWith(makeEmoji()), { once: true });
+      img.addEventListener('error', () => {
+        const fallback = makeEmoji();
+        fallback.classList.toggle('classic-only', img.classList.contains('classic-only'));
+        img.replaceWith(fallback);
+      }, { once: true });
       img.src = sym.image;
       if (img.complete) img.classList.add('loaded');
       div.appendChild(img);
@@ -383,6 +387,20 @@ function renderCard(el, cardSymbols, { onTap } = {}) {
       div.appendChild(makeEmoji());
     }
 
+    const feast = window.thanksgivingSymbol?.(sym.id);
+    if (feast) {
+      div.firstElementChild?.classList.add('classic-only');
+      div.removeAttribute('title');
+      if (div.firstElementChild) div.firstElementChild.title = sym.label;
+      const icon = document.createElement('div');
+      icon.className = 'symbol-emoji feast-only feast-symbol';
+      icon.style.fontSize = pos.size * 0.72 + 'px';
+      icon.title = feast[1];
+      icon.setAttribute('role', 'img');
+      icon.setAttribute('aria-label', feast[1]);
+      icon.textContent = feast[0];
+      div.appendChild(icon);
+    }
     if (onTap) div.addEventListener('click', () => onTap(sym.id, div));
     el.appendChild(div);
   });

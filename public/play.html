@@ -15,10 +15,13 @@
   <link rel="preconnect" href="https://upload.wikimedia.org" />
   <link rel="preconnect" href="https://commons.wikimedia.org" />
   <link rel="stylesheet" href="/style.css" />
+  <link rel="stylesheet" href="/thanksgiving.css?v=1">
+  <script src="/thanksgiving.js?v=1"></script>
 </head>
-<body>
+<body data-feast-game="dobble">
   <div class="wrap">
-    <h1>💘 Our Favourite Things</h1>
+    <div class="feast-toolbar"><button class="feast-switch" type="button" aria-pressed="false"><span aria-hidden="true">🦃</span> Thanksgiving mode</button><span class="feast-state" aria-hidden="true"><span class="classic-only">Classic</span><span class="feast-only">Feast mode!</span></span></div>
+    <h1><span class="classic-only">💘 Our Favourite Things</span><span class="feast-only">🦃 Turkey Dobble</span></h1>
 
     <div class="panel" id="joinPanel">
       <label for="codeInput">Room code</label>

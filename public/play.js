@@ -91,7 +91,7 @@ socket.on('round:result', async (data) => {
   roundActive = false;
   await highlightMatch(el('cardA'), el('cardB'), data.symbolId);
   const won = data.winnerName === playerName;
-  showOverlay(data.image, data.emoji, won ? '🎉 You got it!' : `👀 ${data.winnerName} got it!`, data.label);
+  showOverlay(data, won ? '🎉 You got it!' : `👀 ${data.winnerName} got it!`, false);
   const mine = data.scores.find((p) => p.name === playerName);
   if (mine) el('playerScoreBadge').textContent = mine.score;
 });
@@ -99,7 +99,7 @@ socket.on('round:result', async (data) => {
 socket.on('round:timeout', async (data) => {
   roundActive = false;
   await highlightMatch(el('cardA'), el('cardB'), data.symbolId);
-  showOverlay(data.image, data.emoji, "⏰ Time's up!", `It was ${data.label}`);
+  showOverlay(data, "⏰ Time's up!", true);
 });
 
 socket.on('game:over', (data) => {
@@ -110,8 +110,12 @@ socket.on('game:over', (data) => {
   renderLeaderboard('allTimeLeaderboard', data.allTime, { valueKey: 'wins', labelFn: label });
 });
 
-function showOverlay(image, emoji, title, label) {
-  renderResultPhoto(el('resultPhotoFrame'), image, emoji, label);
+function showOverlay(data, title, reveal) {
+  const feast = document.documentElement.classList.contains('thanksgiving')
+    ? window.thanksgivingSymbol?.(data.symbolId) : null;
+  const name = feast ? feast[1] : data.label;
+  const label = reveal ? `It was ${name}` : name;
+  renderResultPhoto(el('resultPhotoFrame'), feast ? null : data.image, feast ? feast[0] : data.emoji, label);
   el('resultTitle').textContent = title;
   el('resultLabel').textContent = label;
   resultOverlay.classList.remove('hidden');

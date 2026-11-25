@@ -1,0 +1,137 @@
+html:not(.thanksgiving) .feast-only,
+html.thanksgiving .classic-only,
+html:not(.thanksgiving) .turkey-hunt {
+  display: none !important;
+}
+
+html.thanksgiving .feast-only { display: revert; }
+
+.feast-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  flex: none;
+  width: 100%;
+  margin-bottom: 6px;
+  font: 700 12px/1.15 system-ui, sans-serif;
+}
+
+.feast-switch {
+  min-height: 36px;
+  padding: 4px 12px;
+  border: 1px solid #eebf8d;
+  border-radius: 999px;
+  background: #fff5de;
+  color: #61203b;
+  font: inherit;
+  cursor: pointer;
+}
+
+.feast-switch[aria-pressed="true"] {
+  background: #ffd675;
+  border-color: #ffd675;
+}
+
+.feast-switch:focus-visible {
+  outline: 3px solid #e7a733;
+  outline-offset: 3px;
+}
+
+.feast-state {
+  background: #58203a;
+  color: #fff4dc;
+  border-radius: 999px;
+  padding: 6px 10px;
+}
+
+html.thanksgiving:has([data-feast-game="dobble"]),
+html.thanksgiving [data-feast-game="dobble"] {
+  background: #66213a;
+}
+
+html.thanksgiving [data-feast-game="dobble"] h1 { color: #fff4dc; }
+html.thanksgiving [data-feast-game="dobble"] .card {
+  background: #fff4d2;
+  border: 5px dotted #d77433;
+}
+html.thanksgiving .feast-symbol {
+  filter: drop-shadow(0 2px 0 #ffd16c);
+}
+
+html.thanksgiving [data-feast-game="cambio"],
+html.thanksgiving [data-feast-game="cambio"] #app {
+  background-color: #66213a;
+  background-image: repeating-linear-gradient(45deg, #ffffff0a 0 20px, transparent 20px 40px),
+    repeating-linear-gradient(-45deg, #ffb7520e 0 20px, transparent 20px 40px);
+}
+
+html.thanksgiving [data-feast-game="cambio"] .playing.back {
+  background-color: #932744;
+  background-image: repeating-linear-gradient(45deg, #ef905340 0 5px, transparent 5px 10px),
+    repeating-linear-gradient(-45deg, #ef905340 0 5px, transparent 5px 10px);
+}
+
+html.thanksgiving [data-feast-game="cambio"] .playing.back::after { content: '✦'; }
+html.thanksgiving [data-feast-game="cambio"] .real-face { visibility: hidden; }
+
+html.thanksgiving .feast-face {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  border-radius: inherit;
+  background: #fff2cf;
+  color: #302336;
+  box-shadow: inset 0 0 0 2px #dba65d;
+}
+
+html.thanksgiving .playing.red .feast-face { color: #a32b42; }
+.feast-card-rank {
+  position: absolute;
+  left: 10%;
+  top: 6%;
+  font: 800 clamp(11px, 2.8vw, 17px)/1 system-ui, sans-serif;
+}
+.feast-card-art { font-size: clamp(17px, 5vw, 34px); }
+
+html.thanksgiving [data-feast-game="word"] {
+  --paper: #ffefd0;
+  --ink: #66213a;
+  --blue: #7d3a20;
+  --pink: #852b58;
+}
+
+html.thanksgiving [data-feast-game="word"] .tile-row span {
+  border-radius: 50%;
+  background: repeating-conic-gradient(#f8b85e 0deg 14deg, #ffe3a3 14deg 28deg);
+  color: #542331;
+  box-shadow: inset 0 0 0 3px #a9572e, 0 3px 0 #66213a;
+}
+
+html.thanksgiving .pie-title {
+  margin: 12px 0 4px;
+  color: #66213a;
+  font-weight: 800;
+}
+
+html.thanksgiving [data-feast-game="word"] .board li {
+  position: relative;
+  border: 2px solid #e8a957;
+  border-radius: 10px;
+  background: #fff3d9;
+  color: #592439;
+  padding-inline: 19px 8px;
+}
+
+html.thanksgiving [data-feast-game="word"] .board .current {
+  background: #ffe0a4;
+  border-color: #f7b650;
+}
+
+html.thanksgiving [data-feast-game="word"] .board li::before {
+  content: '🥧' / '';
+  position: absolute;
+  left: 4px;
+  font: 12px/1 system-ui;
+}

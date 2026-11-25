@@ -1,6 +1,6 @@
 // Bump this on any release that changes cached files, so old clients pick
 // up the new versions instead of serving stale ones forever.
-const CACHE_VERSION = 'v32-word-chain-home';
+const CACHE_VERSION = 'v33-thanksgiving-games';
 const CACHE_NAME = `favethings-${CACHE_VERSION}`;
 
 // Precached at install: the app shell for pages that work without a live
@@ -21,6 +21,8 @@ const SHELL_URLS = [
   '/duel.css',
   '/countries.css',
   '/layout.js',
+  '/thanksgiving.css?v=1',
+  '/thanksgiving.js?v=1',
   '/manifest.webmanifest',
   '/favicon.ico',
   '/favicon-32.png',
