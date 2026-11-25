@@ -17,8 +17,8 @@
   <link rel="stylesheet" href="/style.css" />
   <style>
     html.thanksgiving {
-      --bg1: #965032;
-      --bg2: #3a211b;
+      --bg1: #ae3f69;
+      --bg2: #43203f;
       --card-bg: #fff8ec;
       --ink: #38231f;
       --accent: #a54a30;
@@ -26,29 +26,110 @@
       --muted: #6f524a;
     }
 
-    .thanksgiving-note[hidden] { display: none; }
+    .turkey-hunt[hidden] { display: none; }
 
-    .thanksgiving-note {
+    .turkey-hunt {
       width: 100%;
-      margin: 0 0 16px;
-      padding: 16px 20px;
-      background: #fff1dc;
-      color: #512d24;
-      border: 1px solid #dcae7d;
-      border-radius: 18px;
+      margin: 0 0 18px;
+      padding: 18px clamp(12px, 4vw, 24px);
+      background: #fff1cd;
+      color: #44233d;
+      border: 3px dashed #b63e59;
+      border-radius: 24px;
+      box-shadow: 0 6px 0 #5e244a;
     }
 
-    .thanksgiving-note strong {
-      display: block;
-      margin-bottom: 4px;
-      color: #792e40;
-      font: 600 1.25rem Georgia, serif;
+    .turkey-hunt .hunt-mascot {
+      display: inline-block;
+      font-size: 2.6rem;
+      transform: rotate(-9deg);
     }
 
-    .thanksgiving-note p {
-      margin: 0;
-      line-height: 1.45;
-      font-size: 0.95rem;
+    .turkey-hunt h2 {
+      font-size: clamp(1.5rem, 6vw, 2.15rem);
+      line-height: 1.1;
+    }
+
+    .turkey-hunt p { margin: 8px 0; }
+
+    .hunt-score {
+      display: flex;
+      justify-content: center;
+      gap: 8px;
+      margin: 14px 0 10px;
+    }
+
+    .hunt-score span {
+      padding: 6px 12px;
+      border-radius: 999px;
+      background: #f6d5e5;
+      font-weight: 750;
+    }
+
+    .hunt-score span:last-child { background: #d5edc9; }
+
+    .hunt-plates {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 8px;
+      max-width: 24rem;
+      margin: 0 auto;
+    }
+
+    .hunt-plates button, .hunt-replay {
+      font: inherit;
+      color: inherit;
+      cursor: pointer;
+    }
+
+    .hunt-plates button {
+      min-height: 57px;
+      padding: 4px;
+      border: 2px solid #c35a75;
+      border-radius: 16px;
+      background: #fffcf2;
+      font-size: 1.65rem;
+      box-shadow: 0 3px 0 #eab4bc;
+    }
+
+    .hunt-plates button[aria-disabled="true"] {
+      background: #ffe0ab;
+      box-shadow: none;
+      cursor: default;
+    }
+
+    .hunt-plates button[data-turkey] {
+      background: #f9cede;
+      animation: turkey-pop 320ms ease-out;
+    }
+
+    .hunt-plates button:focus-visible, .hunt-replay:focus-visible {
+      outline: 3px solid #542852;
+      outline-offset: 2px;
+    }
+
+    .hunt-replay {
+      min-height: 44px;
+      padding: 7px 14px;
+      border: 0;
+      border-radius: 999px;
+      background: #a52c52;
+      color: #fff;
+      font-weight: 750;
+    }
+
+    .hunt-status {
+      min-height: 2.8em;
+      font-weight: 700;
+      line-height: 1.4;
+    }
+
+    @keyframes turkey-pop {
+      50% { transform: rotate(-8deg) scale(1.16); }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .hunt-plates button[data-turkey] { animation: none; }
     }
   </style>
   <script>
@@ -62,9 +143,85 @@
 
       if (today >= start && today < end) {
         document.documentElement.classList.add('thanksgiving');
-        document.querySelector('meta[name="theme-color"]').content = '#3a211b';
+        document.querySelector('meta[name="theme-color"]').content = '#43203f';
         document.addEventListener('DOMContentLoaded', () => {
-          document.querySelector('.thanksgiving-note').hidden = false;
+          const game = document.querySelector('.turkey-hunt');
+          const plates = Array.from(game.querySelectorAll('.hunt-plates button'));
+          const scores = Array.from(game.querySelectorAll('.hunt-score span'));
+          const status = game.querySelector('.hunt-status');
+          const replay = game.querySelector('.hunt-replay');
+          const players = ['Louie', 'Ariel'];
+          const turkey = { icon: '🦃', name: 'a runaway turkey' };
+          const dishes = [
+            turkey, turkey, turkey,
+            { icon: '🥧', name: 'pumpkin pie' },
+            { icon: '🌽', name: 'corn' },
+            { icon: '🥔', name: 'a potato' },
+          ];
+          let shuffled;
+          let points;
+          let starter = 1;
+          let turn;
+          let winner;
+
+          function showScores() {
+            scores.forEach((score, index) => {
+              score.textContent = players[index] + ' ' + points[index];
+            });
+          }
+
+          function reset() {
+            shuffled = [...dishes];
+            for (let index = shuffled.length - 1; index > 0; index--) {
+              const swap = Math.floor(Math.random() * (index + 1));
+              [shuffled[index], shuffled[swap]] = [shuffled[swap], shuffled[index]];
+            }
+            points = [0, 0];
+            starter = 1 - starter;
+            turn = starter;
+            winner = false;
+            plates.forEach((plate, index) => {
+              plate.textContent = '🍽️';
+              plate.setAttribute('aria-label', 'Lift plate ' + (index + 1));
+              plate.removeAttribute('aria-disabled');
+              plate.removeAttribute('data-turkey');
+            });
+            showScores();
+            status.textContent = players[turn] + ', lift a plate!';
+          }
+
+          plates.forEach((plate, index) => {
+            plate.addEventListener('click', () => {
+              if (winner || plate.hasAttribute('aria-disabled')) return;
+              const dish = shuffled[index];
+              plate.textContent = dish.icon;
+              plate.setAttribute('aria-label', 'Plate ' + (index + 1) + ' revealed ' + dish.name);
+              plate.setAttribute('aria-disabled', 'true');
+
+              if (dish === turkey) {
+                plate.setAttribute('data-turkey', '');
+                points[turn]++;
+                showScores();
+                if (points[turn] === 2) {
+                  winner = true;
+                  plates.forEach((item) => item.setAttribute('aria-disabled', 'true'));
+                  status.textContent = 'Gobble gobble! ' + players[turn] + ' wins. Loser does the dishes.';
+                  return;
+                }
+              }
+
+              const found = players[turn] + ' found ' + dish.name + '!';
+              turn = 1 - turn;
+              status.textContent = found + ' ' + players[turn] + ', your turn.';
+            });
+          });
+
+          replay.addEventListener('click', () => {
+            reset();
+            plates[0].focus();
+          });
+          reset();
+          game.hidden = false;
         });
       }
     })();
@@ -76,10 +233,22 @@
     <h1>💘 Our Favourite Things</h1>
     <p class="subtitle">Games, memories &amp; date nights — made just for us</p>
 
-    <div class="thanksgiving-note" hidden>
-      <strong>Happy Thanksgiving <span aria-hidden="true">🍂</span></strong>
-      <p>Here’s to our favourite thing. A little more time together.</p>
-    </div>
+    <section class="turkey-hunt" aria-labelledby="turkey-hunt-title" hidden>
+      <span class="hunt-mascot" aria-hidden="true">🦃</span>
+      <h2 id="turkey-hunt-title">The Great Turkey Escape</h2>
+      <p>Three turkeys have escaped the Thanksgiving table. Take turns lifting plates. First to catch two wins!</p>
+      <div class="hunt-score"><span>Louie 0</span><span>Ariel 0</span></div>
+      <div class="hunt-plates" role="group" aria-label="Thanksgiving plates">
+        <button type="button">🍽️</button>
+        <button type="button">🍽️</button>
+        <button type="button">🍽️</button>
+        <button type="button">🍽️</button>
+        <button type="button">🍽️</button>
+        <button type="button">🍽️</button>
+      </div>
+      <p class="hunt-status" role="status"></p>
+      <button class="hunt-replay" type="button">Shuffle the plates</button>
+    </section>
 
     <div class="scoreboard-card">
       <div class="scoreboard-label">🏆 ALL-TIME</div>
