@@ -15,12 +15,71 @@
   <link rel="preconnect" href="https://upload.wikimedia.org" />
   <link rel="preconnect" href="https://commons.wikimedia.org" />
   <link rel="stylesheet" href="/style.css" />
+  <style>
+    html.thanksgiving {
+      --bg1: #965032;
+      --bg2: #3a211b;
+      --card-bg: #fff8ec;
+      --ink: #38231f;
+      --accent: #a54a30;
+      --accent-dark: #7b293b;
+      --muted: #6f524a;
+    }
+
+    .thanksgiving-note[hidden] { display: none; }
+
+    .thanksgiving-note {
+      width: 100%;
+      margin: 0 0 16px;
+      padding: 16px 20px;
+      background: #fff1dc;
+      color: #512d24;
+      border: 1px solid #dcae7d;
+      border-radius: 18px;
+    }
+
+    .thanksgiving-note strong {
+      display: block;
+      margin-bottom: 4px;
+      color: #792e40;
+      font: 600 1.25rem Georgia, serif;
+    }
+
+    .thanksgiving-note p {
+      margin: 0;
+      line-height: 1.45;
+      font-size: 0.95rem;
+    }
+  </style>
+  <script>
+    (() => {
+      const today = new Date();
+      const year = today.getFullYear();
+      const novemberFirst = new Date(year, 10, 1);
+      const thanksgivingDay = 22 + (4 - novemberFirst.getDay() + 7) % 7;
+      const start = new Date(year, 10, thanksgivingDay - 1);
+      const end = new Date(year, 10, thanksgivingDay + 4);
+
+      if (today >= start && today < end) {
+        document.documentElement.classList.add('thanksgiving');
+        document.querySelector('meta[name="theme-color"]').content = '#3a211b';
+        document.addEventListener('DOMContentLoaded', () => {
+          document.querySelector('.thanksgiving-note').hidden = false;
+        });
+      }
+    })();
+  </script>
 </head>
 <body>
   <div class="wrap">
     <div class="brand-mark">A + L</div>
     <h1>💘 Our Favourite Things</h1>
     <p class="subtitle">Games, memories &amp; date nights — made just for us</p>
+
+    <div class="thanksgiving-note" hidden>
+      <strong>Happy Thanksgiving <span aria-hidden="true">🍂</span></strong>
+      <p>Here’s to our favourite thing. A little more time together.</p>
+    </div>
 
     <div class="scoreboard-card">
       <div class="scoreboard-label">🏆 ALL-TIME</div>
