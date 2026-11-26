@@ -103,10 +103,10 @@ const MASHUP_GAMES = [
 const MASHUP_GAME_KEYS = new Set(MASHUP_GAMES.map((g) => g.key));
 
 // Lifetime win/speed stats, keyed by lowercased player name so "Louie" and
-// "louie" are the same person. Persisted to a local JSON file — this survives
-// normal restarts but NOT a fresh Railway deploy (new container, blank disk)
-// unless a persistent volume is attached to the service.
-const STATS_DIR = path.join(__dirname, 'data');
+// "louie" are the same person. Persisted to JSON files in the data folder,
+// which must be the persistent volume in production (see lib/data-dir.js).
+const { DATA_DIR } = require('./lib/data-dir');
+const STATS_DIR = DATA_DIR;
 const STATS_FILE = path.join(STATS_DIR, 'stats.json');
 /** @type {Map<string, {name: string, wins: number, totalTimeMs: number}>} */
 const statsStore = new Map();
@@ -1373,7 +1373,7 @@ function startRound(code) {
   }, 23000); // padded ~3s over the visible answer window to cover the client-side countdown reveal
 }
 
-const PARTY_MATCH_DIR=process.env.RAILWAY_VOLUME_MOUNT_PATH || (process.env.RAILWAY_ENVIRONMENT_ID ? '/data' : STATS_DIR);
+const PARTY_MATCH_DIR=DATA_DIR;
 io.on('connection', require('./lib/guesswho').guessWho(io,{saveFile:path.join(PARTY_MATCH_DIR,'guesswho-match.json')}));
 io.on('connection', require('./lib/word-chain/socket').wordChain(io,{saveFile:path.join(PARTY_MATCH_DIR,'word-chain-match.json')}));
 io.on('connection', require('./lib/cambio').cambio(io,{saveFile:path.join(PARTY_MATCH_DIR,'cambio-match.json')}));
@@ -3452,4 +3452,11 @@ app.use(express.static(path.join(__dirname, 'public')));
 
 server.listen(PORT, () => {
   console.log(`Dobble Party listening on port ${PORT}`);
+  // Where data is kept and how Draft Night makes pictures, so a wrong setting shows in the logs. Never prints secrets.
+  const e = process.env;
+  const images = e.DRAFT2_IMAGES !== 'live' ? 'preview pictures only'
+    : e.DRAFT2_ENABLE_PAID !== '1' ? 'paid pictures switched off'
+    : e.DRAFT2_IMAGE_GATEWAY_URL && e.DRAFT2_IMAGE_GATEWAY_TOKEN ? `via the image gateway at ${new URL(e.DRAFT2_IMAGE_GATEWAY_URL).host}`
+    : e.OPENAI_API_KEY ? 'direct from OpenAI' : 'NOT CONFIGURED (no OpenAI key and no gateway)';
+  console.log(`Data folder: ${DATA_DIR} · Draft Night data: ${e.DRAFT2_DATA_DIR || path.join(DATA_DIR, 'draft2')} · Draft Night pictures: ${images}`);
 });
